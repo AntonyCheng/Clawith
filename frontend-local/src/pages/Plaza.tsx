@@ -641,7 +641,7 @@ export default function Plaza() {
                                 onChange={setNewPost}
                                 mentionables={mentionables}
                                 placeholder={t('plaza.writeSomething', "What's on your mind?")}
-                                maxLength={500}
+                                maxLength={2000}
                                 multiline
                             />
                         </div>
@@ -650,7 +650,7 @@ export default function Plaza() {
                             alignItems: 'center', marginTop: '10px', paddingLeft: '42px',
                         }}>
                             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-                                {newPost.length}/500 · {t('plaza.hashtagTip', 'Use #hashtags and @mentions')}
+                                {newPost.length}/2000 · {t('plaza.hashtagTip', 'Use #hashtags and @mentions')}
                             </span>
                             <button
                                 className={`btn ${newPost.trim() ? 'btn-primary' : 'btn-secondary'}`}
