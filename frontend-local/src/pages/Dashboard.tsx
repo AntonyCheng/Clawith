@@ -278,15 +278,18 @@ function StatsBar({ agents, allTasks, tokenUsage }: { agents: Agent[]; allTasks:
 
     return (
         <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1px',
-            background: 'var(--border-subtle)', borderRadius: 'var(--radius-lg)',
+            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+            background: '#f8f9fd', borderRadius: '10px',
+            boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
             overflow: 'hidden', marginBottom: '24px',
-            border: '1px solid var(--border-subtle)',
         }}>
             {stats.map((s, i) => (
                 <div key={i} style={{
-                    background: 'var(--bg-secondary)', padding: '16px 20px',
+                    background: '#f8f9fd', padding: '16px 20px',
                     display: 'flex', flexDirection: 'column', gap: '2px',
+                    borderRight: i < stats.length - 1 ? '1px solid #eaedf0' : 'none',
+                    borderTop: '1px solid #eaedf0', borderBottom: '1px solid #eaedf0',
+                    borderLeft: i === 0 ? '1px solid #eaedf0' : 'none',
                 }}>
                     <div style={{
                         fontSize: '12px', color: 'var(--text-tertiary)',
@@ -340,7 +343,7 @@ function AgentRow({ agent, tasks, recentActivity }: {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                 <div style={{
                     width: '32px', height: '32px', borderRadius: 'var(--radius-md)',
-                    background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)',
+                    background: '#e7effd', border: '1px solid var(--border-subtle)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'var(--text-tertiary)', flexShrink: 0,
                 }}>
@@ -480,7 +483,7 @@ function ActivityFeed({ activities, agents }: { activities: any[]; agents: Agent
                         </span>
                         <span style={{
                             fontSize: '11px', padding: '1px 6px',
-                            borderRadius: 'var(--radius-sm)', background: 'var(--bg-tertiary)',
+                            borderRadius: 'var(--radius-sm)', background: '#e7effd',
                             color: 'var(--text-secondary)', whiteSpace: 'nowrap', flexShrink: 0,
                             fontWeight: 500,
                         }}>
@@ -619,8 +622,10 @@ export default function Dashboard() {
 
                     {/* Agent List Card */}
                     <div style={{
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-lg)',
+                        background: '#f8f9fd',
+                        border: '1px solid #eaedf0',
+                        borderRadius: '10px',
+                        boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
                         overflow: 'hidden',
                         marginBottom: '32px',
                     }}>
@@ -663,8 +668,11 @@ export default function Dashboard() {
 
                     {/* Recent Activity */}
                     <div style={{
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+                        background: '#f8f9fd',
+                        border: '1px solid #eaedf0',
+                        borderRadius: '10px',
+                        boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
+                        overflow: 'hidden',
                     }}>
                         <div style={{
                             padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)',

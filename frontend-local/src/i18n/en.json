@@ -2,16 +2,17 @@
   "app": {
     "brand": "Digital Employee",
     "name": "Digital Employee Platform",
-    "tagline": "Enterprise Digital Employee Platform"
+    "tagline": "Enterprise Digital Employee Platform",
+    "logoAlt": "Digital Employee"
   },
   "login": {
     "hero": {
       "badge": "Multi-Agent Collaboration",
-      "title": "Digital Employee Platform",
+      "title": "Welcome to Digital Employee Platform",
       "subtitle": "Your Agent Team.",
       "welcome": "Welcome to the Digital Employee Platform,",
       "founder": "Please login",
-      "description": "Let's build your Agent Team",
+      "description": "Digital Employees powered by AI and ReAct technology, working 24/7 to handle data entry, review, and repetitive tasks automatically. Streamline standard processes, reduce labor costs, and free your team for high-value creative work.",
       "mark": "Your Agent Team",
       "features": {
         "multiAgent": {
@@ -109,6 +110,11 @@
     "rememberedPassword": "Remembered your password?",
     "backToLogin": "Back to login",
     "resetPasswordTitle": "Reset password",
+    "tenantSelection": "Select Organization",
+    "tenantSelectionSubtitle": "This email corresponds to multiple organizations. Please select the organization to log in to:",
+    "selectOrganization": "Select Organization",
+    "multiTenantPrompt": "This email corresponds to multiple organizations. Please select the organization to log in to:",
+    "createOrJoinOrganization": "Create or Join Organization",
     "resetPasswordSubtitle": "Choose a new password for your account.",
     "resetPasswordMissingToken": "Reset token is missing from the link.",
     "resetPasswordTooShort": "New password must be at least 6 characters.",

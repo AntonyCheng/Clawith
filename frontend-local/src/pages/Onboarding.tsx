@@ -31,7 +31,7 @@ export default function Onboarding() {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+        document.documentElement.setAttribute('data-theme', 'light');
     }, []);
 
     useEffect(() => {

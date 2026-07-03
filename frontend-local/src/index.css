@@ -21,10 +21,10 @@
   --text-tertiary: #5c5c70;
   --text-inverse: #0a0a0f;
 
-  --accent-primary: #e1e1e8;
-  --accent-hover: #ffffff;
-  --accent-subtle: rgba(225, 225, 232, 0.08);
-  --accent-text: #c0c0cc;
+  --accent-primary: #1D61F7;
+  --accent-hover: #1558D6;
+  --accent-subtle: rgba(29, 97, 247, 0.08);
+  --accent-text: #1D61F7;
 
   --segment-active-bg: var(--accent-primary);
   --segment-active-text: var(--text-inverse);
@@ -218,7 +218,7 @@
 }
 
 [data-theme="light"] {
-  --bg-primary: #f8f8f7;
+  --bg-primary: #f9fcfe;
   --bg-secondary: #f5f5f3;
   --bg-tertiary: #efefec;
   --bg-elevated: #fffefd;
@@ -234,10 +234,10 @@
   --text-tertiary: #9898a8;
   --text-inverse: #ffffff;
 
-  --accent-primary: #3a3a42;
-  --accent-hover: #28282e;
-  --accent-subtle: rgba(58, 58, 66, 0.08);
-  --accent-text: #3a3a42;
+  --accent-primary: #1D61F7;
+  --accent-hover: #1558D6;
+  --accent-subtle: rgba(29, 97, 247, 0.08);
+  --accent-text: #1D61F7;
 
   --segment-active-bg: var(--bg-elevated);
   --segment-active-text: var(--text-primary);
@@ -270,10 +270,7 @@
   --notification-bar-close-hover: rgba(255, 255, 255, 0.2);
 }
 
-/* Light-mode overrides: primary button uses dark bg → white text */
-[data-theme="light"] .btn-primary {
-  color: #ffffff;
-}
+/* Light-mode overrides: primary button uses blue bg → white text, already good */
 
 /* Light-mode secondary button — keep neutral gray style */
 [data-theme="light"] .btn-secondary {
@@ -390,8 +387,11 @@ select:focus {
 
 .sidebar {
   width: var(--sidebar-width);
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  border-right: none;
+  box-shadow:
+    6px 0 22px rgba(29, 97, 247, 0.05),
+    0 4px 16px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -413,7 +413,7 @@ select:focus {
   flex-shrink: 0;
   position: relative;
   z-index: 1;
-  background: var(--bg-secondary);
+  background: #f8f9fd;
 }
 
 .sidebar-scrollable {
@@ -423,7 +423,7 @@ select:focus {
   min-height: 0;
   position: relative;
   z-index: 0;
-  background: var(--bg-secondary);
+  background: #f8f9fd;
 }
 
 /* Custom scrollbar for sidebar */
@@ -449,9 +449,9 @@ select:focus {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 2px 14px 6px;
-  color: var(--text-tertiary);
-  font-size: 11px;
+  padding: 6px 14px;
+  color: #667696;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -467,7 +467,7 @@ select:focus {
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: var(--bg-primary);
-  color: var(--text-tertiary);
+  color: #667696;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -499,7 +499,7 @@ select:focus {
   padding: 5px 24px 5px 28px;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  background: var(--bg-secondary);
+  background: #f6f9fd;
   color: var(--text-primary);
   font-size: 12px;
   outline: none;
@@ -531,7 +531,8 @@ select:focus {
 
 .sidebar-bottom {
   flex-shrink: 0;
-  border-top: 1px solid var(--border-subtle);
+  border-top: none;
+  box-shadow: 0 -1px 0 rgba(29, 97, 247, 0.08);
 }
 
 .sidebar-logo {
@@ -608,68 +609,68 @@ select:focus {
 }
 
 .workspace-switcher-avatar.tone-1 {
-  background: #eeeeec;
-  color: #6f6f68;
+  background: #1D61F7;
+  color: #ffffff;
 }
 
 .workspace-switcher-avatar.tone-2 {
-  background: #f0eeeb;
-  color: #776b5f;
+  background: #BFD2FE;
+  color: #ffffff;
 }
 
 .workspace-switcher-avatar.tone-3 {
-  background: #ecefee;
-  color: #61716d;
+  background: #A4BCFC;
+  color: #ffffff;
 }
 
 .workspace-switcher-avatar.tone-4 {
-  background: #efeeee;
-  color: #725f63;
+  background: #88A6FA;
+  color: #ffffff;
 }
 
 .workspace-switcher-avatar.tone-5 {
-  background: #f1efea;
-  color: #766c58;
+  background: #527AF6;
+  color: #ffffff;
 }
 
 .workspace-switcher-avatar.tone-6 {
-  background: #eceef1;
-  color: #5f6876;
+  background: #1D61F7;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .workspace-switcher-avatar {
   background: #2a2a32;
-  color: #aaaab7;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .workspace-switcher-avatar.tone-1 {
-  background: #2a2a32;
-  color: #aaaab7;
+  background: #2e3a66;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .workspace-switcher-avatar.tone-2 {
-  background: #302d2a;
-  color: #b2a89e;
+  background: #2d4280;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .workspace-switcher-avatar.tone-3 {
-  background: #29302e;
-  color: #9fb4ad;
+  background: #305098;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .workspace-switcher-avatar.tone-4 {
-  background: #312c2e;
-  color: #b4a2a8;
+  background: #355FB1;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .workspace-switcher-avatar.tone-5 {
-  background: #302f2a;
-  color: #b4ad9c;
+  background: #4570CE;
+  color: #ffffff;
 }
 
 [data-theme="dark"] .workspace-switcher-avatar.tone-6 {
-  background: #292d33;
-  color: #a3adbb;
+  background: #5B82E5;
+  color: #ffffff;
 }
 
 .workspace-switcher-name {
@@ -680,7 +681,9 @@ select:focus {
   white-space: nowrap;
   text-align: left;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
+  color: #0F172A;
+  letter-spacing: -0.01em;
 }
 
 .workspace-switcher-chevron {
@@ -1162,15 +1165,15 @@ select:focus {
 .sidebar-divider {
   height: 1px;
   background: var(--border-subtle);
-  margin: var(--space-2) var(--space-4);
-  opacity: 0.6;
+  margin: 0;
 }
 
 .sidebar-section-title {
   font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--text-tertiary);
+  color: #1D61F7;
+  opacity: 0.8;
   letter-spacing: 0.5px;
   padding: 0 var(--space-2);
   margin-bottom: var(--space-2);
@@ -1181,29 +1184,58 @@ select:focus {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
+  border-radius: 10px;
   font-size: var(--text-sm);
   color: var(--text-secondary);
-  transition: all 0.25s ease-in-out;
+  transition: background 0.2s ease, color 0.2s ease;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
 }
 
 .sidebar-item:hover {
-  background: var(--bg-hover);
+  background: rgba(29, 97, 247, 0.07);
   color: var(--text-primary);
+  font-weight: 600;
 }
 
 .sidebar-item.active {
-  background: var(--accent-subtle);
-  color: var(--accent-text);
+  background: #1D61F7;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.sidebar-item.active:hover {
+  background: #1D61F7;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: var(--text-sm);
 }
 
 .sidebar-item-icon {
   width: 18px;
   text-align: center;
   flex-shrink: 0;
+  color: #0F172A;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition-fast);
+}
+
+.sidebar-item-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+  color: inherit;
+}
+
+.sidebar-item:hover .sidebar-item-icon {
+  color: inherit;
+}
+
+.sidebar-item.active .sidebar-item-icon {
+  color: #ffffff;
 }
 
 .sidebar-item-text {
@@ -1211,6 +1243,8 @@ select:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 600;
+  color: #0F172A;
   transition: opacity var(--transition-fast);
 }
 
@@ -1326,7 +1360,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: #f8f9fd;
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
@@ -1384,6 +1418,7 @@ select:focus {
 
 .sidebar-footer {
   padding: var(--space-4) var(--space-5);
+  background: #f8f9fd;
 }
 
 /* Collapse/expand toggle in logo row */
@@ -1617,6 +1652,15 @@ select:focus {
   padding-right: 0 !important;
 }
 
+.sidebar-item:hover .sidebar-item-text {
+  color: inherit;
+}
+
+.sidebar-item.active .sidebar-item-text {
+  color: #ffffff;
+  font-weight: 700;
+}
+
 .sidebar.collapsed .sidebar-item-text {
   opacity: 0;
   width: 0;
@@ -1689,8 +1733,7 @@ select:focus {
 
 .btn-primary {
   background: var(--accent-primary);
-  /* Dark theme: near-white bg → needs dark text for contrast */
-  color: #0a0a0f;
+  color: #ffffff;
 }
 
 .btn-primary:hover {
@@ -1708,6 +1751,26 @@ select:focus {
   background: var(--bg-hover);
   border-color: var(--accent-primary);
   color: var(--text-primary);
+}
+
+.btn-primary-light {
+  background: rgba(29, 97, 247, 0.1);
+  color: #1D61F7;
+  border: 1px solid rgba(29, 97, 247, 0.2);
+  cursor: not-allowed;
+}
+
+.talent-market-start-btn {
+  background: #1D61F7;
+  color: #ffffff;
+  border: 1px solid #1D61F7;
+  font-weight: 600;
+}
+
+.talent-market-start-btn:hover {
+  background: #1749c4;
+  border-color: #1749c4;
+  color: #ffffff;
 }
 
 .btn:disabled {
@@ -1841,7 +1904,7 @@ select:focus {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
-  background: var(--bg-tertiary);
+  background: #e7effd;
   flex-shrink: 0;
   line-height: 1;
   letter-spacing: -0.02em;

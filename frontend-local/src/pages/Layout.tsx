@@ -597,17 +597,17 @@ export default function Layout() {
         }
     };
 
-    // Theme
-    const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-        return (localStorage.getItem('theme') as 'dark' | 'light') || 'light';
-    });
+    // Theme — locked to light; toggle disabled
+    // const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    //     return (localStorage.getItem('theme') as 'dark' | 'light') || 'light';
+    // });
 
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('theme', theme);
-    }, [theme]);
+    // useEffect(() => {
+    //     document.documentElement.setAttribute('data-theme', theme);
+    //     localStorage.setItem('theme', theme);
+    // }, [theme]);
 
-    const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+    // const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
     // Sidebar collapse state
     const isSidebarCollapsed = useAppStore(s => s.sidebarCollapsed);
@@ -1081,7 +1081,7 @@ export default function Layout() {
                                 onClick={() => setShowTalentMarket(true)}
                                 title={t('nav.hire', t('nav.newAgent'))}
                             >
-                                <IconPlus size={15} stroke={1.7} />
+                                <IconPlus size={15} stroke={2} />
                             </button>
                         </div>
                     )}
@@ -1090,15 +1090,17 @@ export default function Layout() {
                 </div>
 
                 <div className="sidebar-bottom">
+                    <div className="sidebar-divider" />
                     <div className="sidebar-footer">
                         <div className="sidebar-footer-controls" style={{
                             display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px', width: '100%',
                         }}>
-                            <button className="btn btn-ghost" onClick={toggleTheme} style={{
+                            {/* Theme toggle disabled — locked to light */}
+                            {/* <button className="btn btn-ghost" onClick={toggleTheme} style={{
                                 padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }} title={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}>
                                 {theme === 'dark' ? SidebarIcons.sun : SidebarIcons.moon}
-                            </button>
+                            </button> */}
                             <button className="btn btn-ghost" onClick={() => setShowNotifications(v => !v)} style={{
                                 padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
                             }} title={isChinese ? '通知' : 'Notifications'}>
@@ -1175,9 +1177,9 @@ export default function Layout() {
                             >
                                 <div style={{
                                     width: '28px', height: '28px', borderRadius: 'var(--radius-md)',
-                                    background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)',
+                                    background: '#e7effd', border: '1px solid var(--border-subtle)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    color: 'var(--text-tertiary)', flexShrink: 0,
+                                    color: '#1D61F7', flexShrink: 0,
                                 }}>
                                     {SidebarIcons.user}
                                 </div>
@@ -1185,7 +1187,7 @@ export default function Layout() {
                                     <div style={{ fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {user?.display_name}
                                     </div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                                    <div style={{ fontSize: '11px', color: '#667696' }}>
                                         {user?.role === 'platform_admin' ? t('roles.platformAdmin') :
                                             user?.role === 'org_admin' ? t('roles.orgAdmin') :
                                                 user?.role === 'agent_admin' ? t('roles.agentAdmin') : t('roles.member')}

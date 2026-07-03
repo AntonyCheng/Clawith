@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../stores';
 import { agentApi } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
+import PostCard from '../components/PostCard';
+import MentionInput from '../components/MentionInput';
 
 /* ────── Inline SVG Icons (monochrome, matching Dashboard) ────── */
 
@@ -98,66 +100,6 @@ const postJson = async (url: string, body: any) => {
 };
 
 // Auto-detect URLs, #hashtags, and @mentions in text
-const linkifyContent = (text: string) => {
-    const parts = text.split(/(https?:\/\/[^\s<>"'()\uff0c\u3002\uff01\uff1f\u3001\uff1b\uff1a]+|#[\w\u4e00-\u9fff]+|@\S+)/g);
-    if (parts.length <= 1) return text;
-    return parts.map((part, i) => {
-        if (i % 2 === 1) {
-            if (part.startsWith('#')) {
-                return (
-                    <span key={i} style={{ color: 'var(--accent-primary)', fontWeight: 500 }}>{part}</span>
-                );
-            }
-            if (part.startsWith('@')) {
-                return (
-                    <span key={i} style={{ color: 'var(--accent-primary)', fontWeight: 600, cursor: 'default' }}>{part}</span>
-                );
-            }
-            return (
-                <a key={i} href={part} target="_blank" rel="noopener noreferrer"
-                    style={{ color: 'var(--accent-primary)', textDecoration: 'none', wordBreak: 'break-all' }}
-                    onMouseOver={e => (e.currentTarget.style.textDecoration = 'underline')}
-                    onMouseOut={e => (e.currentTarget.style.textDecoration = 'none')}
-                >{part.length > 60 ? part.substring(0, 57) + '...' : part}</a>
-            );
-        }
-        return part;
-    });
-};
-
-// Simple markdown-like rendering: **bold**, `code`, line breaks
-const renderContent = (text: string) => {
-    const elements: any[] = [];
-    const lines = text.split('\n');
-    lines.forEach((line, li) => {
-        const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-        parts.forEach((part, pi) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-                elements.push(<strong key={`${li}-${pi}`}>{part.slice(2, -2)}</strong>);
-            } else if (part.startsWith('`') && part.endsWith('`')) {
-                elements.push(
-                    <code key={`${li}-${pi}`} style={{
-                        background: 'var(--bg-tertiary)', padding: '1px 5px',
-                        borderRadius: 'var(--radius-sm)', fontSize: 'var(--text-xs)',
-                        fontFamily: 'var(--font-mono)',
-                    }}>{part.slice(1, -1)}</code>
-                );
-            } else {
-                const linked = linkifyContent(part);
-                if (Array.isArray(linked)) {
-                    elements.push(...linked.map((el, ei) =>
-                        typeof el === 'string' ? <span key={`${li}-${pi}-${ei}`}>{el}</span> : el
-                    ));
-                } else {
-                    elements.push(<span key={`${li}-${pi}`}>{linked}</span>);
-                }
-            }
-        });
-        if (li < lines.length - 1) elements.push(<br key={`br-${li}`} />);
-    });
-    return elements;
-};
-
 interface Post {
     id: string;
     author_id: string;
@@ -200,7 +142,7 @@ function Avatar({ name, isAgent, size = 32 }: { name: string; isAgent: boolean; 
     return (
         <div style={{
             width: size, height: size, borderRadius: 'var(--radius-md)',
-            background: 'var(--bg-tertiary)', border: '1px solid var(--border-subtle)',
+            background: '#e7effd', border: '1px solid var(--border-subtle)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'var(--text-tertiary)', flexShrink: 0,
             fontSize: isAgent ? `${size * 0.45}px` : `${size * 0.4}px`,
@@ -223,15 +165,19 @@ function StatsBar({ stats }: { stats: PlazaStats }) {
 
     return (
         <div style={{
-            display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`, gap: '1px',
-            background: 'var(--border-subtle)', borderRadius: 'var(--radius-lg)',
-            overflow: 'hidden', marginBottom: '24px',
-            border: '1px solid var(--border-subtle)',
+            display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`,
+            background: '#f8f9fd', borderRadius: '10px',
+            marginBottom: '24px',
+            boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
+            overflow: 'hidden',
         }}>
             {items.map((s, i) => (
                 <div key={i} style={{
-                    background: 'var(--bg-secondary)', padding: '16px 20px',
+                    background: '#f8f9fd', padding: '16px 20px',
                     display: 'flex', flexDirection: 'column', gap: '2px',
+                    borderRight: i < items.length - 1 ? '1px solid #eaedf0' : 'none',
+                    borderTop: '1px solid #eaedf0', borderBottom: '1px solid #eaedf0',
+                    borderLeft: i === 0 ? '1px solid #eaedf0' : 'none',
                 }}>
                     <div style={{
                         fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)',
@@ -279,11 +225,14 @@ function ActionBtn({ icon, label, active, onClick }: {
 function SidebarSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
     return (
         <div style={{
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+            border: '1px solid #eaedf0',
+            borderRadius: '10px',
+            overflow: 'hidden',
+            background: '#f8f9fd',
+            boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
         }}>
             <div style={{
-                padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)',
+                padding: '10px 14px', borderBottom: '1px solid #eaedf0',
                 display: 'flex', alignItems: 'center', gap: '6px',
                 fontSize: 'var(--text-xs)', fontWeight: 500,
                 color: 'var(--text-secondary)',
@@ -305,168 +254,6 @@ const styles = `
     .delete-btn:hover { opacity: 1; color: #ef4444; background: var(--bg-hover); }
 `;
 
-/* ────── Mention Autocomplete Component ────── */
-
-function MentionInput({ value, onChange, onSubmit, mentionables, placeholder, maxLength, multiline, style }: {
-    value: string;
-    onChange: (val: string) => void;
-    onSubmit?: () => void;
-    mentionables: { id: string, name: string, isAgent: boolean }[];
-    placeholder?: string;
-    maxLength?: number;
-    multiline?: boolean;
-    style?: React.CSSProperties;
-}) {
-    const [showDropdown, setShowDropdown] = useState(false);
-    const [mentionFilter, setMentionFilter] = useState('');
-    const [mentionStart, setMentionStart] = useState(-1);
-    const [selectedIdx, setSelectedIdx] = useState(0);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
-
-    const filtered = mentionables.filter(m =>
-        m.name.toLowerCase().includes(mentionFilter.toLowerCase())
-    ).slice(0, 50);
-
-    const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
-        const val = e.target.value;
-        onChange(val);
-
-        const cursorPos = e.target.selectionStart || 0;
-        // Find @ before cursor
-        const textBeforeCursor = val.substring(0, cursorPos);
-        const atIdx = textBeforeCursor.lastIndexOf('@');
-
-        // Trigger @ if it's at the beginning, or after a space, newline, or non-word character (e.g. CJK chars)
-        const prevChar = atIdx > 0 ? textBeforeCursor[atIdx - 1] : '';
-        if (atIdx >= 0 && (atIdx === 0 || !/[a-zA-Z0-9_]/.test(prevChar))) {
-            const query = textBeforeCursor.substring(atIdx + 1);
-            if (!/\s/.test(query)) {
-                setMentionStart(atIdx);
-                setMentionFilter(query);
-                setShowDropdown(true);
-                setSelectedIdx(0);
-                return;
-            }
-        }
-        setShowDropdown(false);
-    }, [onChange]);
-
-    const insertMention = useCallback((agentName: string) => {
-        const before = value.substring(0, mentionStart);
-        const after = value.substring(mentionStart + mentionFilter.length + 1);
-        const newVal = before + '@' + agentName + ' ' + after;
-        onChange(newVal);
-        setShowDropdown(false);
-        // Re-focus input
-        setTimeout(() => inputRef.current?.focus(), 0);
-    }, [value, mentionStart, mentionFilter, onChange]);
-
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (showDropdown && filtered.length > 0) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setSelectedIdx(i => (i + 1) % filtered.length);
-                return;
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setSelectedIdx(i => (i - 1 + filtered.length) % filtered.length);
-                return;
-            }
-            if (e.key === 'Enter' || e.key === 'Tab') {
-                e.preventDefault();
-                insertMention(filtered[selectedIdx].name);
-                return;
-            }
-            if (e.key === 'Escape') {
-                setShowDropdown(false);
-                return;
-            }
-        }
-        if (e.key === 'Enter' && !e.shiftKey && !multiline && onSubmit) {
-            e.preventDefault();
-            onSubmit();
-        }
-    }, [showDropdown, filtered, selectedIdx, insertMention, multiline, onSubmit]);
-
-    useEffect(() => {
-        const handleClick = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-                setShowDropdown(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClick);
-        return () => document.removeEventListener('mousedown', handleClick);
-    }, []);
-
-    const InputTag = multiline ? 'textarea' : 'input';
-
-    return (
-        <div ref={containerRef} style={{ position: 'relative', flex: style?.flex || 1 }}>
-            <InputTag
-                ref={inputRef as any}
-                value={value}
-                onChange={handleChange}
-                onKeyDown={handleKeyDown}
-                placeholder={placeholder}
-                maxLength={maxLength}
-                rows={multiline ? 2 : undefined}
-                style={{
-                    width: '100%', boxSizing: 'border-box',
-                    resize: multiline ? 'none' : undefined,
-                    padding: multiline ? '8px 12px' : '6px 10px',
-                    fontSize: 'var(--text-sm)', lineHeight: 1.5,
-                    background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)',
-                    fontFamily: 'var(--font-family)',
-                    transition: 'border-color var(--transition-fast)',
-                    ...style,
-                }}
-                onFocus={e => {
-                    e.currentTarget.style.borderColor = 'var(--accent-primary)';
-                    e.currentTarget.style.boxShadow = '0 0 0 2px var(--accent-subtle)';
-                    if (multiline) (e.currentTarget as HTMLTextAreaElement).rows = 3;
-                }}
-                onBlur={e => {
-                    e.currentTarget.style.borderColor = 'var(--border-default)';
-                    e.currentTarget.style.boxShadow = 'none';
-                    if (multiline && !value) (e.currentTarget as HTMLTextAreaElement).rows = 2;
-                }}
-            />
-            {showDropdown && filtered.length > 0 && (
-                <div style={{
-                    position: 'absolute', left: 0, top: '100%', zIndex: 100,
-                    marginTop: '4px', width: '200px', maxHeight: '240px',
-                    background: 'var(--bg-primary)', border: '1px solid var(--border-default)',
-                    borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
-                    overflowY: 'auto', overflowX: 'hidden',
-                }}>
-                    {filtered.map((a, idx) => (
-                        <div key={a.id}
-                            onMouseDown={e => { e.preventDefault(); insertMention(a.name); }}
-                            style={{
-                                padding: '6px 10px', cursor: 'pointer',
-                                fontSize: 'var(--text-sm)',
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                background: idx === selectedIdx ? 'var(--bg-hover)' : 'transparent',
-                                color: 'var(--text-primary)',
-                            }}
-                            onMouseEnter={() => setSelectedIdx(idx)}
-                        >
-                            <Avatar name={a.name} isAgent={a.isAgent} size={20} />
-                            <span>{a.name}</span>
-                            {a.isAgent && <span style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginLeft: 'auto' }}>AI</span>}
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
 /* ────── Main Component ────── */
 
 export default function Plaza() {
@@ -476,7 +263,6 @@ export default function Plaza() {
     const [searchParams] = useSearchParams();
     const [newPost, setNewPost] = useState('');
     const [expandedPost, setExpandedPost] = useState<string | null>(searchParams.get('post') || null);
-    const [newComment, setNewComment] = useState('');
     const [deleteModalPostId, setDeleteModalPostId] = useState<string | null>(null);
     const tenantId = localStorage.getItem('current_tenant_id') || '';
 
@@ -520,12 +306,6 @@ export default function Plaza() {
         ...users.map((u: any) => ({ id: u.id, name: u.display_name, isAgent: false }))
     ];
 
-    const { data: postDetails } = useQuery<Post>({
-        queryKey: ['plaza-post-detail', expandedPost],
-        queryFn: () => fetchJson(`/api/plaza/posts/${expandedPost}`),
-        enabled: !!expandedPost,
-    });
-
     const createPost = useMutation({
         mutationFn: (content: string) => postJson('/api/plaza/posts', {
             content,
@@ -550,7 +330,6 @@ export default function Plaza() {
                 author_name: user?.display_name || 'Anonymous',
             }),
         onSuccess: (_, vars) => {
-            setNewComment('');
             queryClient.invalidateQueries({ queryKey: ['plaza-posts'] });
             queryClient.invalidateQueries({ queryKey: ['plaza-post-detail', vars.postId] });
         },
@@ -630,9 +409,11 @@ export default function Plaza() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                     {/* Composer */}
                     <div style={{
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-lg)', padding: '14px 16px',
+                        border: '1px solid #eaedf0',
+                        borderRadius: '10px', padding: '14px 16px',
                         marginBottom: '16px',
+                        background: '#f8f9fd',
+                        boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
                     }}>
                         <div style={{ display: 'flex', gap: '10px' }}>
                             <Avatar name={user?.display_name || 'U'} isAgent={false} size={32} />
@@ -653,7 +434,7 @@ export default function Plaza() {
                                 {newPost.length}/2000 · {t('plaza.hashtagTip', 'Use #hashtags and @mentions')}
                             </span>
                             <button
-                                className={`btn ${newPost.trim() ? 'btn-primary' : 'btn-secondary'}`}
+                                className={`btn ${newPost.trim() ? 'btn-primary' : 'btn-primary-light'}`}
                                 onClick={() => newPost.trim() && createPost.mutate(newPost)}
                                 disabled={!newPost.trim() || createPost.isPending}
                                 style={{ height: '30px', fontSize: 'var(--text-xs)', padding: '0 14px' }}
@@ -687,158 +468,22 @@ export default function Plaza() {
                         </div>
                     ) : (
                         <div style={{
-                            border: '1px solid var(--border-subtle)',
-                            borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+                            display: 'flex', flexDirection: 'column', gap: '12px',
                         }}>
                             {posts.map((post, idx) => (
-                                <div key={post.id} id={`post-${post.id}`} style={{
-                                    padding: '14px 16px',
-                                    borderBottom: idx < posts.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                                    transition: 'background var(--transition-fast)',
-                                    background: expandedPost === post.id ? 'var(--bg-hover)' : 'transparent',
-                                }}
-                                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-hover)'; }}
-                                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = expandedPost === post.id ? 'var(--bg-hover)' : 'transparent'; }}
-                                >
-                                    {/* Author row */}
-                                    <div style={{
-                                        display: 'flex', alignItems: 'center',
-                                        gap: '10px', marginBottom: '8px',
-                                    }}>
-                                        <Avatar name={post.author_name} isAgent={post.author_type === 'agent'} size={30} />
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{
-                                                fontSize: 'var(--text-sm)', fontWeight: 500,
-                                                display: 'flex', alignItems: 'center', gap: '6px',
-                                                color: 'var(--text-primary)',
-                                            }}>
-                                                {post.author_name}
-                                                {post.author_type === 'agent' && (
-                                                    <span style={{
-                                                        fontSize: '10px', padding: '1px 5px',
-                                                        background: 'var(--bg-tertiary)',
-                                                        border: '1px solid var(--border-subtle)',
-                                                        color: 'var(--text-secondary)',
-                                                        borderRadius: 'var(--radius-sm)',
-                                                        fontWeight: 500, lineHeight: '14px',
-                                                    }}>AI</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <span style={{
-                                            fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)',
-                                            fontFamily: 'var(--font-mono)', flexShrink: 0,
-                                        }}>
-                                            {timeAgo(post.created_at)}
-                                        </span>
-                                    </div>
-
-                                    {/* Content */}
-                                    <div style={{
-                                        fontSize: 'var(--text-sm)', lineHeight: 1.65,
-                                        color: 'var(--text-primary)',
-                                        marginBottom: '10px', whiteSpace: 'pre-wrap',
-                                        wordBreak: 'break-word', paddingLeft: '40px',
-                                    }}>
-                                        {renderContent(post.content)}
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div style={{
-                                        display: 'flex', gap: '2px', paddingLeft: '40px',
-                                        justifyContent: 'space-between', alignItems: 'center',
-                                    }}>
-                                        <div style={{ display: 'flex', gap: '2px' }}>
-                                            <ActionBtn
-                                                icon={post.likes_count > 0 ? Icons.heartFilled : Icons.heart}
-                                                label={post.likes_count || 0}
-                                                active={post.likes_count > 0}
-                                                onClick={() => likePost.mutate(post.id)}
-                                            />
-                                            <ActionBtn
-                                                icon={Icons.comment}
-                                                label={post.comments_count || 0}
-                                                onClick={() => setExpandedPost(expandedPost === post.id ? null : post.id)}
-                                            />
-                                        </div>
-                                        {(isAdmin || post.author_id === user?.id) && (
-                                            <button
-                                                className="delete-btn"
-                                                onClick={() => setDeleteModalPostId(post.id)}
-                                                title={t('plaza.deletePost', 'Delete post')}
-                                            >
-                                                <span style={{ display: 'flex', marginRight: '4px' }}>{Icons.trash}</span>
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* Comments */}
-                                    {expandedPost === post.id && (
-                                        <div style={{
-                                            marginTop: '10px', paddingTop: '10px', paddingLeft: '40px',
-                                            borderTop: '1px solid var(--border-subtle)',
-                                        }}>
-                                            {postDetails?.comments?.map(c => (
-                                                <div key={c.id} style={{
-                                                    display: 'flex', gap: '8px', marginBottom: '8px',
-                                                    padding: '6px 10px',
-                                                    background: 'var(--bg-secondary)',
-                                                    borderRadius: 'var(--radius-md)',
-                                                }}>
-                                                    <Avatar name={c.author_name} isAgent={c.author_type === 'agent'} size={22} />
-                                                    <div style={{ minWidth: 0, flex: 1 }}>
-                                                        <div style={{
-                                                            fontSize: 'var(--text-xs)', fontWeight: 500,
-                                                            display: 'flex', alignItems: 'center', gap: '6px',
-                                                        }}>
-                                                            {c.author_name}
-                                                            <span style={{
-                                                                fontWeight: 400, color: 'var(--text-tertiary)',
-                                                                fontFamily: 'var(--font-mono)',
-                                                            }}>
-                                                                {timeAgo(c.created_at)}
-                                                            </span>
-                                                        </div>
-                                                        <div style={{
-                                                            fontSize: 'var(--text-sm)', marginTop: '2px',
-                                                            lineHeight: 1.5, color: 'var(--text-secondary)',
-                                                        }}>
-                                                            {renderContent(c.content)}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                                                <MentionInput
-                                                    value={newComment}
-                                                    onChange={setNewComment}
-                                                    onSubmit={() => {
-                                                        if (newComment.trim()) {
-                                                            addComment.mutate({ postId: post.id, content: newComment });
-                                                        }
-                                                    }}
-                                                    mentionables={mentionables}
-                                                    placeholder={t('plaza.writeComment', 'Write a comment...')}
-                                                    maxLength={300}
-                                                    style={{ height: '32px' }}
-                                                />
-                                                <button
-                                                    className={`btn ${newComment.trim() ? 'btn-primary' : 'btn-secondary'}`}
-                                                    onClick={() => newComment.trim() && addComment.mutate({ postId: post.id, content: newComment })}
-                                                    disabled={!newComment.trim()}
-                                                    style={{
-                                                        height: '32px', fontSize: 'var(--text-xs)',
-                                                        padding: '0 12px',
-                                                        display: 'flex', alignItems: 'center', gap: '4px',
-                                                    }}
-                                                >
-                                                    <span style={{ display: 'flex' }}>{Icons.send}</span>
-                                                    {t('plaza.send', 'Send')}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                                <PostCard
+                                    key={post.id}
+                                    post={post}
+                                    mentionables={mentionables}
+                                    expandedPost={expandedPost}
+                                    onToggleExpand={(id) => setExpandedPost(prev => prev === id ? null : id)}
+                                    onDelete={setDeleteModalPostId}
+                                    onLike={(id) => likePost.mutate(id)}
+                                    onComment={(id, content) => addComment.mutate({ postId: id, content })}
+                                    onQueryInvalidate={(keys) => keys.forEach(k => queryClient.invalidateQueries({ queryKey: k.split(',') }))}
+                                    currentUserId={user?.id}
+                                    isAdmin={isAdmin}
+                                />
                             ))}
                         </div>
                     )}
@@ -927,7 +572,7 @@ export default function Plaza() {
                                         padding: '2px 8px',
                                         borderRadius: 'var(--radius-sm)',
                                         fontSize: 'var(--text-xs)',
-                                        background: 'var(--bg-tertiary)',
+                                        background: '#e7effd',
                                         color: 'var(--text-secondary)',
                                         fontWeight: 500,
                                     }}>

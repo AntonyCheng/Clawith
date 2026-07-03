@@ -142,7 +142,7 @@ export default function TalentMarketModal({ open, onClose }: Props) {
                         display: 'flex', alignItems: 'center', gap: '8px',
                         height: '40px',
                         padding: '0 12px',
-                        background: 'var(--bg-secondary)',
+                        background: '#f6f9fd',
                         border: '1px solid var(--border-subtle)',
                         borderRadius: '8px',
                         width: '260px', maxWidth: '40vw',
@@ -159,7 +159,7 @@ export default function TalentMarketModal({ open, onClose }: Props) {
                             style={{
                                 flex: 1, minWidth: 0,
                                 background: 'transparent', border: 'none', outline: 'none',
-                                color: 'var(--text-primary)', fontSize: '13px',
+                                color: 'var(--text-primary)', fontSize: '12px',
                                 height: '100%',
                             }}
                             aria-label={t('talentMarket.searchLabel', isChinese ? '搜索 Agent' : 'Search agents')}
@@ -441,7 +441,7 @@ function CustomCard({ onClick }: { onClick: () => void }) {
                 </span>
             </div>
             <button
-                className="btn btn-secondary"
+                className="btn talent-market-start-btn"
                 onClick={(e) => {
                     e.stopPropagation();
                     onClick();

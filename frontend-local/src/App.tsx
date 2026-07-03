@@ -213,9 +213,10 @@ export default function App() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Initialize theme on app mount (ensures login page gets correct theme)
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
+        // Theme is locked to light. Clear any legacy 'theme' value from localStorage
+        // so prior 'dark' state cannot resurrect on next mount.
+        localStorage.removeItem('theme');
+        document.documentElement.setAttribute('data-theme', 'light');
 
         // Cross-domain tenant switch: the backend appends ?token=<jwt> to the redirect URL
         // so the new domain receives a fresh scoped token. Consume it here (before any other

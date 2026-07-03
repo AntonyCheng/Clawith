@@ -34,7 +34,7 @@ export default function ClawithWordmark({ height = 28, className }: Props) {
             }}
         >
             <img
-                src="/logo-new.jpg"
+                src="/logo-new.png"
                 alt=""
                 style={{ height, width: 'auto', display: 'block', flex: 'none' }}
             />

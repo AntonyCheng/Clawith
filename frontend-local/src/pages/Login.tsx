@@ -8,8 +8,10 @@ import {
     IconAlertTriangle,
     IconArrowRight,
     IconCheck,
+    IconWorld,
+    IconChevronDown,
 } from '@tabler/icons-react';
-import { AtlasFrame, OriginPlate } from '../components/atlas';
+import '../styles/LoginPage.css';
 
 export default function Login() {
     const { t, i18n } = useTranslation();
@@ -45,7 +47,7 @@ export default function Login() {
     });
 
     useEffect(() => {
-        document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
+        document.documentElement.setAttribute('data-theme', 'light');
 
         // If arriving via invitation link with email, check whether the email is already registered
         // to decide whether to show login or register form.
@@ -402,462 +404,322 @@ export default function Login() {
     const shouldShowGlobalOAuth = !tenant?.sso_enabled && !isRegister && !showVerification;
 
     return (
-        <AtlasFrame onToggleLang={toggleLang}>
-            <div className="atlas-screen-split atlas-login-split">
-                {/* ── Left: Hero with compass ── */}
-                <div className="atlas-screen-plate atlas-login-hero">
-                    <div className="atlas-login-compass">
-                        <OriginPlate size={620} />
-                    </div>
-                    <div className="atlas-login-welcome">
-                        <h1 className="atlas-h1">
-                            {`${t('login.hero.welcome')} ${t('login.hero.founder')}.`}
-                        </h1>
-                        <p className="atlas-body atlas-body--muted">{t('login.hero.description')}</p>
-                    </div>
+        <div className="lp-container">
+            <div className="lp-wrapper">
+            {/* ── Left: Brand showcase ── */}
+            <div className="lp-left">
+                <div className="lp-brand">
+                    <img className="lp-logo" src="/logo-new.png" alt="" />
+                    <span className="lp-brand-text">{t('app.brand')}</span>
                 </div>
+                <h1 className="lp-hero-title">{t('login.hero.title')}</h1>
+                <p className="lp-hero-desc">{t('login.hero.description')}</p>
+                <div className="lp-hero-underline" />
+            </div>
 
-                {/* ── Right: Form Panel ── */}
-                <div className="atlas-screen-form atlas-login-form-pane">
-                    <div className="atlas-login-form-wrapper">
+            {/* ── Right: Form Panel ── */}
+            <div className="lp-right">
+                {/* Language toggle */}
+                <button type="button" className="lp-lang-btn" onClick={toggleLang}>
+                    <IconWorld size={11} stroke={1.4} />
+                    <span>{isZh ? 'English' : '中文'}</span>
+                    <IconChevronDown size={8} stroke={2} className="arrow" />
+                </button>
+
+                <div className="lp-form-wrapper">
                     {checkingEmail ? (
-                        // While resolving invitation email, show a minimal loading indicator
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '200px', gap: '16px' }}>
-                            <span className="login-spinner" style={{ width: 24, height: 24 }} />
-                            <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>
+                            <span className="lp-btn-primary" style={{ width: 24, height: 24, borderRadius: '50%', padding: 0 }}>
+                                <span className="spinner" />
+                            </span>
+                            <span style={{ fontSize: '13px', color: 'var(--lp-text-muted)' }}>
                                 {t('auth.checkingInvitation', 'Checking invitation...')}
                             </span>
                         </div>
                     ) : (
-                    <>
-                    <div className="login-form-header">
-                        <h2 className="login-form-title">
-                            {showVerification
-                                ? (isZh ? '验证邮箱' : 'Verify email')
-                                : (isRegister ? t('auth.register') : t('auth.login'))}
-                        </h2>
-                        <p className="login-form-subtitle">
-                            {showVerification
-                                ? (isZh
-                                    ? `输入发送到 ${verificationEmail || form.login_identifier} 的验证码。`
-                                    : `Enter the verification code sent to ${verificationEmail || form.login_identifier}.`)
-                                : (isRegister ? t('auth.subtitleRegister') : t('auth.subtitleLogin'))}
-                        </p>
-                    </div>
+                        <>
+                            <h2 className="lp-form-title">
+                                {showVerification
+                                    ? (isZh ? '验证邮箱' : 'Verify email')
+                                    : (isRegister ? t('auth.register') : t('auth.login'))}
+                            </h2>
+                            <p className="lp-form-subtitle">
+                                {showVerification
+                                    ? (isZh
+                                        ? `输入发送到 ${verificationEmail || form.login_identifier} 的验证码。`
+                                        : `Enter the verification code sent to ${verificationEmail || form.login_identifier}.`)
+                                    : (isRegister ? t('auth.subtitleRegister') : t('auth.subtitleLogin'))}
+                            </p>
 
-                    {error && (
-                        <div className="login-error">
-                            <IconAlertTriangle size={16} stroke={1.8} /> {error}
-                        </div>
-                    )}
-
-                    {successMessage && (
-                        <div className="login-success" style={{
-                            background: 'rgba(34, 197, 94, 0.1)',
-                            color: '#16a34a',
-                            padding: '12px 16px',
-                            borderRadius: '8px',
-                            marginBottom: '16px',
-                            fontSize: '14px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            border: '1px solid rgba(34, 197, 94, 0.2)',
-                        }}>
-                            <IconCheck size={16} stroke={1.8} /> {successMessage}
-                        </div>
-                    )}
-
-                    {tenant && tenant.sso_enabled && !isRegister && !showVerification && (
-                        <div style={{ marginBottom: '24px' }}>
-                            <div style={{
-                                padding: '16px', borderRadius: '12px', background: 'rgba(59,130,246,0.08)',
-                                border: '1px solid rgba(59,130,246,0.15)', marginBottom: '16px',
-                                textAlign: 'center'
-                            }}>
-                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-primary)', marginBottom: '4px' }}>
-                                    {tenant.name}
-                                </div>
-                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                    {t('auth.ssoNotice', 'Enterprise SSO is enabled for this domain.')}
-                                </div>
-                            </div>
-
-                            {ssoLoading && (
-                                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
-                                    {t('auth.ssoLoading', 'Loading SSO providers...')}
+                            {error && (
+                                <div className="lp-error">
+                                    <IconAlertTriangle size={16} stroke={1.8} /> {error}
                                 </div>
                             )}
 
-                            {!ssoLoading && ssoProviders.length > 0 && (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                                    {ssoProviders.map(p => {
-                                        const meta = ssoMeta[p.provider_type] || { label: p.name || p.provider_type, icon: '' };
-                                        return (
-                                            <button
-                                                key={p.provider_type}
-                                                className="login-submit"
-                                                style={{
-                                                    background: 'var(--bg-secondary)',
-                                                    color: 'var(--text-primary)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    gap: '10px',
-                                                    border: '1px solid var(--border-subtle)',
-                                                }}
-                                                onClick={() => window.location.href = p.url}
-                                            >
-                                                {meta.icon ? (
-                                                    <img src={meta.icon} alt={meta.label} width={18} height={18} />
-                                                ) : (
-                                                    <span style={{ width: 18, height: 18, borderRadius: 4, background: 'var(--bg-tertiary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
-                                                        {(meta.label || '').slice(0, 1).toUpperCase()}
-                                                    </span>
-                                                )}
-                                                {meta.label || p.name || p.provider_type}
-                                            </button>
-                                        );
-                                    })}
+                            {successMessage && (
+                                <div className="lp-success">
+                                    <IconCheck size={16} stroke={1.8} /> {successMessage}
                                 </div>
                             )}
 
-                            {!ssoLoading && ssoProviders.length === 0 && (
-                                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
-                                    {ssoError || t('auth.ssoNoProviders', 'No SSO providers configured.')}
+                            {tenant && tenant.sso_enabled && !isRegister && !showVerification && (
+                                <div>
+                                    <div className="lp-sso-notice">
+                                        <strong>{tenant.name}</strong>
+                                        <br />
+                                        {t('auth.ssoNotice', 'Enterprise SSO is enabled for this domain.')}
+                                    </div>
+
+                                    {ssoLoading && (
+                                        <div className="lp-sso-loading">
+                                            {t('auth.ssoLoading', 'Loading SSO providers...')}
+                                        </div>
+                                    )}
+
+                                    {!ssoLoading && ssoProviders.length > 0 && (
+                                        <div className="lp-sso-buttons">
+                                            {ssoProviders.map(p => {
+                                                const meta = ssoMeta[p.provider_type] || { label: p.name || p.provider_type, icon: '' };
+                                                return (
+                                                    <button
+                                                        key={p.provider_type}
+                                                        className="lp-sso-btn"
+                                                        onClick={() => window.location.href = p.url}
+                                                    >
+                                                        {meta.icon ? (
+                                                            <img src={meta.icon} alt={meta.label} width={18} height={18} />
+                                                        ) : (
+                                                            <span style={{ width: 18, height: 18, borderRadius: 4, background: 'var(--lp-border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                                                {(meta.label || '').slice(0, 1).toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                        {meta.label || p.name || p.provider_type}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {!ssoLoading && ssoProviders.length === 0 && (
+                                        <div className="lp-sso-error">
+                                            {ssoError || t('auth.ssoNoProviders', 'No SSO providers configured.')}
+                                        </div>
+                                    )}
+
+                                    <div className="lp-divider">{t('auth.or', 'or')}</div>
                                 </div>
                             )}
 
-                            <div style={{
-                                display: 'flex', alignItems: 'center', gap: '12px',
-                                margin: '20px 0', color: 'var(--text-tertiary)', fontSize: '11px'
-                            }}>
-                                <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-                                {t('auth.or', 'or')}
-                                <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-                            </div>
-                        </div>
-                    )}
+                            {shouldShowGlobalOAuth && (
+                                <div>
+                                    {oauthLoading && (
+                                        <div className="lp-sso-loading">
+                                            Loading social login providers...
+                                        </div>
+                                    )}
 
-                    {shouldShowGlobalOAuth && (
-                        <div style={{ marginBottom: '24px' }}>
-                            {oauthLoading && (
-                                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
-                                    Loading social login providers...
+                                    {!oauthLoading && oauthProviders.length > 0 && (
+                                        <div className="lp-sso-buttons">
+                                            {oauthProviders.map(p => {
+                                                const meta = ssoMeta[p.provider_type] || { label: p.name || p.provider_type, icon: '' };
+                                                return (
+                                                    <button
+                                                        key={p.provider_type}
+                                                        className="lp-sso-btn"
+                                                        type="button"
+                                                        onClick={() => startOAuthLogin(p.provider_type)}
+                                                    >
+                                                        {meta.icon ? (
+                                                            <img src={meta.icon} width={18} height={18} alt="" />
+                                                        ) : (
+                                                            <span style={{ width: 18, height: 18, borderRadius: 4, background: 'var(--lp-border)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
+                                                                {(meta.label || '').slice(0, 1).toUpperCase()}
+                                                            </span>
+                                                        )}
+                                                        Continue with {meta.label || p.name || p.provider_type}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {!oauthLoading && oauthProviders.length === 0 && oauthError && (
+                                        <div className="lp-sso-error">
+                                            {oauthError}
+                                        </div>
+                                    )}
+
+                                    {!oauthLoading && oauthProviders.length > 0 && (
+                                        <div className="lp-divider">{t('auth.or', 'or')}</div>
+                                    )}
                                 </div>
                             )}
 
-                            {!oauthLoading && oauthProviders.length > 0 && (
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
-                                    {oauthProviders.map(p => {
-                                        const meta = ssoMeta[p.provider_type] || { label: p.name || p.provider_type, icon: '' };
-                                        return (
-                                            <button
-                                                key={p.provider_type}
-                                                className="login-submit"
-                                                type="button"
-                                                style={{
-                                                    background: 'var(--bg-secondary)',
-                                                    color: 'var(--text-primary)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    gap: '10px',
-                                                    border: '1px solid var(--border-subtle)',
-                                                }}
-                                                onClick={() => startOAuthLogin(p.provider_type)}
-                                            >
-                                                {meta.icon ? (
-                                                    <img
-                                                        src={meta.icon}
-                                                        width={18}
-                                                        height={18}
-                                                        alt=""
-                                                        aria-hidden="true"
-                                                    />
-                                                ) : (
-                                                    <span style={{ width: 18, height: 18, borderRadius: 4, background: 'var(--bg-tertiary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>
-                                                        {(meta.label || '').slice(0, 1).toUpperCase()}
-                                                    </span>
-                                                )}
-                                                Continue with {meta.label || p.name || p.provider_type}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                            {showVerification ? (
+                                <form onSubmit={handleVerifyEmail} className="lp-form">
+                                    <div className="lp-form-field">
+                                        <label>{isZh ? '邮箱验证码' : 'Verification code'}</label>
+                                        <input
+                                            className="lp-input"
+                                            type="text"
+                                            value={verificationCode}
+                                            onChange={(e) => setVerificationCode(e.target.value)}
+                                            required
+                                            autoFocus
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            placeholder={isZh ? '输入验证码' : 'Enter code'}
+                                        />
+                                    </div>
 
-                            {!oauthLoading && oauthProviders.length === 0 && oauthError && (
-                                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', fontSize: '12px' }}>
-                                    {oauthError}
-                                </div>
-                            )}
+                                    <button className="lp-btn-primary" type="submit" disabled={loading || !verificationCode.trim()}>
+                                        {loading ? (
+                                            <span className="spinner" />
+                                        ) : (
+                                            <>
+                                                {isZh ? '验证并继续' : 'Verify and continue'}
+                                                <IconArrowRight size={17} stroke={1.9} style={{ marginLeft: '6px' }} />
+                                            </>
+                                        )}
+                                    </button>
 
-                            {!oauthLoading && oauthProviders.length > 0 && (
-                                <div style={{
-                                    display: 'flex', alignItems: 'center', gap: '12px',
-                                    margin: '20px 0', color: 'var(--text-tertiary)', fontSize: '11px'
-                                }}>
-                                    <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-                                    {t('auth.or', 'or')}
-                                    <div style={{ flex: 1, height: '1px', background: 'var(--border-subtle)' }} />
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {showVerification ? (
-                        <form onSubmit={handleVerifyEmail} className="login-form">
-                            <div className="login-field">
-                                <label>{isZh ? '邮箱验证码' : 'Verification code'}</label>
-                                <input
-                                    type="text"
-                                    value={verificationCode}
-                                    onChange={(e) => setVerificationCode(e.target.value)}
-                                    required
-                                    autoFocus
-                                    inputMode="numeric"
-                                    autoComplete="one-time-code"
-                                    placeholder={isZh ? '输入验证码' : 'Enter code'}
-                                />
-                            </div>
-
-                            <button className="login-submit" type="submit" disabled={loading || !verificationCode.trim()}>
-                                {loading ? (
-                                    <span className="login-spinner" />
-                                ) : (
-                                    <>
-                                        {isZh ? '验证并继续' : 'Verify and continue'}
-                                        <IconArrowRight size={17} stroke={1.9} style={{ marginLeft: '6px' }} />
-                                    </>
-                                )}
-                            </button>
-
-                            <div className="login-verification-actions">
-                                <button type="button" onClick={handleResendVerification} disabled={loading}>
-                                    {isZh ? '重新发送验证码' : 'Resend code'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowVerification(false);
-                                        setVerificationCode('');
-                                        setError('');
-                                        setSuccessMessage('');
-                                    }}
-                                    disabled={loading}
-                                >
-                                    {isZh ? '返回' : 'Back'}
-                                </button>
-                            </div>
-                        </form>
-                    ) : (
-                        <form onSubmit={handleSubmit} className="login-form">
-                            <div className="login-field">
-                                <label>{t('auth.email')}</label>
-                                <input
-                                    type="email"
-                                    value={form.login_identifier}
-                                    onChange={(e) => setForm({ ...form, login_identifier: e.target.value })}
-                                    required
-                                    autoFocus
-                                    placeholder={t('auth.emailPlaceholder')}
-                                />
-                            </div>
-
-                            <div className="login-field">
-                                <label>{t('auth.password')}</label>
-                                <input
-                                    type="password"
-                                    value={form.password}
-                                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                                    required
-                                    placeholder={t('auth.passwordPlaceholder')}
-                                />
-                            </div>
-
-                            {!isRegister && (
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-4px', marginBottom: '8px' }}>
-                                    <Link
-                                        to="/forgot-password"
-                                        style={{ fontSize: '13px', color: 'var(--accent-primary)', textDecoration: 'none' }}
-                                    >
-                                        {t('auth.forgotPassword', 'Forgot password?')}
-                                    </Link>
-                                </div>
-                            )}
-
-                            <button className="login-submit" type="submit" disabled={loading}>
-                                {loading ? (
-                                    <span className="login-spinner" />
-                                ) : (
-                                    <>
-                                        {isRegister ? t('auth.register') : t('auth.login')}
-                                        <IconArrowRight size={17} stroke={1.9} style={{ marginLeft: '6px' }} />
-                                    </>
-                                )}
-                            </button>
-                        </form>
-                    )}
-
-                    {/* Multi-tenant selection modal */}
-                    {tenantSelection && (
-                        <div style={{
-                            position: 'fixed',
-                            top: 0, left: 0, right: 0, bottom: 0,
-                            background: 'rgba(17, 17, 20, 0.28)',
-                            backdropFilter: 'blur(8px)',
-                            WebkitBackdropFilter: 'blur(8px)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 2000,
-                        }}>
-                            <div style={{
-                                background: '#fbfbfa',
-                                borderRadius: '16px',
-                                padding: '32px',
-                                maxWidth: '400px',
-                                width: '90%',
-                                maxHeight: 'min(620px, calc(100vh - 64px))',
-                                border: '1px solid rgba(17, 17, 20, 0.1)',
-                                boxShadow: '0 24px 80px rgba(17,17,20,0.18), 0 0 0 1px rgba(255,255,255,0.55) inset',
-                                display: 'flex',
-                                flexDirection: 'column',
-                            }}>
-                                <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px', color: '#17171a' }}>
-                                    {t('auth.selectOrganization', '选择公司')}
-                                </h3>
-                                <p style={{ fontSize: '13px', color: '#767681', marginBottom: '20px', lineHeight: '1.5' }}>
-                                    {t('auth.multiTenantPrompt', '该邮箱对应多个公司，请选择要登录的公司：')}
-                                </p>
-                                <div style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px',
-                                    maxHeight: '216px',
-                                    overflowY: 'auto',
-                                    paddingRight: '4px',
-                                    marginRight: '-4px',
-                                }}>
-                                    {tenantSelection.map((tenant: any) => (
+                                    <div className="lp-link-group">
+                                        <button type="button" onClick={handleResendVerification} disabled={loading} style={{ background: 'none', border: 'none', color: 'var(--lp-primary)', cursor: 'pointer', textDecoration: 'underline' }}>
+                                            {isZh ? '重新发送验证码' : 'Resend code'}
+                                        </button>
+                                        <span style={{ margin: '0 12px' }}>|</span>
                                         <button
-                                            key={tenant.tenant_id}
-                                            onClick={() => handleTenantSelect(tenant.tenant_id)}
-                                            style={{
-                                                padding: '12px 16px',
-                                                borderRadius: '10px',
-                                                border: '1px solid rgba(17,17,20,0.1)',
-                                                background: '#ffffff',
-                                                color: '#2b2b31',
-                                                fontSize: '14px',
-                                                fontWeight: 500,
-                                                cursor: 'pointer',
-                                                textAlign: 'left',
-                                                transition: 'background 0.15s, border-color 0.15s',
+                                            type="button"
+                                            onClick={() => {
+                                                setShowVerification(false);
+                                                setVerificationCode('');
+                                                setError('');
+                                                setSuccessMessage('');
                                             }}
-                                            onMouseEnter={e => {
-                                                (e.currentTarget as HTMLButtonElement).style.background = '#f2f2f0';
-                                                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(17,17,20,0.2)';
-                                            }}
-                                            onMouseLeave={e => {
-                                                (e.currentTarget as HTMLButtonElement).style.background = '#ffffff';
-                                                (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(17,17,20,0.1)';
+                                            disabled={loading}
+                                            style={{ background: 'none', border: 'none', color: 'var(--lp-text-muted)', cursor: 'pointer', textDecoration: 'underline' }}
+                                        >
+                                            {isZh ? '返回' : 'Back'}
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <form onSubmit={handleSubmit} className="lp-form">
+                                    <div className="lp-form-field">
+                                        <label>{t('auth.email')}</label>
+                                        <input
+                                            className="lp-input"
+                                            type="email"
+                                            value={form.login_identifier}
+                                            onChange={(e) => setForm({ ...form, login_identifier: e.target.value })}
+                                            required
+                                            autoFocus
+                                            placeholder={t('auth.emailPlaceholder')}
+                                        />
+                                    </div>
+
+                                    <div className="lp-form-field">
+                                        <label>{t('auth.password')}</label>
+                                        <div className="lp-input-group">
+                                            <input
+                                                className="lp-input"
+                                                type="password"
+                                                value={form.password}
+                                                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                                                required
+                                                placeholder={t('auth.passwordPlaceholder')}
+                                            />
+                                            {!isRegister && (
+                                                <Link to="/forgot-password" className="lp-forget-link">
+                                                    {t('auth.forgotPassword', '忘记密码？')}
+                                                </Link>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <button className="lp-btn-primary" type="submit" disabled={loading}>
+                                        {loading ? (
+                                            <span className="spinner" />
+                                        ) : (
+                                            <>
+                                                {isRegister ? t('auth.register') : t('auth.login')}
+                                                <IconArrowRight size={17} stroke={1.9} style={{ marginLeft: '6px' }} />
+                                            </>
+                                        )}
+                                    </button>
+                                </form>
+                            )}
+
+                            {/* Multi-tenant selection modal */}
+                            {tenantSelection && (
+                                <div className="lp-modal-overlay">
+                                    <div className="lp-modal">
+                                        <h3 className="lp-modal-title">
+                                            {t('auth.selectOrganization', '选择公司')}
+                                        </h3>
+                                        <p className="lp-modal-subtitle">
+                                            {t('auth.multiTenantPrompt', '该邮箱对应多个公司，请选择要登录的公司：')}
+                                        </p>
+                                        <div className="lp-modal-list">
+                                            {tenantSelection.map((tenant: any) => (
+                                                <button
+                                                    key={tenant.tenant_id}
+                                                    className="lp-modal-item"
+                                                    onClick={() => handleTenantSelect(tenant.tenant_id)}
+                                                >
+                                                    {tenant.tenant_name} {tenant.tenant_slug && `(${tenant.tenant_slug})`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            className="lp-modal-item lp-modal-item--dashed"
+                                            onClick={async () => {
+                                                try {
+                                                    setLoading(true);
+                                                    const firstTenant = tenantSelection[0];
+                                                    const res = await authApi.login({
+                                                        login_identifier: form.login_identifier,
+                                                        password: form.password,
+                                                        tenant_id: firstTenant.tenant_id,
+                                                    });
+                                                    const tokenRes = res as TokenResponse;
+                                                    setAuth(tokenRes.user, tokenRes.access_token);
+                                                    setTenantSelection(null);
+                                                    navigate('/setup-company?from=tenant-selection');
+                                                } catch (err: any) {
+                                                    setError(err.message || 'Failed');
+                                                    setTenantSelection(null);
+                                                } finally {
+                                                    setLoading(false);
+                                                }
                                             }}
                                         >
-                                            {tenant.tenant_name} {tenant.tenant_slug && `(${tenant.tenant_slug})`}
+                                            {t('auth.createOrJoinOrganization', 'Create or Join Organization')}
                                         </button>
-                                    ))}
+                                        <button
+                                            className="lp-modal-cancel"
+                                            onClick={() => setTenantSelection(null)}
+                                        >
+                                            {t('common.cancel', 'Cancel')}
+                                        </button>
+                                    </div>
                                 </div>
-                                {/* Create or Join Organization */}
-                                <button
-                                    onClick={async () => {
-                                        // Log in with the first tenant to get a valid token, then redirect to company setup
-                                        try {
-                                            setLoading(true);
-                                            const firstTenant = tenantSelection[0];
-                                            const res = await authApi.login({
-                                                login_identifier: form.login_identifier,
-                                                password: form.password,
-                                                tenant_id: firstTenant.tenant_id,
-                                            });
-                                            const tokenRes = res as TokenResponse;
-                                            setAuth(tokenRes.user, tokenRes.access_token);
-                                            setTenantSelection(null);
-                                            navigate('/setup-company?from=tenant-selection');
-                                        } catch (err: any) {
-                                            setError(err.message || 'Failed');
-                                            setTenantSelection(null);
-                                        } finally {
-                                            setLoading(false);
-                                        }
-                                    }}
-                                    style={{
-                                        marginTop: '8px',
-                                        padding: '12px 16px',
-                                        borderRadius: '10px',
-                                        border: '1px dashed rgba(17,17,20,0.18)',
-                                        background: 'transparent',
-                                        color: '#8c8c96',
-                                        fontSize: '14px',
-                                        cursor: 'pointer',
-                                        textAlign: 'left',
-                                        transition: 'border-color 0.15s, color 0.15s',
-                                    }}
-                                    onMouseEnter={e => {
-                                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(17,17,20,0.32)';
-                                        (e.currentTarget as HTMLButtonElement).style.color = '#4f4f58';
-                                    }}
-                                    onMouseLeave={e => {
-                                        (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(17,17,20,0.18)';
-                                        (e.currentTarget as HTMLButtonElement).style.color = '#8c8c96';
-                                    }}
-                                >
-                                    {t('auth.createOrJoinOrganization', 'Create or Join Organization')}
-                                </button>
-                                <button
-                                    onClick={() => setTenantSelection(null)}
-                                    style={{
-                                        marginTop: '16px',
-                                        padding: '10px 16px',
-                                        borderRadius: '10px',
-                                        border: '1px solid rgba(17,17,20,0.1)',
-                                        background: '#f3f3f1',
-                                        color: '#6f6f79',
-                                        fontSize: '14px',
-                                        fontWeight: 500,
-                                        cursor: 'pointer',
-                                        width: '100%',
-                                        transition: 'background 0.15s, color 0.15s',
-                                    }}
-                                    onMouseEnter={e => {
-                                        (e.currentTarget as HTMLButtonElement).style.background = '#e9e9e6';
-                                        (e.currentTarget as HTMLButtonElement).style.color = '#2b2b31';
-                                    }}
-                                    onMouseLeave={e => {
-                                        (e.currentTarget as HTMLButtonElement).style.background = '#f3f3f1';
-                                        (e.currentTarget as HTMLButtonElement).style.color = '#6f6f79';
-                                    }}
-                                >
-                                    {t('common.cancel', 'Cancel')}
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                            )}
 
-                    {!showVerification && (
-                    <div className="login-switch">
-                        {isRegister ? t('auth.hasAccount') : t('auth.noAccount')}{' '}
-                        <a href="#" onClick={(e) => { e.preventDefault(); setIsRegister(!isRegister); setError(''); }}>
-                            {isRegister ? t('auth.goLogin') : t('auth.goRegister')}
-                        </a>
-                    </div>
+                            {!showVerification && (
+                                <div className="lp-link-group">
+                                    {isRegister ? t('auth.hasAccount') : t('auth.noAccount')}{' '}
+                                    <a href="#" onClick={(e) => { e.preventDefault(); setIsRegister(!isRegister); setError(''); }}>
+                                        {isRegister ? t('auth.goLogin') : t('auth.goRegister')}
+                                    </a>
+                                </div>
+                            )}
+                        </>
                     )}
-                    </>
-                    )}
-                    </div>
                 </div>
             </div>
-        </AtlasFrame>
+            </div>
+        </div>
     );
 }

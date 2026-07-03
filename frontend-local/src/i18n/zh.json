@@ -2,16 +2,17 @@
   "app": {
     "brand": "数字员工",
     "name": "数字员工平台",
-    "tagline": "Enterprise Digital Employee Platform"
+    "tagline": "Enterprise Digital Employee Platform",
+    "logoAlt": "数字员工"
   },
   "login": {
     "hero": {
       "badge": "多智能体协作",
-      "title": "数字员工平台",
+      "title": "欢迎登录数字员工平台",
       "subtitle": "Your Agent Team.",
       "welcome": "欢迎来到数字员工，",
       "founder": "请登录",
-      "description": "来构建你的智能体团队",
+      "description": "数字员工依托人工智能、ReAct 技术打造，可 7×24 小时处理录入、审核等重复业务，自动完成标准化流程，降低人力成本，解放员工聚焦高价值创造性工作。",
       "mark": "Your Agent Team",
       "features": {
         "multiAgent": {
@@ -116,6 +117,11 @@
     "rememberedPassword": "想起密码了？",
     "backToLogin": "返回登录",
     "resetPasswordTitle": "重置密码",
+    "tenantSelection": "选择公司",
+    "tenantSelectionSubtitle": "该邮箱对应多个公司，请选择要登录的公司：",
+    "selectOrganization": "选择公司",
+    "multiTenantPrompt": "该邮箱对应多个公司，请选择要登录的公司：",
+    "createOrJoinOrganization": "创建或加入公司",
     "resetPasswordSubtitle": "为你的账号设置一个新密码。",
     "resetPasswordMissingToken": "链接中缺少重置令牌。",
     "resetPasswordTooShort": "新密码至少需要 6 个字符。",
