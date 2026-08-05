@@ -31,12 +31,13 @@ def runtime_execution_payload(trigger: AgentTrigger) -> dict:
     return payload
 
 
-async def enqueue_due_trigger(trigger: AgentTrigger, now: datetime) -> None:
+async def enqueue_due_trigger(trigger: AgentTrigger, scheduled_at: datetime) -> None:
     async with query_dao.session() as db:
         await enqueue_trigger_execution(
             db,
             trigger=trigger,
             source=trigger.type,
-            idempotency_key=build_scheduled_execution_key(trigger, now),
+            idempotency_key=build_scheduled_execution_key(trigger, scheduled_at),
+            scheduled_at=scheduled_at,
             payload_obj=runtime_execution_payload(trigger),
         )

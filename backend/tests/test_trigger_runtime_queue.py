@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 import uuid
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 from app.models.agent import Agent
@@ -108,11 +109,20 @@ async def test_execution_and_runtime_start_commit_as_one_queue_transaction() -> 
             side_effect=accept_runtime,
         ),
     ):
+        scheduled_at = datetime(
+            2026,
+            8,
+            5,
+            9,
+            0,
+            tzinfo=timezone(timedelta(hours=8)),
+        )
         execution, created = await enqueue_trigger_execution(
             db,  # type: ignore[arg-type]
             trigger=trigger,
             source="poll",
             idempotency_key="poll:2026-07-13T16:00",
+            scheduled_at=scheduled_at,
         )
 
     assert created is True
@@ -123,6 +133,7 @@ async def test_execution_and_runtime_start_commit_as_one_queue_transaction() -> 
     assert db.added == [execution]
     assert trigger.fire_count == 1
     assert trigger.last_fired_at is not None
+    assert execution.scheduled_at == scheduled_at.astimezone(UTC)
 
 
 @pytest.mark.asyncio

@@ -63,12 +63,18 @@ async def enqueue_trigger_execution(
     trigger: AgentTrigger,
     source: str,
     idempotency_key: str,
+    scheduled_at: datetime | None = None,
     payload_text: str = "",
     payload_obj: dict | None = None,
 ) -> tuple[TriggerExecution | None, bool]:
     """Atomically insert an occurrence and its required Runtime command."""
     normalized_key = idempotency_key[:255]
     now = datetime.now(timezone.utc)
+    scheduled_at_utc = scheduled_at or now
+    if scheduled_at_utc.tzinfo is None:
+        scheduled_at_utc = scheduled_at_utc.replace(tzinfo=timezone.utc)
+    else:
+        scheduled_at_utc = scheduled_at_utc.astimezone(timezone.utc)
     execution = TriggerExecution(
         id=uuid.uuid4(),
         trigger_id=trigger.id,
@@ -78,7 +84,7 @@ async def enqueue_trigger_execution(
         idempotency_key=normalized_key,
         payload=payload_obj if isinstance(payload_obj, dict) else {},
         payload_text=payload_text[:8000],
-        scheduled_at=now,
+        scheduled_at=scheduled_at_utc,
     )
     try:
         async with db.begin_nested():
