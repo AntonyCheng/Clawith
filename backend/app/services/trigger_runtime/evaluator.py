@@ -12,9 +12,10 @@ from loguru import logger
 from sqlalchemy import select
 
 from app.dao import query_dao
-async_session = query_dao.session
 from app.models.agent import Agent
 from app.models.trigger import AgentTrigger
+
+async_session = query_dao.session
 
 MIN_POLL_INTERVAL_MINUTES = 5
 

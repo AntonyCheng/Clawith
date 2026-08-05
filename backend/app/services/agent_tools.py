@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Optional, Any, cast
 import re
 
+from croniter import croniter
 from loguru import logger
 from sqlalchemy import select, or_
 
@@ -10494,7 +10495,6 @@ async def _handle_set_trigger_outcome(
                 "invalid_tool_arguments",
             )
         try:
-            from croniter import croniter
             croniter(expr)
         except Exception:
             return _typed_failure(
@@ -10799,7 +10799,6 @@ async def _handle_update_trigger_outcome(
                             "invalid_tool_arguments",
                         )
                     try:
-                        from croniter import croniter
                         croniter(expr)
                     except Exception:
                         return _typed_failure(

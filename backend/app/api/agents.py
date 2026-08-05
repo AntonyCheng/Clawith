@@ -24,6 +24,7 @@ from app.models.chat_session import ChatSession
 from app.models.user import User
 from app.schemas.schemas import AgentCreate, AgentOut, AgentUpdate
 from app.services.storage import get_storage_backend
+from app.services.timezone_utils import DEFAULT_TIMEZONE
 from app.services.access_relationships import ensure_access_granted_platform_relationships
 from app.services.quota_guard import check_agent_creation_quota, QuotaExceeded
 from app.models.tenant import Tenant
@@ -599,8 +600,6 @@ async def get_agent(
         if tenant:
             effective_tz = tenant.timezone
     if not effective_tz:
-        from app.services.timezone_utils import DEFAULT_TIMEZONE
-
         effective_tz = DEFAULT_TIMEZONE
     out["effective_timezone"] = effective_tz
 

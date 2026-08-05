@@ -273,7 +273,7 @@ async def join_company(
     ic_result = await query_dao.execute(db, 
         select(InvitationCode).where(
             InvitationCode.code == data.invitation_code,
-            InvitationCode.is_active == True,
+            InvitationCode.is_active.is_(True),
             InvitationCode.tenant_id.is_not(None),
         )
     )

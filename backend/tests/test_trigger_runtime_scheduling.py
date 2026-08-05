@@ -194,7 +194,7 @@ async def test_dispatch_passes_occurrence_to_queue_unchanged() -> None:
 
     with (
         patch(
-            "app.services.trigger_runtime.dispatch.async_session",
+            "app.services.trigger_runtime.dispatch.query_dao.session",
             return_value=_SessionContext(),
         ),
         patch(
@@ -226,7 +226,7 @@ async def test_dispatch_logs_scheduled_occurrence_registration_failure() -> None
 
     with (
         patch(
-            "app.services.trigger_runtime.dispatch.async_session",
+            "app.services.trigger_runtime.dispatch.query_dao.session",
             return_value=_SessionContext(),
         ),
         patch(

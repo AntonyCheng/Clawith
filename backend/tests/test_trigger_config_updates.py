@@ -56,7 +56,7 @@ async def test_rest_update_rejects_invalid_cron_before_commit(monkeypatch) -> No
     async def fake_session():
         yield session
 
-    monkeypatch.setattr(triggers_api, "async_session", fake_session)
+    monkeypatch.setattr(triggers_api.query_dao, "session", fake_session)
 
     with pytest.raises(HTTPException) as error:
         await triggers_api.update_trigger(
@@ -80,7 +80,7 @@ async def test_rest_update_accepts_valid_cron(monkeypatch) -> None:
     async def fake_session():
         yield session
 
-    monkeypatch.setattr(triggers_api, "async_session", fake_session)
+    monkeypatch.setattr(triggers_api.query_dao, "session", fake_session)
 
     result = await triggers_api.update_trigger(
         trigger.agent_id,
