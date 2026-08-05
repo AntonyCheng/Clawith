@@ -132,14 +132,28 @@ async def test_cron_evaluator_rejects_occurrence_before_trigger_creation() -> No
 async def test_cron_evaluator_does_not_fallback_for_invalid_timezone() -> None:
     now = datetime(2026, 8, 5, 1, 0, 8, tzinfo=UTC)
     trigger = _cron_trigger(created_at=now - timedelta(days=2))
+    bound_logger = MagicMock()
 
-    with patch(
-        "app.services.timezone_utils.get_agent_timezone",
-        new=AsyncMock(return_value="Invalid/Timezone"),
+    with (
+        patch(
+            "app.services.timezone_utils.get_agent_timezone",
+            new=AsyncMock(return_value="Invalid/Timezone"),
+        ),
+        patch(
+            "app.services.trigger_runtime.evaluator.logger.bind",
+            return_value=bound_logger,
+        ) as bind,
     ):
         scheduled_at = await evaluate_trigger(trigger, now)
 
     assert scheduled_at is None
+    bind.assert_called_once_with(
+        trigger_id=str(trigger.id),
+        trigger_name=trigger.name,
+        trigger_type=trigger.type,
+        cron_expr="0 9 * * *",
+    )
+    bound_logger.warning.assert_called_once()
 
 
 def test_cron_execution_key_uses_supplied_occurrence() -> None:
@@ -194,3 +208,43 @@ async def test_dispatch_passes_occurrence_to_queue_unchanged() -> None:
     assert enqueue.await_args.kwargs["idempotency_key"] == (
         f"cron:{trigger.id}:2026-08-05T01:00:00+00:00"
     )
+
+
+@pytest.mark.asyncio
+async def test_dispatch_logs_scheduled_occurrence_registration_failure() -> None:
+    scheduled_at = datetime(
+        2026,
+        8,
+        5,
+        9,
+        0,
+        tzinfo=ZoneInfo("Asia/Shanghai"),
+    )
+    trigger = _cron_trigger(created_at=scheduled_at - timedelta(days=2))
+    error = RuntimeError("database unavailable")
+    bound_logger = MagicMock()
+
+    with (
+        patch(
+            "app.services.trigger_runtime.dispatch.async_session",
+            return_value=_SessionContext(),
+        ),
+        patch(
+            "app.services.trigger_runtime.dispatch.enqueue_trigger_execution",
+            new=AsyncMock(side_effect=error),
+        ),
+        patch(
+            "app.services.trigger_runtime.dispatch.logger.bind",
+            return_value=bound_logger,
+        ) as bind,
+        pytest.raises(RuntimeError, match="database unavailable"),
+    ):
+        await enqueue_due_trigger(trigger, scheduled_at)
+
+    bind.assert_called_once_with(
+        trigger_id=str(trigger.id),
+        trigger_name=trigger.name,
+        trigger_type=trigger.type,
+        scheduled_at=scheduled_at.isoformat(),
+    )
+    bound_logger.error.assert_called_once()

@@ -230,8 +230,13 @@ async def evaluate_trigger(trigger: AgentTrigger, now: datetime) -> datetime | N
                 logger.info(f"[Trigger] Skipped {trigger.name} on non-workday {local_now.date()}")
                 return None
             return scheduled_at
-        except Exception as e:
-            logger.warning(f"Invalid cron expr '{expr}' for trigger {trigger.name}: {e}")
+        except Exception as error:
+            logger.bind(
+                trigger_id=str(trigger.id),
+                trigger_name=trigger.name,
+                trigger_type=trigger.type,
+                cron_expr=expr,
+            ).warning("Trigger occurrence evaluation failed: {}", error)
             return None
 
     if t == "once":
