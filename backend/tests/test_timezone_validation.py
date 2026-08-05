@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import uuid
+from types import SimpleNamespace
+
 import pytest
 from pydantic import ValidationError
 
+from app.api import agents as agents_api
 from app.api.tenants import TenantOut, TenantUpdate
 from app.models.tenant import Tenant
 from app.schemas.schemas import AgentUpdate
@@ -45,3 +49,44 @@ def test_agent_update_accepts_inheritance_or_iana_timezone(
 def test_agent_update_rejects_invalid_timezone(timezone_name: str) -> None:
     with pytest.raises(ValidationError):
         AgentUpdate(timezone=timezone_name)
+
+
+@pytest.mark.asyncio
+async def test_agent_detail_uses_platform_timezone_when_agent_and_tenant_missing(
+    monkeypatch,
+) -> None:
+    agent = SimpleNamespace(
+        id=uuid.uuid4(),
+        creator_id=None,
+        tenant_id=None,
+        timezone=None,
+    )
+
+    async def fake_check_agent_access(*_args, **_kwargs):
+        return agent, "manage"
+
+    async def fake_lazy_reset(*_args, **_kwargs):
+        return False
+
+    async def fake_agent_to_out(*_args, **_kwargs):
+        return SimpleNamespace(model_dump=lambda: {})
+
+    monkeypatch.setattr(
+        agents_api,
+        "check_agent_access",
+        fake_check_agent_access,
+    )
+    monkeypatch.setattr(
+        agents_api,
+        "_lazy_reset_token_counters",
+        fake_lazy_reset,
+    )
+    monkeypatch.setattr(agents_api, "_agent_to_out", fake_agent_to_out)
+
+    result = await agents_api.get_agent(
+        agent.id,
+        current_user=SimpleNamespace(id=uuid.uuid4()),
+        db=SimpleNamespace(),
+    )
+
+    assert result["effective_timezone"] == "Asia/Shanghai"
