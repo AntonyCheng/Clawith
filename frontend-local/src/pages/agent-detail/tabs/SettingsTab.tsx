@@ -1,4 +1,5 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { useState, useRef } from 'react';
 import { IconTools, IconWorld } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
 
@@ -68,6 +69,8 @@ export default function SettingsTab(props: Props) {
         onDeleteAgent,
     } = props;
     const { t, i18n } = useTranslation();
+    const [avatarUrl, setAvatarUrl] = useState((agent as any)?.avatar_url || "");
+    const avatarInputRef = useRef<HTMLInputElement>(null);
     const readOnly = !canManage;
     const canSave = canManage && hasChanges && !settingsSaving;
 
@@ -99,6 +102,74 @@ export default function SettingsTab(props: Props) {
                     </button>}
                 </div>
             </div>
+
+            {canManage && (
+            <div className="card" style={{ marginBottom: '12px' }}>
+                <h4 style={{ marginBottom: '12px' }}>{t('agent.settings.avatar.title', 'Avatar')}</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{
+                        width: '64px', height: '64px', borderRadius: '8px', overflow: 'hidden',
+                        background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        border: '1px solid var(--border-subtle)', flexShrink: 0,
+                    }}>
+                        {avatarUrl ? (
+                            <img src={avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                            <span style={{ fontSize: '24px', color: '#999' }}>
+                                {((agent as any)?.name || 'A')[0].toUpperCase()}
+                            </span>
+                        )}
+                    </div>
+                    <div>
+                        <input
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            style={{ display: 'none' }}
+                            id="avatar-upload-input"
+                            ref={avatarInputRef}
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 2 * 1024 * 1024) {
+                                    alert(t('agent.settings.avatar.sizeLimitError', 'Image must not exceed 2MB'));
+                                    return;
+                                }
+                                try {
+                                    const result = await agentApi.uploadAvatar(agentId, file);
+                                    setAvatarUrl(result.avatar_url);
+                                    queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+                                } catch {
+                                    alert(t('agent.settings.avatar.uploadFailed', 'Upload failed, please try again'));
+                                }
+                                e.target.value = '';
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            style={{ padding: '6px 16px', fontSize: '13px', cursor: 'pointer' }}
+                            onClick={() => avatarInputRef.current?.click()}
+                        >
+                            {avatarUrl ? t('agent.settings.avatar.reupload', 'Re-upload') : t('agent.settings.avatar.upload', 'Upload Avatar')}
+                        </button>
+                        {avatarUrl && (
+                            <button type="button" onClick={async () => {
+                                setAvatarUrl('');
+                                try {
+                                    await agentApi.deleteAvatar(agentId);
+                                    queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+                                } catch { /* ignore */ }
+                            }} style={{ marginLeft: '8px', background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '13px' }}>
+                                {t('agent.settings.avatar.remove', 'Remove')}
+                            </button>
+                        )}
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                            {t('agent.settings.avatar.supportedFormats', 'Supports PNG, JPG, up to 2MB')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            )}
 
             <div className="card" style={{ marginBottom: '12px' }}>
                 <h4 style={{ marginBottom: '12px' }}>{t('agent.settings.modelConfig')}</h4>

@@ -54,7 +54,7 @@ class CompanyCreateResponse(BaseModel):
 class PlatformSettingsOut(BaseModel):
     allow_self_create_company: bool = True
     invitation_code_enabled: bool = False
-    sso_custom_domain_redirect_enabled: bool = True
+    sso_custom_domain_redirect_enabled: bool = False
 
 
 class PlatformSettingsUpdate(BaseModel):
@@ -591,7 +591,7 @@ async def get_platform_settings(
     for key, default in [
         ("allow_self_create_company", True),
         ("invitation_code_enabled", False),
-        ("sso_custom_domain_redirect_enabled", True),
+        ("sso_custom_domain_redirect_enabled", False),
     ]:
         r = await db.execute(select(SystemSetting).where(SystemSetting.key == key))
         s = r.scalar_one_or_none()

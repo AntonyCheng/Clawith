@@ -248,7 +248,7 @@ function KRCard({
     return (
         <div style={{
             padding: editing ? '12px 14px' : '10px 14px',
-            background: 'var(--bg-secondary)',
+            background: 'rgba(255, 255, 255, 1)',
             border: `1px solid ${editing ? 'var(--accent-primary)40' : 'var(--border-subtle)'}`,
             borderRadius: '8px',
             display: 'flex', flexDirection: 'column', gap: '8px',
@@ -342,10 +342,11 @@ function KRCard({
                                 onChange={e => setEditValue(e.target.value)}
                                 style={{
                                     width: 80, padding: '4px 8px',
-                                    background: 'var(--bg-primary)',
+                                    background: 'rgba(246, 248, 250, 1)',
                                     border: '1px solid var(--border-subtle)',
                                     borderRadius: '4px', color: 'var(--text-primary)',
                                     fontSize: '13px',
+                                    boxShadow: 'none',
                                 }}
                             />
                             {kr.unit && <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>{kr.unit}</span>}
@@ -359,10 +360,11 @@ function KRCard({
                                 onChange={e => setEditStatus(e.target.value)}
                                 style={{
                                     padding: '4px 8px',
-                                    background: 'var(--bg-primary)',
+                                    background: 'rgba(246, 248, 250, 1)',
                                     border: '1px solid var(--border-subtle)',
                                     borderRadius: '4px', color: 'var(--text-primary)',
                                     fontSize: '12px',
+                                    boxShadow: 'none',
                                 }}
                             >
                                 <option value="auto">{isChinese ? '自动计算' : 'Auto'}</option>
@@ -384,6 +386,7 @@ function KRCard({
                             border: '1px solid var(--border-subtle)',
                             borderRadius: '4px', color: 'var(--text-primary)',
                             fontSize: '12px',
+                            boxShadow: 'none',
                         }}
                     />
                     <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
@@ -464,7 +467,7 @@ function AddKRForm({
     return (
         <div style={{
             padding: '12px 14px',
-            background: 'var(--bg-tertiary)',
+            background: 'rgba(255, 255, 255, 1)',
             border: '1px dashed var(--border-subtle)',
             borderRadius: '8px',
             display: 'flex', flexDirection: 'column', gap: '8px',
@@ -475,9 +478,10 @@ function AddKRForm({
                 onChange={e => setTitle(e.target.value)}
                 placeholder={isChinese ? 'Key Result 描述，例如：用户满意度达到 4.5 分' : 'e.g. Increase NPS to 50'}
                 autoFocus
+                className="add-kr-input"
                 style={{
                     padding: '6px 10px',
-                    background: 'var(--bg-primary)',
+                    background: 'rgba(246, 248, 250, 1)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '4px', color: 'var(--text-primary)',
                     fontSize: '13px',
@@ -494,7 +498,7 @@ function AddKRForm({
                     onChange={e => setTargetValue(e.target.value)}
                     style={{
                         width: 80, padding: '4px 8px',
-                        background: 'var(--bg-primary)',
+                        background: 'rgba(246, 248, 250, 1)',
                         border: '1px solid var(--border-subtle)',
                         borderRadius: '4px', color: 'var(--text-primary)',
                         fontSize: '13px',
@@ -507,10 +511,10 @@ function AddKRForm({
                     placeholder={isChinese ? '单位（可选，如 %、万元）' : 'Unit (e.g. %, pts)'}
                     style={{
                         flex: 1, padding: '4px 8px',
-                        background: 'var(--bg-primary)',
+                        background: 'rgba(246, 248, 250, 1)',
                         border: '1px solid var(--border-subtle)',
                         borderRadius: '4px', color: 'var(--text-primary)',
-                        fontSize: '12px',
+                        fontSize: '12px', boxShadow: 'none',
                     }}
                 />
             </div>
@@ -571,6 +575,7 @@ function ObjectiveCard({
                     padding: '14px 16px',
                     display: 'flex', alignItems: 'flex-start', gap: '12px',
                     cursor: 'pointer',
+                    background: 'rgba(255, 255, 255, 1)',
                     borderBottom: expanded ? '1px solid var(--border-subtle)' : 'none',
                 }}
                 onClick={() => setExpanded(v => !v)}
@@ -639,7 +644,7 @@ function ObjectiveCard({
 
             {/* KR list */}
             {expanded && (
-                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '8px', background: 'rgba(255, 255, 255, 1)' }}>
                     {obj.key_results.map(kr => (
                         <KRCard
                             key={kr.id}
@@ -748,8 +753,8 @@ function CreateObjectiveForm({
     return (
         <div style={{
             padding: '16px',
-            background: 'var(--bg-primary)',
-            border: '1px solid var(--accent-primary)40',
+            background: 'rgba(255, 255, 255, 1)',
+            border: '1px solid #d0d7de',
             borderRadius: '10px',
             display: 'flex', flexDirection: 'column', gap: '12px',
         }}>
@@ -764,10 +769,11 @@ function CreateObjectiveForm({
                 autoFocus
                 style={{
                     padding: '8px 12px',
-                    background: 'var(--bg-secondary)',
+                    background: 'rgba(246, 248, 250, 1)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '6px', color: 'var(--text-primary)',
                     fontSize: '14px',
+                    boxShadow: 'none',
                 }}
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onCancel(); }}
             />
@@ -778,11 +784,12 @@ function CreateObjectiveForm({
                 rows={2}
                 style={{
                     padding: '8px 12px',
-                    background: 'var(--bg-secondary)',
+                    background: 'rgba(246, 248, 250, 1)',
                     border: '1px solid var(--border-subtle)',
                     borderRadius: '6px', color: 'var(--text-primary)',
                     fontSize: '13px', resize: 'vertical',
                     fontFamily: 'inherit',
+                    boxShadow: 'none',
                 }}
             />
             {isAdmin && (
@@ -1048,7 +1055,7 @@ export default function OKR() {
                                 onClick={() => setPeriodMenuOpen(v => !v)}
                                 style={{
                                     minWidth: 170, height: 34, padding: '5px 10px', borderRadius: '6px',
-                                    border: '1px solid var(--border-subtle)', background: 'var(--bg-secondary)',
+                                    border: '1px solid var(--border-subtle)', background: 'rgba(255, 255, 255, 1)',
                                     color: 'var(--text-secondary)', fontSize: '12px', display: 'flex',
                                     alignItems: 'center', justifyContent: 'space-between', gap: '10px', cursor: 'pointer',
                                 }}
@@ -1423,7 +1430,7 @@ function MembersWithoutOKRPanel({
                 borderRadius: '8px',
                 border: '1px solid var(--border-subtle)',
             }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0, backgroundColor: 'rgba(255, 255, 255, 1)' }}>
                     <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', lineHeight: 1.6 }}>
                         {company_okr_exists
                             ? (isChinese
@@ -1494,11 +1501,11 @@ function MembersWithoutOKRPanel({
                     title={company_okr_exists ? undefined : (isChinese ? '请先设定公司 OKR' : 'Set company OKRs first')}
                     style={{
                         display: 'flex', alignItems: 'center', gap: '6px',
-                        padding: '5px 12px', borderRadius: '6px',
+                        padding: '7px 14px', borderRadius: '6px',
                         border: 'none', flexShrink: 0,
-                        background: company_okr_exists ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-                        color: company_okr_exists ? '#fff' : 'var(--text-quaternary)',
-                        fontSize: '12px', fontWeight: 500,
+                        background: 'var(--accent-primary)',
+                        color: '#fff',
+                        fontSize: '13px', fontWeight: 500,
                         cursor: nudging || !company_okr_exists ? 'not-allowed' : 'pointer',
                         opacity: nudging ? 0.7 : 1,
                         transition: 'opacity 0.15s, background 0.15s',
@@ -1530,7 +1537,7 @@ function MembersWithoutOKRPanel({
                         <div key={member.id} style={{
                             display: 'flex', alignItems: 'center', gap: '10px',
                             padding: '8px 10px',
-                            background: 'var(--bg-secondary)',
+                            background: 'rgba(255, 255, 255, 1)',
                             borderRadius: '6px',
                             border: '1px solid var(--border-subtle)',
                         }}>

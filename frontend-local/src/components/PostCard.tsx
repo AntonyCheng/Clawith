@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import MentionInput from './MentionInput';
 
@@ -12,25 +12,10 @@ const fetchJson = async <T,>(url: string): Promise<T> => {
     return res.json();
 };
 
-const postJson = async (url: string, body: any) => {
-    const token = localStorage.getItem('token');
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error('Failed to post');
-    return res.json();
-};
-
-const timeAgo = (dateStr: string) => {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'now';
-    if (mins < 60) return `${mins}m`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.floor(hours / 24)}d`;
+const formatTime = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 };
 
 /* ────── Inline SVG Icons ────── */
@@ -101,17 +86,53 @@ function ActionBtn({ icon, label, active, onClick, color, hoverColor }: { icon: 
 
 /* ────── Avatar ────── */
 
-function Avatar({ name, isAgent, size = 32 }: { name: string; isAgent: boolean; size?: number }) {
+function Avatar({
+    name,
+    isAgent,
+    size = 32,
+    avatarUrl,
+}: {
+    name: string;
+    isAgent: boolean;
+    size?: number;
+    avatarUrl?: string | null;
+}) {
     const initial = (Array.from(name || '?')[0] || '?').toUpperCase();
+    const [imgFailed, setImgFailed] = useState(false);
+    const showImage = Boolean(avatarUrl) && !imgFailed;
+    const baseStyle: React.CSSProperties = {
+        width: `${size}px`,
+        height: `${size}px`,
+        borderRadius: 'var(--radius-md)',
+        flexShrink: 0,
+        userSelect: 'none',
+        overflow: 'hidden',
+    };
+    if (showImage) {
+        return (
+            <img
+                src={avatarUrl as string}
+                alt={initial}
+                title={name}
+                onError={() => setImgFailed(true)}
+                style={{
+                    ...baseStyle,
+                    display: 'block',
+                    objectFit: 'cover',
+                }}
+            />
+        );
+    }
     return (
         <div style={{
-            width: `${size}px`, height: `${size}px`, borderRadius: '50%',
-            background: isAgent
-                ? 'linear-gradient(135deg, #1D61F7 0%, #0066FF 100%)'
-                : 'linear-gradient(135deg, #667085 0%, #344054 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: `${Math.round(size * 0.4)}px`, fontWeight: 600, color: '#fff', flexShrink: 0,
-            userSelect: 'none',
+            ...baseStyle,
+            background: '#E60027',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: `${Math.round(size * 0.4)}px`,
+            fontWeight: 600,
+            color: '#fff',
         }}>
             {initial}
         </div>
@@ -183,8 +204,11 @@ const renderContent = (text: string) => {
 
 export interface PlazaComment {
     id: string;
+    post_id?: string;
+    author_id?: string;
     author_name: string;
     author_type: string;
+    author_avatar_url?: string | null;
     created_at: string;
     content: string;
 }
@@ -194,6 +218,7 @@ export interface Post {
     author_name: string;
     author_type: 'human' | 'agent';
     author_id: string;
+    author_avatar_url?: string | null;
     content: string;
     likes_count: number;
     comments_count: number;
@@ -215,6 +240,7 @@ export interface PostCardProps {
     expandedPost: string | null;
     onToggleExpand: (postId: string) => void;
     onDelete: (postId: string) => void;
+    onDeleteComment: (postId: string, commentId: string) => void;
     onLike: (postId: string) => void;
     onComment: (postId: string, content: string) => void;
     onQueryInvalidate: (key: string[]) => void;
@@ -230,6 +256,7 @@ export default function PostCard({
     expandedPost,
     onToggleExpand,
     onDelete,
+    onDeleteComment,
     onLike,
     onComment,
     onQueryInvalidate,
@@ -241,6 +268,7 @@ export default function PostCard({
     const [localComment, setLocalComment] = useState('');
     const [isContentExpanded, setIsContentExpanded] = useState(false);
     const [isOverflowing, setIsOverflowing] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
     const contentRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -259,47 +287,35 @@ export default function PostCard({
         enabled: isExpanded,
     });
 
-    const addComment = useMutation({
-        mutationFn: (payload: { postId: string; content: string }) =>
-            postJson(`/api/plaza/posts/${payload.postId}/comments`, {
-                content: payload.content,
-                author_id: currentUserId,
-                author_type: 'human',
-                author_name: '',
-            }),
-        onSuccess: (_, vars) => {
-            setLocalComment('');
-            onQueryInvalidate(['plaza-posts']);
-            onQueryInvalidate([`plaza-post-detail,${vars.postId}`]);
-        },
-    });
-
     const comments: PlazaComment[] = (postDetail?.comments || post.comments || []) as PlazaComment[];
 
     const handleCommentSubmit = () => {
-        if (localComment.trim()) {
-            addComment.mutate({ postId: post.id, content: localComment });
-        }
+        const trimmed = localComment.trim();
+        if (!trimmed) return;
+        setLocalComment('');
+        onComment(post.id, trimmed);
     };
 
     return (
         <div
             id={`post-${post.id}`}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
             style={{
                 padding: '14px 16px',
-                border: '1px solid #eaedf0',
+                border: '1px solid rgba(209, 212, 219, 1)',
                 borderRadius: '10px',
                 overflow: 'hidden',
-                background: '#f8f9fd',
-                boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
+                background: isHovered ? 'rgba(246, 248, 250, 1)' : 'rgba(255, 255, 255, 1)',
+                transition: 'background 0.2s ease',
             }}
         >
             {/* Author row */}
             <div style={{
-                display: 'flex', alignItems: 'center',
+                display: 'flex', alignItems: 'flex-start',
                 gap: '10px', marginBottom: '8px',
             }}>
-                <Avatar name={post.author_name} isAgent={post.author_type === 'agent'} size={30} />
+                <Avatar name={post.author_name} isAgent={post.author_type === 'agent'} size={30} avatarUrl={post.author_avatar_url} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{
                         fontSize: 'var(--text-sm)', fontWeight: 500,
@@ -310,25 +326,51 @@ export default function PostCard({
                         {post.author_type === 'agent' && (
                             <span style={{
                                 fontSize: '10px', padding: '1px 5px',
-                                background: 'var(--bg-tertiary)',
+                                background: 'rgba(230, 0, 39, 0.07)',
                                 border: '1px solid var(--border-subtle)',
-                                color: 'var(--text-secondary)',
-                                borderRadius: 'var(--radius-sm)',
+                                color: 'rgba(230, 0, 18, 1)',
+                                borderRadius: 'var(--radius-md)',
                                 fontWeight: 500, lineHeight: '14px',
                             }}>AI</span>
                         )}
                     </div>
+                    <div style={{
+                        fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)',
+                        fontFamily: 'var(--font-mono)', marginTop: '2px',
+                    }}>
+                        {formatTime(post.created_at)}
+                    </div>
                 </div>
-                <span style={{
-                    fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)',
-                    fontFamily: 'var(--font-mono)', flexShrink: 0,
-                }}>
-                    {timeAgo(post.created_at)}
-                </span>
+                <div style={{ display: 'flex', gap: '2px', alignItems: 'center', flexShrink: 0 }}>
+                    <ActionBtn
+                        icon={post.likes_count > 0 ? Icons.heartFilled : Icons.heart}
+                        label={post.likes_count || 0}
+                        active={post.likes_count > 0}
+                        color={post.likes_count > 0 ? '#E60027' : 'rgba(104, 104, 104, 1)'}
+                        hoverColor={post.likes_count > 0 ? '#C8001F' : 'rgba(104, 104, 104, 1)'}
+                        onClick={() => onLike(post.id)}
+                    />
+                    <ActionBtn
+                        icon={Icons.comment}
+                        label={post.comments_count || 0}
+                        color={isExpanded ? 'var(--text-secondary)' : 'rgba(106, 106, 106, 1)'}
+                        hoverColor={isExpanded ? 'var(--text-secondary)' : 'rgba(106, 106, 106, 1)'}
+                        onClick={() => onToggleExpand(post.id)}
+                    />
+                    {(isAdmin || post.author_id === currentUserId) && (
+                        <button
+                            className="delete-btn"
+                            onClick={() => onDelete(post.id)}
+                            title={t('plaza.deletePost', 'Delete post')}
+                        >
+                            <span style={{ display: 'flex' }}>{Icons.trash}</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Content */}
-            <div style={{ paddingLeft: '40px', marginBottom: '10px' }}>
+            <div style={{ marginBottom: '10px', marginLeft: '36px' }}>
                 <div
                     ref={contentRef}
                     style={{
@@ -338,7 +380,11 @@ export default function PostCard({
                         whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                         maxHeight: isContentExpanded ? 'none' : 'calc(1.65em * 10)',
                         overflow: 'hidden',
-                        transition: 'max-height 0.3s ease',
+                        transition: 'max-height 0.3s ease, background 0.2s ease',
+                        background: isHovered ? 'rgba(255, 255, 255, 1)' : 'rgba(246, 248, 250, 1)',
+                        padding: '12px 14px',
+                        border: '1px solid rgba(209, 212, 219, 1)',
+                        borderRadius: 'var(--radius-md)',
                     }}
                 >
                     {renderContent(post.content)}
@@ -375,43 +421,11 @@ export default function PostCard({
                 )}
             </div>
 
-            {/* Actions */}
-            <div style={{
-                display: 'flex', gap: '2px', paddingLeft: '40px',
-                justifyContent: 'space-between', alignItems: 'center',
-            }}>
-                <div style={{ display: 'flex', gap: '2px' }}>
-                    <ActionBtn
-                        icon={post.likes_count > 0 ? Icons.heartFilled : Icons.heart}
-                        label={post.likes_count || 0}
-                        active={post.likes_count > 0}
-                        color={post.likes_count > 0 ? '#EF4444' : 'rgba(239, 68, 68, 0.4)'}
-                        hoverColor="#EF4444"
-                        onClick={() => onLike(post.id)}
-                    />
-                    <ActionBtn
-                        icon={Icons.comment}
-                        label={post.comments_count || 0}
-                        color={isExpanded ? '#1D61F7' : 'rgba(29, 97, 247, 0.35)'}
-                        hoverColor="#1D61F7"
-                        onClick={() => onToggleExpand(post.id)}
-                    />
-                </div>
-                {(isAdmin || post.author_id === currentUserId) && (
-                    <button
-                        className="delete-btn"
-                        onClick={() => onDelete(post.id)}
-                        title={t('plaza.deletePost', 'Delete post')}
-                    >
-                        <span style={{ display: 'flex', marginRight: '4px' }}>{Icons.trash}</span>
-                    </button>
-                )}
-            </div>
-
             {/* Comments */}
             {isExpanded && (
                 <div style={{
-                    marginTop: '10px', paddingTop: '10px', paddingLeft: '40px',
+                    marginTop: '10px', paddingTop: '10px',
+                    marginLeft: '36px',
                     borderTop: '1px solid var(--border-subtle)',
                 }}>
                     {comments.map(c => (
@@ -421,7 +435,7 @@ export default function PostCard({
                             background: 'var(--bg-secondary)',
                             borderRadius: 'var(--radius-md)',
                         }}>
-                            <Avatar name={c.author_name} isAgent={c.author_type === 'agent'} size={22} />
+                            <Avatar name={c.author_name} isAgent={c.author_type === 'agent'} size={22} avatarUrl={c.author_avatar_url} />
                             <div style={{ minWidth: 0, flex: 1 }}>
                                 <div style={{
                                     fontSize: 'var(--text-xs)', fontWeight: 500,
@@ -432,7 +446,7 @@ export default function PostCard({
                                         fontWeight: 400, color: 'var(--text-tertiary)',
                                         fontFamily: 'var(--font-mono)',
                                     }}>
-                                        {timeAgo(c.created_at)}
+                                        {formatTime(c.created_at)}
                                     </span>
                                 </div>
                                 <div style={{
@@ -442,6 +456,15 @@ export default function PostCard({
                                     {renderContent(c.content)}
                                 </div>
                             </div>
+                            {(isAdmin || c.author_id === currentUserId || post.author_id === currentUserId) && (
+                                <button
+                                    className="delete-btn"
+                                    onClick={e => { e.stopPropagation(); onDeleteComment(post.id, c.id); }}
+                                    title="删除评论"
+                                >
+                                    <span style={{ display: 'flex' }}>{Icons.trash}</span>
+                                </button>
+                            )}
                         </div>
                     ))}
                     <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
@@ -455,16 +478,17 @@ export default function PostCard({
                             style={{ height: '32px' }}
                         />
                         <button
-                            className={`btn ${localComment.trim() ? 'btn-primary' : 'btn-secondary'}`}
                             onClick={handleCommentSubmit}
-                            disabled={!localComment.trim()}
                             style={{
                                 height: '32px', fontSize: 'var(--text-xs)',
                                 padding: '0 12px',
                                 display: 'flex', alignItems: 'center', gap: '4px',
+                                border: 'none', borderRadius: 'var(--radius-sm)',
+                                background: '#E60027', color: '#fff',
+                                cursor: 'pointer', fontWeight: 500,
+                                flexShrink: 0,
                             }}
                         >
-                            <span style={{ display: 'flex' }}>{Icons.send}</span>
                             {t('plaza.send', 'Send')}
                         </button>
                     </div>

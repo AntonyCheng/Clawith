@@ -105,9 +105,9 @@ function ThemeColorPicker() {
                     style={{ width: '120px', fontSize: '13px', fontFamily: 'var(--font-mono)' }}
                     onKeyDown={e => e.key === 'Enter' && handleCustom()}
                 />
-                <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={handleCustom}>Apply</button>
+                <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={handleCustom}>{t('enterprise.tools.apply')}</button>
                 {currentColor && (
-                    <button className="btn btn-ghost" style={{ fontSize: '12px', color: 'var(--text-tertiary)' }} onClick={handleReset}>Reset</button>
+                    <button className="btn btn-ghost" style={{ fontSize: '12px', color: 'var(--text-tertiary)' }} onClick={handleReset}>{t('enterprise.tools.reset')}</button>
                 )}
                 {currentColor && (
                     <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: currentColor, border: '1px solid var(--border-default)' }} />
@@ -236,10 +236,10 @@ export default function EnterpriseSettings() {
     // Category-level config schemas: tools sharing the same key have config on category header
     const GLOBAL_CATEGORY_CONFIG_SCHEMAS: Record<string, { title: string; fields: any[] }> = {
         agentbay: {
-            title: 'AgentBay Settings',
+            title: t('admin.agentBaySettings'),
             fields: [
-                { key: 'api_key', label: 'API Key (from AgentBay)', type: 'password', placeholder: 'Enter your AgentBay API key' },
-                { key: 'os_type', label: 'Cloud Computer OS', type: 'select', default: 'windows', options: [{ value: 'linux', label: 'Linux' }, { value: 'windows', label: 'Windows' }] },
+                { key: 'api_key', label: t('admin.apiKeyFromAgentBay'), type: 'password', placeholder: t('admin.apiKeyPlaceholder') },
+                { key: 'os_type', label: t('admin.cloudComputerOs'), type: 'select', default: 'windows', options: [{ value: 'linux', label: t('admin.linux') }, { value: 'windows', label: t('admin.windows') }] },
             ],
         },
     };
@@ -274,19 +274,19 @@ export default function EnterpriseSettings() {
         agentbay: t('agent.toolCategories.agentbay', 'AgentBay'),
     };
     const categoryDescriptions: Record<string, string> = {
-        agentbay: 'Browser and cloud computer automation',
-        file: 'Read, write, convert, and manage workspace files',
-        communication: 'Messages and cross-channel collaboration',
-        search: 'Web and knowledge search tools',
-        code: 'Code execution and development utilities',
-        aware: 'Triggers, reminders, and awareness workflows',
-        email: 'Email reading and sending tools',
-        feishu: 'Feishu / Lark messaging and collaboration',
-        okr: 'Objectives, key results, and progress reporting',
-        social: 'Social publishing and community workflows',
-        discovery: 'Tool and capability discovery',
-        custom: 'Company-added or MCP tools',
-        general: 'General purpose tools',
+        agentbay: t('enterprise.tools.browserAutomation'),
+        file: t('enterprise.tools.fileManagement'),
+        communication: t('enterprise.tools.communication'),
+        search: t('enterprise.tools.webSearch'),
+        code: t('enterprise.tools.codeExecution'),
+        aware: t('enterprise.tools.triggers'),
+        email: t('enterprise.tools.email'),
+        feishu: t('enterprise.tools.feishu'),
+        okr: t('enterprise.tools.okr'),
+        social: t('enterprise.tools.social'),
+        discovery: t('enterprise.tools.discovery'),
+        custom: t('enterprise.tools.custom'),
+        general: t('enterprise.tools.general'),
     };
     const renderCategoryIcon = (category: string, size = 15) => {
         const style = { color: 'var(--text-tertiary)' };
@@ -495,7 +495,11 @@ export default function EnterpriseSettings() {
                 {activeTab === 'okr' && <OkrTab tenantId={selectedTenantId} t={t} />}
 
                 {/* ── LLM Model Pool ── */}
-                {activeTab === 'llm' && <LlmTab selectedTenantId={selectedTenantId} />}
+                {activeTab === 'llm' && (
+                    <div className="es-card">
+                        <LlmTab selectedTenantId={selectedTenantId} />
+                    </div>
+                )}
 
                 {/* ── Org Structure ── */}
                 {activeTab === 'org' && <OrgTab tenant={currentTenant} />}
@@ -514,11 +518,11 @@ export default function EnterpriseSettings() {
                                 {a.status === 'pending' ? (
                                     <div style={{ display: 'flex', gap: '8px' }}>
                                         <button className="btn btn-primary" onClick={() => resolveApproval.mutate({ id: a.id, action: 'approve' })}>{t('common.confirm')}</button>
-                                        <button className="btn btn-danger" onClick={() => resolveApproval.mutate({ id: a.id, action: 'reject' })}>Reject</button>
+                                        <button className="btn btn-danger" onClick={() => resolveApproval.mutate({ id: a.id, action: 'reject' })}>{t('common.reject')}</button>
                                     </div>
                                 ) : (
                                     <span className={`badge ${a.status === 'approved' ? 'badge-success' : 'badge-error'}`}>
-                                        {a.status === 'approved' ? 'Approved' : 'Rejected'}
+                                        {a.status === 'approved' ? t('common.approved') : t('common.rejected')}
                                     </span>
                                 )}
                             </div>
@@ -587,7 +591,7 @@ export default function EnterpriseSettings() {
 
                 {/* ── Company Management ── */}
                 {activeTab === 'info' && (
-                    <div>
+                    <div className="es-info">
                         <CompanyLogoEditor key={`logo-${selectedTenantId}`} />
                         <CompanyNameEditor key={`name-${selectedTenantId}`} />
                         <CompanyTimezoneEditor key={`tz-${selectedTenantId}`} />
@@ -607,6 +611,7 @@ export default function EnterpriseSettings() {
                                     minHeight: '200px', resize: 'vertical',
                                     fontFamily: 'var(--font-mono)', fontSize: '13px',
                                     lineHeight: '1.6', whiteSpace: 'pre-wrap',
+                                    background: '#F6F8FA',
                                 }}
                             />
                             <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -628,7 +633,8 @@ export default function EnterpriseSettings() {
                             </div>
                             <EnterpriseKBBrowser onRefresh={() => setInfoRefresh((v: number) => v + 1)} refreshKey={infoRefresh} />
                         </div>
-                        <ThemeColorPicker />
+                        {/* ThemeColorPicker hidden — accent is hardcoded to #E60027 */}
+                        {/* <ThemeColorPicker /> */}
                         <A2AAsyncToggle key={`a2a-${selectedTenantId}`} />
 
                         {/* ── Danger Zone: Delete Company ── */}
@@ -787,7 +793,7 @@ export default function EnterpriseSettings() {
                                 <button className="btn btn-primary" onClick={saveQuotas} disabled={quotaSaving}>
                                     {quotaSaving ? t('common.loading') : t('common.save', 'Save')}
                                 </button>
-                                {quotaSaved && <span style={{ color: 'var(--success)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconCheck size={13} stroke={2} /> Saved</span>}
+                                {quotaSaved && <span style={{ color: 'var(--success)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}><IconCheck size={13} stroke={2} /> {t('enterprise.config.saved')}</span>}
                             </div>
                         </div>
                     </div>
@@ -801,7 +807,7 @@ export default function EnterpriseSettings() {
 
                 {/* ── Tools Tab ── */}
                 {activeTab === 'tools' && (
-                    <div>
+                    <div className="es-card--padded">
                         {/* Sub-tab pills */}
                         <div className="tool-source-tabs enterprise-tool-source-tabs" role="tablist" aria-label={t('enterprise.tools.sourceTabs', 'Tool sources')}>
                             {([['global', t('enterprise.tools.globalTools')], ['agent-installed', t('enterprise.tools.agentInstalled')]] as const).map(([key, label]) => (
@@ -853,7 +859,7 @@ export default function EnterpriseSettings() {
                                                         const meta = getToolGroupMeta(groupKey, groupRows);
                                                         const expanded = expandedAgentInstalledGroups.has(groupKey);
                                                         return (
-                                                            <div key={groupKey} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+                                                            <div key={groupKey} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
                                                                 <div
                                                                     role="button"
                                                                     tabIndex={0}
@@ -864,15 +870,15 @@ export default function EnterpriseSettings() {
                                                                             toggleAgentInstalledGroup(groupKey);
                                                                         }
                                                                     }}
-                                                                    style={{ background: 'var(--bg-secondary)', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}
+                                                                    style={{ background: 'transparent', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}
                                                                 >
                                                                     <IconChevronDown size={14} stroke={1.8} style={{ color: 'var(--text-tertiary)', transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease', flexShrink: 0 }} />
-                                                                    <span style={{ width: '26px', height: '26px', borderRadius: '7px', border: '1px solid var(--border-subtle)', background: 'var(--bg-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{renderCategoryIcon(meta.iconCategory, 15)}</span>
+                                                                    <span style={{ width: '26px', height: '26px', borderRadius: '7px', border: '1px solid var(--border-subtle)', background: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{renderCategoryIcon(meta.iconCategory, 15)}</span>
                                                                     <div style={{ minWidth: 0 }}>
                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                                             <span style={{ fontSize: '13px', fontWeight: 650, color: 'var(--text-primary)' }}>{meta.label}</span>
                                                                             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                                                                {groupRows.length} {groupRows.length === 1 ? 'tool' : 'tools'}
+                                                                                {t('enterprise.tools.count', { count: groupRows.length })}
                                                                             </span>
                                                                         </div>
                                                                         <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{meta.description}</div>
@@ -887,15 +893,16 @@ export default function EnterpriseSettings() {
                                                                         padding: '10px 14px',
                                                                         borderTop: idx === 0 ? '1px solid var(--border-subtle)' : 'none',
                                                                         borderBottom: idx < groupRows.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                                                                        background: '#ffffff',
                                                                     }}>
                                                                         <div style={{ minWidth: 0 }}>
                                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
                                                                                 <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.tool_display_name}</span>
-                                                                                {row.type === 'mcp' && <span style={{ fontSize: '10px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderRadius: '4px', padding: '1px 5px' }}>MCP</span>}
+                                                                                {row.type === 'mcp' && <span style={{ fontSize: '10px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderRadius: '4px', padding: '1px 5px' }}>{t('enterprise.tools.mcpShort')}</span>}
                                                                                 {row.configured && <span style={{ fontSize: '10px', background: 'rgba(99,102,241,0.15)', color: 'var(--accent-color)', borderRadius: '4px', padding: '1px 5px' }}>{t('enterprise.tools.configured', 'Configured')}</span>}
                                                                             </div>
                                                                             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                                                {row.installed_by_agent_name || 'Unknown Agent'}
+                                                                                {row.installed_by_agent_name || t('enterprise.tools.unknownAgent')}
                                                                                 {row.installed_at && <span> · {new Date(row.installed_at).toLocaleString()}</span>}
                                                                             </div>
                                                                         </div>
@@ -962,31 +969,31 @@ export default function EnterpriseSettings() {
                                         {!mcpForm.server_name && (
                                             <div>
                                                 <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>{t('enterprise.tools.mcpServerName')}</label>
-                                                <input className="form-input" value={mcpForm.server_name} onChange={e => setMcpForm(p => ({ ...p, server_name: e.target.value }))} placeholder="My MCP Server" />
+                                                <input className="form-input" value={mcpForm.server_name} onChange={e => setMcpForm(p => ({ ...p, server_name: e.target.value }))} placeholder={t('enterprise.tools.mcpServerPlaceholder')} />
                                             </div>
                                         )}
 
                                         {/* Optional standalone API Key — sent as Authorization: Bearer */}
                                         <div>
                                             <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-                                                API Key <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span>
+                                                {t('enterprise.tools.apiKeyOptional')} <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>{t('enterprise.tools.optional')}</span>
                                             </label>
                                             <input
                                                 type="password"
                                                 className="form-input"
                                                 value={mcpForm.api_key}
                                                 onChange={e => setMcpForm(p => ({ ...p, api_key: e.target.value }))}
-                                                placeholder="Leave blank if the key is already embedded in the URL"
+                                                placeholder={t('enterprise.tools.urlOrJsonHint')}
                                                 autoComplete="new-password"
                                             />
                                         </div>
 
                                         {/* Auth explanation for non-obvious behavior */}
                                         <div style={{ padding: '10px 12px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: '6px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.65' }}>
-                                            <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>How authentication works</div>
-                                            <div>- If your MCP server embeds the key in the URL (e.g. Tavily uses <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 3px', borderRadius: '3px' }}>?tavilyApiKey=xxx</code>), leave the field above blank.</div>
-                                            <div>- For servers that use <strong>Bearer token</strong> auth, enter the key here. It is sent as <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 3px', borderRadius: '3px' }}>Authorization: Bearer ...</code> on every request.</div>
-                                            <div>- If both are provided, the API Key field takes priority. All keys are stored encrypted.</div>
+                                            <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>{t('enterprise.tools.howAuthWorks')}</div>
+                                            <div>{t('enterprise.tools.authEmbeddedUrl')}</div>
+                                            <div>{t('enterprise.tools.authBearer')}</div>
+                                            <div>{t('enterprise.tools.authPriority')}</div>
                                         </div>
 
                                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -1038,7 +1045,7 @@ export default function EnterpriseSettings() {
                                                                     } catch (e: any) {
                                                                         await dialog.alert(t('enterprise.tools.importFailed') || '导入失败', { type: 'error', details: String(e?.message || e) });
                                                                     }
-                                                                }}>{t('enterprise.tools.import') || 'Import'}</button>
+                                                                }}>{t('enterprise.tools.import')}</button>
                                                             </div>
                                                         ))}
                                                         <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
@@ -1077,7 +1084,7 @@ export default function EnterpriseSettings() {
                                                                 await loadAllTools();
                                                                 setShowAddMCP(false); setMcpTestResult(null); setMcpForm({ server_url: '', server_name: '', api_key: '' }); setMcpRawInput('');
                                                                 if (errors.length > 0) {
-                                                                    await dialog.alert(`已导入 ${successCount}/${tools.length} 个工具`, { type: 'warning', title: '部分导入失败', details: errors.join('\n') });
+                                                                    await dialog.alert(t('enterprise.tools.importPartial', { success: successCount, total: tools.length }), { type: 'warning', title: t('enterprise.tools.importPartialFail'), details: errors.join('\n') });
                                                                 } else if (successCount > 0) {
                                                                     toast.success(t('common.dialog.partialImportSuccess', { count: successCount }));
                                                                 }
@@ -1158,15 +1165,15 @@ export default function EnterpriseSettings() {
                                             padding: '10px 14px',
                                             borderTop: idx === 0 ? '1px solid var(--border-subtle)' : 'none',
                                             borderBottom: idx < total - 1 ? '1px solid var(--border-subtle)' : 'none',
-                                            background: 'var(--bg-primary)',
+                                            background: '#ffffff',
                                         }}>
                                             <div style={{ minWidth: 0 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flexWrap: 'wrap' }}>
                                                     <span style={{ fontWeight: 500, fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tool.display_name}</span>
                                                     <span style={{ fontSize: '10px', background: tool.type === 'mcp' ? 'var(--primary)' : 'var(--bg-tertiary)', color: tool.type === 'mcp' ? '#fff' : 'var(--text-secondary)', borderRadius: '4px', padding: '1px 5px', flexShrink: 0 }}>
-                                                        {tool.type === 'mcp' ? 'MCP' : 'Built-in'}
+                                                        {tool.type === 'mcp' ? t('enterprise.tools.mcpShort') : t('enterprise.tools.builtInShort')}
                                                     </span>
-                                                    {tool.is_default && <span style={{ fontSize: '10px', background: 'rgba(0,200,100,0.15)', color: 'var(--success)', borderRadius: '4px', padding: '1px 5px', flexShrink: 0 }}>Default</span>}
+                                                    {tool.is_default && <span style={{ fontSize: '10px', background: 'rgba(0,200,100,0.15)', color: 'var(--success)', borderRadius: '4px', padding: '1px 5px', flexShrink: 0 }}>{t('enterprise.tools.default')}</span>}
                                                     {isConfigured && <span style={{ fontSize: '10px', background: 'rgba(99,102,241,0.15)', color: 'var(--accent-color)', borderRadius: '4px', padding: '1px 5px', flexShrink: 0 }}>{t('enterprise.tools.configured', 'Configured')}</span>}
                                                 </div>
                                                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -1177,19 +1184,19 @@ export default function EnterpriseSettings() {
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                                                 {tool.type === 'mcp' && tool.mcp_server_name && (
                                                     <button
-                                                        style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                                                        style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)' }}
                                                         onClick={() => setEditingMcpServer({
                                                             server_name: tool.mcp_server_name,
                                                             server_url: tool.mcp_server_url || '',
                                                             api_key: '',
                                                         })}
                                                     >
-                                                        Edit Server
+                                                        {t('enterprise.tools.editServer')}
                                                     </button>
                                                 )}
                                                 {hasOwnConfig && (
                                                     <button
-                                                        style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                                                        style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '3px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)' }}
                                                         title={t('enterprise.tools.configureSettings', 'Configure settings')}
                                                         onClick={async () => {
                                                             setEditingToolId(tool.id);
@@ -1238,11 +1245,26 @@ export default function EnterpriseSettings() {
                                 if (filteredTools.length === 0) {
                                     return (
                                         <>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                 <div style={{ position: 'relative', flex: '1 1 260px', minWidth: '220px' }}>
                                                     <IconSearch size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-                                                    <input value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder={t('agent.tools.searchTools', 'Search tools...')} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-subtle)', borderRadius: '8px', background: 'var(--bg-primary)', color: 'var(--text-primary)', padding: '8px 10px 8px 32px', fontSize: '13px', outline: 'none' }} />
+                                                    <input value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder={t('agent.tools.searchTools', 'Search tools...')} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-subtle)', borderRadius: '8px', background: '#ffffff', color: 'var(--text-primary)', padding: '8px 10px 8px 32px', fontSize: '13px', outline: 'none' }} />
                                                 </div>
+                                                {(['all', 'enabled', 'disabled', 'default', 'configured'] as const).map(filter => (
+                                                    <button key={filter} type="button" onClick={() => setToolStatusFilter(filter)} style={{ border: '1px solid var(--border-subtle)', borderRadius: '999px', background: toolStatusFilter === filter ? 'var(--text-primary)' : 'var(--bg-primary)', color: toolStatusFilter === filter ? 'var(--bg-primary)' : 'var(--text-secondary)', padding: '6px 10px', fontSize: '11px', cursor: 'pointer' }}>
+                                                        {filter === 'all' ? t('enterprise.tools.filterAll')
+                                                            : filter === 'enabled' ? t('enterprise.tools.filterEnabled')
+                                                                : filter === 'disabled' ? t('enterprise.tools.filterDisabled')
+                                                                    : filter === 'default' ? t('enterprise.tools.default')
+                                                                        : t('enterprise.tools.filterConfigured')}
+                                                    </button>
+                                                ))}
+                                                <button type="button" onClick={() => {
+                                                    const categories = Object.keys(allGrouped);
+                                                    setExpandedToolCategories(prev => prev.size >= categories.length ? new Set() : new Set(categories));
+                                                }} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', background: '#ffffff', color: 'var(--text-secondary)', padding: '6px 10px', fontSize: '11px', cursor: 'pointer' }}>
+                                                    {expandedToolCategories.size >= Object.keys(allGrouped).length ? t('enterprise.tools.collapseAll') : t('enterprise.tools.expandAll')}
+                                                </button>
                                             </div>
                                             <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-tertiary)' }}>{hasFilters ? t('agent.tools.noMatchingTools', 'No matching tools') : t('enterprise.tools.emptyState')}</div>
                                         </>
@@ -1254,23 +1276,23 @@ export default function EnterpriseSettings() {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                             <div style={{ position: 'relative', flex: '1 1 260px', minWidth: '220px' }}>
                                                 <IconSearch size={15} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-tertiary)' }} />
-                                                <input value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder={t('agent.tools.searchTools', 'Search tools...')} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-subtle)', borderRadius: '8px', background: 'var(--bg-primary)', color: 'var(--text-primary)', padding: '8px 10px 8px 32px', fontSize: '13px', outline: 'none' }} />
+                                                <input value={toolSearch} onChange={(e) => setToolSearch(e.target.value)} placeholder={t('agent.tools.searchTools', 'Search tools...')} style={{ width: '100%', boxSizing: 'border-box', border: '1px solid var(--border-subtle)', borderRadius: '8px', background: '#ffffff', color: 'var(--text-primary)', padding: '8px 10px 8px 32px', fontSize: '13px', outline: 'none' }} />
                                             </div>
-                                            {(['all', 'enabled', 'disabled', 'default', 'configured'] as const).map(filter => (
-                                                <button key={filter} type="button" onClick={() => setToolStatusFilter(filter)} style={{ border: '1px solid var(--border-subtle)', borderRadius: '999px', background: toolStatusFilter === filter ? 'var(--text-primary)' : 'var(--bg-primary)', color: toolStatusFilter === filter ? 'var(--bg-primary)' : 'var(--text-secondary)', padding: '6px 10px', fontSize: '11px', cursor: 'pointer' }}>
-                                                    {filter === 'all' ? t('common.all', 'All')
-                                                        : filter === 'enabled' ? t('common.enabled', 'Enabled')
-                                                            : filter === 'disabled' ? t('common.disabled', 'Disabled')
-                                                                : filter === 'default' ? 'Default'
-                                                                    : t('agent.tools.configured', 'Configured')}
+                                                {(['all', 'enabled', 'disabled', 'default', 'configured'] as const).map(filter => (
+                                                    <button key={filter} type="button" onClick={() => setToolStatusFilter(filter)} style={{ border: '1px solid var(--border-subtle)', borderRadius: '999px', background: toolStatusFilter === filter ? '#dc2626' : '#ffffff', color: toolStatusFilter === filter ? '#ffffff' : 'var(--text-secondary)', padding: '6px 10px', fontSize: '11px', cursor: 'pointer' }}>
+                                                        {filter === 'all' ? t('enterprise.tools.filterAll')
+                                                            : filter === 'enabled' ? t('enterprise.tools.filterEnabled')
+                                                                : filter === 'disabled' ? t('enterprise.tools.filterDisabled')
+                                                                    : filter === 'default' ? t('enterprise.tools.default')
+                                                                        : t('enterprise.tools.filterConfigured')}
+                                                    </button>
+                                                ))}
+                                                <button type="button" onClick={() => {
+                                                    const categories = Object.keys(allGrouped);
+                                                    setExpandedToolCategories(prev => prev.size >= categories.length ? new Set() : new Set(categories));
+                                                }} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', background: '#dc2626', color: '#ffffff', padding: '6px 10px', fontSize: '11px', cursor: 'pointer' }}>
+                                                    {expandedToolCategories.size >= Object.keys(allGrouped).length ? t('enterprise.tools.collapseAll') : t('enterprise.tools.expandAll')}
                                                 </button>
-                                            ))}
-                                            <button type="button" onClick={() => {
-                                                const categories = Object.keys(allGrouped);
-                                                setExpandedToolCategories(prev => prev.size >= categories.length ? new Set() : new Set(categories));
-                                            }} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', background: 'var(--bg-primary)', color: 'var(--text-secondary)', padding: '6px 10px', fontSize: '11px', cursor: 'pointer' }}>
-                                                {expandedToolCategories.size >= Object.keys(allGrouped).length ? t('agent.tools.collapseAll', 'Collapse all') : t('agent.tools.expandAll', 'Expand all')}
-                                            </button>
                                         </div>
 
                                         {Object.entries(grouped)
@@ -1293,25 +1315,25 @@ export default function EnterpriseSettings() {
                                             const visibleCount = (catTools as any[]).length;
 
                                             return (
-                                                <div key={category} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: 'var(--bg-primary)' }}>
+                                                <div key={category} style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
                                                     <div role="button" tabIndex={0} onClick={() => toggleCategoryExpanded(category)} onKeyDown={(e) => {
                                                         if (e.key === 'Enter' || e.key === ' ') {
                                                             e.preventDefault();
                                                             toggleCategoryExpanded(category);
                                                         }
-                                                    }} style={{ width: '100%', background: 'var(--bg-secondary)', padding: '13px 16px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '14px', alignItems: 'center', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
+                                                    }} style={{ width: '100%', background: '#ffffff', padding: '13px 16px', display: 'grid', gridTemplateColumns: '1fr auto', gap: '14px', alignItems: 'center', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                                                             <IconChevronDown size={16} style={{ transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 120ms ease', color: 'var(--text-tertiary)', flexShrink: 0 }} />
-                                                            <span style={{ width: '28px', height: '28px', borderRadius: '7px', border: '1px solid var(--border-subtle)', background: 'var(--bg-primary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{renderCategoryIcon(meta.iconCategory, 16)}</span>
+                                                            <span style={{ width: '28px', height: '28px', borderRadius: '7px', border: '1px solid var(--border-subtle)', background: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{renderCategoryIcon(meta.iconCategory, 16)}</span>
                                                             <div style={{ minWidth: 0 }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                                                     <span style={{ fontSize: '13px', fontWeight: 650, color: 'var(--text-primary)' }}>{label}</span>
                                                                     <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                                                        {allCatTools.length} tools · {enabledCount} enabled
-                                                                        {defaultCount > 0 ? ` · ${defaultCount} default` : ''}
-                                                                        {visibleCount !== allCatTools.length ? ` · ${visibleCount} shown` : ''}
+                                                                        {t('enterprise.tools.categoryCount', { count: allCatTools.length, enabledCount })}
+                                                                        {defaultCount > 0 ? ` · ${defaultCount} ${t('enterprise.tools.default')}` : ''}
+                                                                        {visibleCount !== allCatTools.length ? ` · ${visibleCount} ${t('enterprise.tools.shown')}` : ''}
                                                                     </span>
-                                                                    {configuredCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(99,102,241,0.15)', color: 'var(--accent-color)', borderRadius: '4px', padding: '1px 5px' }}>{configuredCount} configured</span>}
+                                                                    {configuredCount > 0 && <span style={{ fontSize: '10px', background: 'rgba(99,102,241,0.15)', color: 'var(--accent-color)', borderRadius: '4px', padding: '1px 5px' }}>{configuredCount} {t('enterprise.tools.configured2')}</span>}
                                                                 </div>
                                                                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.description}</div>
                                                             </div>
@@ -1323,7 +1345,7 @@ export default function EnterpriseSettings() {
                                                                     setEditingConfig({});
                                                                     const firstToolWithConfig = (allCatTools as any[]).find((tl: any) => tl.category === meta.configCategory && hasMeaningfulConfig(tl.config));
                                                                     if (firstToolWithConfig?.config) setEditingConfig({ ...firstToolWithConfig.config });
-                                                                }} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)' }} title={`Configure ${label}`}>
+                                                                }} style={{ background: '#ffffff', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)' }} title={`Configure ${label}`}>
                                                                     {t('enterprise.tools.configure', 'Configure')}
                                                                 </button>
                                                             )}
@@ -1352,15 +1374,15 @@ export default function EnterpriseSettings() {
                                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                     onClick={e => { if (e.target === e.currentTarget) setEditingMcpServer(null); }}>
                                     <div className="card" style={{ width: '480px', maxWidth: '95vw', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                        <h3 style={{ margin: 0, fontSize: '15px' }}>Edit MCP Server</h3>
+                                        <h3 style={{ margin: 0, fontSize: '15px' }}>{t('enterprise.tools.editMcpServer')}</h3>
                                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', background: 'var(--bg-tertiary)', padding: '6px 10px', borderRadius: '6px' }}>
                                             <strong>{editingMcpServer.server_name}</strong>
-                                            <span style={{ marginLeft: '8px', color: 'var(--text-tertiary)' }}>Updates all tools from this server at once</span>
+                                            <span style={{ marginLeft: '8px', color: 'var(--text-tertiary)' }}>{t('enterprise.tools.editMcpServerHint')}</span>
                                         </div>
 
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                             <div>
-                                                <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Server URL</label>
+                                                <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>{t('enterprise.tools.serverUrl')}</label>
                                                 <input
                                                     type="password"
                                                     className="form-input"
@@ -1369,34 +1391,34 @@ export default function EnterpriseSettings() {
                                                     placeholder="https://mcp.example.com/sse"
                                                     autoComplete="off"
                                                 />
-                                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '3px' }}>Stored encrypted. For URL-embedded keys (e.g. Tavily), include the key directly here.</div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '3px' }}>{t('enterprise.tools.serverUrlHint')}</div>
                                             </div>
                                             <div>
                                                 <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-                                                    API Key <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>(optional)</span>
+                                                    {t('enterprise.tools.apiKeyOptional')} <span style={{ color: 'var(--text-tertiary)', fontWeight: 400 }}>{t('enterprise.tools.optional')}</span>
                                                 </label>
                                                 <input
                                                     type="password"
                                                     className="form-input"
                                                     value={editingMcpServer.api_key}
                                                     onChange={e => setEditingMcpServer(s => s ? { ...s, api_key: e.target.value } : null)}
-                                                    placeholder="Leave blank to keep existing key"
+                                                    placeholder={t('enterprise.tools.keepExistingKey')}
                                                     autoComplete="new-password"
                                                 />
-                                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '3px' }}>Sent as <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 3px', borderRadius: '3px' }}>Authorization: Bearer ...</code> Takes priority over URL-embedded keys.</div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '3px' }}>{t('enterprise.tools.bearerHint')}</div>
                                             </div>
 
                                             {/* Auth explanation */}
                                             <div style={{ padding: '10px 12px', background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: '6px', fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '1.65' }}>
-                                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>How authentication works</div>
-                                                <div>- <strong>URL-embedded key</strong> (e.g. Tavily <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0 3px', borderRadius: '3px' }}>?tavilyApiKey=xxx</code>): include in Server URL above, leave API Key blank.</div>
-                                                <div>- <strong>Bearer token</strong> auth: enter in the API Key field. It is injected as an HTTP header on every request — the URL stays clean.</div>
-                                                <div>- If both are present, the API Key field takes priority over any URL-embedded value.</div>
+                                                <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>{t('enterprise.tools.howAuthWorks')}</div>
+                                                <div>{t('enterprise.tools.authEmbeddedUrlEdit')}</div>
+                                                <div>{t('enterprise.tools.authBearerEdit')}</div>
+                                                <div>{t('enterprise.tools.authPriorityEdit')}</div>
                                             </div>
                                         </div>
 
                                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                            <button className="btn btn-secondary" onClick={() => setEditingMcpServer(null)} disabled={mcpServerSaving}>Cancel</button>
+                                            <button className="btn btn-secondary" onClick={() => setEditingMcpServer(null)} disabled={mcpServerSaving}>{t('common.cancel')}</button>
                                             <button className="btn btn-primary" disabled={mcpServerSaving || !editingMcpServer.server_url} onClick={async () => {
                                                 setMcpServerSaving(true);
                                                 try {
@@ -1416,7 +1438,7 @@ export default function EnterpriseSettings() {
                                                     toast.error(t('common.error.serverUpdateFailed'), { details: String(e?.message || e) });
                                                 }
                                                 setMcpServerSaving(false);
-                                            }}>{mcpServerSaving ? 'Saving...' : 'Save Changes'}</button>
+                                            }}>{mcpServerSaving ? t('enterprise.tools.saving') : t('enterprise.tools.saveChanges')}</button>
                                         </div>
                                     </div>
                                 </div>
@@ -1489,11 +1511,11 @@ export default function EnterpriseSettings() {
                                 return (
                                     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                         onClick={() => setEditingToolId(null)}>
-                                        <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-primary)', borderRadius: '12px', padding: '24px', width: '480px', maxWidth: '95vw', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+                                        <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', borderRadius: '12px', padding: '24px', width: '480px', maxWidth: '95vw', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                                 <div>
                                                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><IconSettings size={20} stroke={1.8} /> {tool.display_name}</h3>
-                                                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Global configuration used by all agents</div>
+                                                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{t('enterprise.tools.globalConfigDesc')}</div>
                                                 </div>
                                                 <button onClick={() => setEditingToolId(null)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button>
                                             </div>
@@ -1507,7 +1529,7 @@ export default function EnterpriseSettings() {
                                                             onClick={() => setShowAdvancedToolConfig(v => !v)}
                                                             style={{ padding: 0, minWidth: 'auto', fontSize: '12px', color: 'var(--text-secondary)' }}
                                                         >
-                                                            {showAdvancedToolConfig ? 'Hide advanced settings' : 'Advanced settings'}
+                                                            {showAdvancedToolConfig ? t('enterprise.tools.hideAdvanced') : t('enterprise.tools.advancedSettings')}
                                                         </button>
                                                         {showAdvancedToolConfig && (
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
@@ -1545,11 +1567,11 @@ export default function EnterpriseSettings() {
                             {configCategory && GLOBAL_CATEGORY_CONFIG_SCHEMAS[configCategory] && (
                                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                                     onClick={() => setConfigCategory(null)}>
-                                    <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-primary)', borderRadius: '12px', padding: '24px', width: '480px', maxWidth: '95vw', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+                                    <div onClick={e => e.stopPropagation()} style={{ background: '#ffffff', borderRadius: '12px', padding: '24px', width: '480px', maxWidth: '95vw', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                             <div>
                                                 <h3 style={{ margin: 0 }}>{GLOBAL_CATEGORY_CONFIG_SCHEMAS[configCategory].title}</h3>
-                                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>Global configuration shared by all tools in this category</div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{t('enterprise.tools.categoryGlobalConfigDesc')}</div>
                                             </div>
                                             <button onClick={() => setConfigCategory(null)} style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: 'var(--text-secondary)' }}>x</button>
                                         </div>

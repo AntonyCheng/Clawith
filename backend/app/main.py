@@ -349,7 +349,7 @@ app.add_middleware(
 )
 
 # Register API routes
-from app.api.auth import router as auth_router
+from app.api.auth import router as auth_router, users_router as users_api_router
 from app.api.agents import router as agents_router
 from app.api.tasks import router as tasks_router
 from app.api.files import router as files_router
@@ -363,6 +363,7 @@ from app.api.upload import router as upload_router
 from app.api.relationships import router as relationships_router
 from app.api.files import upload_router as files_upload_router, enterprise_kb_router
 from app.api.activity import router as activity_router
+from app.api.dashboard import router as dashboard_router
 from app.api.messages import router as messages_router
 from app.api.tenants import router as tenants_router
 from app.api.schedules import router as schedules_router
@@ -394,6 +395,7 @@ from app.api.okr import router as okr_router
 from app.api.onboarding import router as onboarding_router
 
 app.include_router(auth_router, prefix=settings.API_PREFIX)
+app.include_router(users_api_router, prefix=settings.API_PREFIX)
 app.include_router(agents_router, prefix=settings.API_PREFIX)
 app.include_router(tasks_router, prefix=settings.API_PREFIX)
 app.include_router(files_router, prefix=settings.API_PREFIX)
@@ -405,6 +407,7 @@ app.include_router(advanced_router, prefix=settings.API_PREFIX)
 app.include_router(upload_router, prefix=settings.API_PREFIX)
 app.include_router(relationships_router, prefix=settings.API_PREFIX)
 app.include_router(activity_router, prefix=settings.API_PREFIX)
+app.include_router(dashboard_router, prefix=settings.API_PREFIX)
 app.include_router(messages_router, prefix=settings.API_PREFIX)
 app.include_router(tenants_router, prefix=settings.API_PREFIX)
 app.include_router(schedules_router, prefix=settings.API_PREFIX)

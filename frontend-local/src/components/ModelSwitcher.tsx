@@ -125,11 +125,12 @@ export default function ModelSwitcher({ value, onChange, tenantDefaultId, disabl
                     padding: '0 10px 0 12px', fontSize: '12px',
                     border: `1px solid ${open || hovered ? 'var(--border-default)' : 'var(--border-subtle)'}`,
                     borderRadius: '999px',
-                    background: open || hovered ? 'var(--bg-elevated)' : 'var(--bg-primary)',
+                    background: open || hovered ? 'var(--bg-elevated)' : 'rgba(255, 254, 253, 0)',
                     color: 'var(--text-primary)',
                     cursor: disabled ? 'not-allowed' : 'pointer',
                     opacity: disabled ? 0.6 : 1,
-                    boxShadow: open ? '0 0 0 2px color-mix(in srgb, var(--accent-primary) 12%, transparent)' : 'none',
+                    boxShadow: 'none',
+                    outline: 'none',
                     transition: 'background 120ms, border-color 120ms, box-shadow 120ms, color 120ms',
                 }}
                 title={t('chat.modelSwitcher.title', 'Switch model for this session')}
@@ -163,8 +164,8 @@ export default function ModelSwitcher({ value, onChange, tenantDefaultId, disabl
                         left: coords.left,
                         minWidth: Math.max(220, coords.width),
                         maxHeight: `${coords.maxHeight}px`, overflowY: 'auto',
-                        background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)',
-                        borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                        background: 'rgba(255, 255, 255, 1)', border: '1px solid rgba(236, 236, 236, 1)',
+                        borderRadius: '8px', boxShadow: 'none',
                         zIndex: 10001, padding: '4px',
                     }}
                 >

@@ -19,6 +19,17 @@ export interface FileItem {
     size?: number;
 }
 
+// Surfaced by the backend upload response (`extraction` field). Kept narrow on
+// purpose — only consumed by the badge below. Reasons mirror
+// `backend/app/services/text_extractor.py`.
+export interface ExtractionInfo {
+    reason: string;        // "ok" | "scanned_pdf_no_text_layer" | "empty_extraction" | "extraction_error" | "not_a_binary"
+    detail: string;
+    char_count?: number;
+    page_count?: number;
+    md_path?: string | null;
+}
+
 export interface FileBrowserApi {
     list: (path: string) => Promise<FileItem[]>;
     read: (path: string) => Promise<{ content: string }>;
@@ -103,7 +114,25 @@ export default function FileBrowser({
     const [promptModal, setPromptModal] = useState<{ title: string; placeholder: string; action: string } | null>(null);
     const [promptValue, setPromptValue] = useState('');
     const [uploadProgress, setUploadProgress] = useState<{ fileName: string; percent: number } | null>(null);
+    const [extractionInfos, setExtractionInfos] = useState<Record<string, ExtractionInfo>>({});
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // ─── Extraction badge helpers ────────────────────────
+    // Maps backend `extraction.reason` to a row-level visual hint. Reasons
+    // come from `backend/app/services/text_extractor.py` constants.
+    const EXTRACTION_BADGES: Record<string, { label: string; color: string; bg: string; border: string }> = {
+        scanned_pdf_no_text_layer: { label: '扫描件', color: '#b45309', bg: '#fef3c7', border: '#fde68a' },
+        empty_extraction:          { label: '无文本', color: '#b45309', bg: '#fef3c7', border: '#fde68a' },
+        extraction_error:          { label: '抽取失败', color: '#b91c1c', bg: '#fee2e2', border: '#fecaca' },
+    };
+
+    function getExtractionBadge(relPath: string) {
+        const info = extractionInfos[relPath];
+        if (!info) return null;
+        const def = EXTRACTION_BADGES[info.reason];
+        if (!def) return null;
+        return { ...def, title: info.detail || info.reason };
+    }
 
  
 
@@ -156,9 +185,10 @@ export default function FileBrowser({
         try {
             for (const file of files) {
                 setUploadProgress({ fileName: file.name, percent: 0 });
-                await api.upload(file, currentPath, (pct) => {
+                const res = await api.upload(file, currentPath, (pct) => {
                     setUploadProgress({ fileName: file.name, percent: pct });
                 });
+                captureExtractionInfo(res, currentPath, file.name);
             }
             setUploadProgress(null);
             reload();
@@ -169,6 +199,17 @@ export default function FileBrowser({
             showToast(t('agent.upload.failed', 'Upload failed') + ': ' + (err.message || ''), 'error');
         }
     }, [api, currentPath, reload, onRefresh, showToast, t]);
+
+    // Persist the backend's `extraction` field so the file row can show a
+    // actionable badge (e.g. "scanned PDF"). The list endpoint does not return
+    // this field, so we capture it at upload time and key by relative path.
+    const captureExtractionInfo = useCallback((res: any, basePath: string, fileName: string) => {
+        if (!res || typeof res !== 'object') return;
+        const extraction = res.extraction;
+        if (!extraction || typeof extraction !== 'object') return;
+        const rel = basePath ? `${basePath}/${fileName}` : fileName;
+        setExtractionInfos((prev) => ({ ...prev, [rel]: extraction as ExtractionInfo }));
+    }, []);
 
     const { isDragging, dropZoneProps } = useDropZone({
         onDrop: handleDroppedFiles,
@@ -197,10 +238,10 @@ export default function FileBrowser({
             await api.write(target, editContent);
             setContent(editContent);
             setEditing(false);
-            showToast('Saved');
+            showToast(t('common.status.saved', 'Saved'));
             onRefresh?.();
         } catch (err: any) {
-            showToast('Save failed: ' + (err.message || ''), 'error');
+            showToast(t('common.error.saveFailed', 'Save failed') + ': ' + (err.message || ''), 'error');
         }
         setSaving(false);
     };
@@ -216,9 +257,9 @@ export default function FileBrowser({
             }
             reload();
             onRefresh?.();
-            showToast('Deleted');
+            showToast(t('agent.workspace.delete', 'Delete'));
         } catch (err: any) {
-            showToast('Delete failed: ' + (err.message || ''), 'error');
+            showToast(t('common.error.deleteFailed', 'Delete failed') + ': ' + (err.message || ''), 'error');
         }
     };
 
@@ -233,17 +274,18 @@ export default function FileBrowser({
                 const fileList = Array.from(input.files);
                 for (const file of fileList) {
                     setUploadProgress({ fileName: file.name, percent: 0 });
-                    await api.upload!(file, currentPath, (pct) => {
+                    const res = await api.upload!(file, currentPath, (pct) => {
                         setUploadProgress({ fileName: file.name, percent: pct });
                     });
+                    captureExtractionInfo(res, currentPath, file.name);
                 }
                 setUploadProgress(null);
                 reload();
                 onRefresh?.();
-                showToast('Upload successful');
+                showToast(t('agent.upload.success', 'Upload successful'));
             } catch (err: any) {
                 setUploadProgress(null);
-                showToast('Upload failed: ' + (err.message || ''), 'error');
+                showToast(t('agent.upload.failed', 'Upload failed') + ': ' + (err.message || ''), 'error');
             }
         };
         input.click();
@@ -276,7 +318,7 @@ export default function FileBrowser({
             reload();
             onRefresh?.();
         } catch (err: any) {
-            showToast('Failed: ' + (err.message || ''), 'error');
+            showToast(t('common.error.genericFailed', 'Failed') + ': ' + (err.message || ''), 'error');
         }
     };
 
@@ -336,7 +378,7 @@ export default function FileBrowser({
                 onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}>
                 <div style={{ background: 'var(--bg-primary)', borderRadius: '12px', padding: '24px', width: '380px', border: '1px solid var(--border-subtle)', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
                     <h4 style={{ marginBottom: '12px', fontSize: '15px' }}>{t('common.delete')}</h4>
-                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>Delete "{deleteTarget.name}"?</p>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>{t('agent.workspace.deleteConfirm', { name: deleteTarget.name })}</p>
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                         <button className="btn btn-secondary" onClick={() => setDeleteTarget(null)}>{t('common.cancel')}</button>
                         <button className="btn btn-danger" onClick={handleDelete}>{t('common.delete')}</button>
@@ -513,7 +555,7 @@ export default function FileBrowser({
                 {renderBreadcrumbs()}
                 <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
                     {upload && api.upload && (
-                        <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={handleUpload}><IconUpload size={13} stroke={1.8} /> Upload</button>
+                        <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={handleUpload}><IconUpload size={13} stroke={1.8} /> {t('agent.workspace.uploadFile')}</button>
                     )}
                     {newFolder && (
                         <button className="btn btn-secondary" style={{ fontSize: '12px' }}
@@ -571,7 +613,10 @@ export default function FileBrowser({
                             <span style={{ fontSize: '13px' }}>↩ ..</span>
                         </div>
                     )}
-                    {files.map((f) => (
+                    {files.map((f) => {
+                        const fullPath = f.path || `${currentPath}/${f.name}`;
+                        const badge = !f.is_dir ? getExtractionBadge(fullPath) : null;
+                        return (
                         <div key={f.name} className="card"
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', cursor: 'pointer' }}
                             onClick={() => {
@@ -584,9 +629,27 @@ export default function FileBrowser({
                                     setEditing(false);
                                 }
                             }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>{f.is_dir ? '/' : '·'}</span>
-                                <span style={{ fontWeight: 500, fontSize: '13px' }}>{fileFilter?.includes('.md') ? f.name.replace('.md', '') : f.name}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                                <span style={{ fontSize: '13px', color: 'var(--text-tertiary)', flexShrink: 0 }}>{f.is_dir ? '/' : '·'}</span>
+                                <span style={{ fontWeight: 500, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fileFilter?.includes('.md') ? f.name.replace('.md', '') : f.name}</span>
+                                {badge && (
+                                    <span
+                                        title={badge.title}
+                                        style={{
+                                            fontSize: '10px',
+                                            fontWeight: 600,
+                                            padding: '1px 6px',
+                                            borderRadius: '8px',
+                                            color: badge.color,
+                                            backgroundColor: badge.bg,
+                                            border: `1px solid ${badge.border}`,
+                                            cursor: 'help',
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        {badge.label}
+                                    </span>
+                                )}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 {f.size != null && <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{(f.size / 1024).toFixed(1)} KB</span>}
@@ -606,7 +669,8 @@ export default function FileBrowser({
                                 )}
                             </div>
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 

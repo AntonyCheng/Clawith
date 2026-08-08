@@ -127,7 +127,7 @@ export default function CompanySetup() {
     return (
         <div className="cs-page">
             <div className="cs-topbar">
-                <img src="/logo-new.png" alt="Clawith" className="cs-logo" />
+                <img src="/logo-new.png" alt="DigitalEmployee" className="cs-logo" />
                 <button
                     type="button"
                     className="cs-back-btn"

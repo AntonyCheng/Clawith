@@ -476,8 +476,20 @@ async def call_llm(
         tools_for_llm = await get_agent_tools_for_llm(agent_id) if agent_id else AGENT_TOOLS
     allowed_tool_names = _allowed_tool_names(tools_for_llm)
 
-    # Convert messages to LLMMessage format
-    api_messages = [LLMMessage(role="system", content=static_prompt, dynamic_content=dynamic_prompt)]
+    # Convert messages to LLMMessage format.
+    # If messages[0] is a system message (injected by the onboarding flow in
+    # websocket.py), prepend it to the static prompt so we emit exactly one
+    # role="system" message instead of two.  Qwen and other OpenAI-compatible
+    # providers require the system message to be the very first entry.
+    messages = list(messages)
+    system_prefix = ""
+    if messages and messages[0].get("role") == "system":
+        system_prefix = messages[0].get("content", "") + "\n\n"
+        messages = messages[1:]
+
+    api_messages = [
+        LLMMessage(role="system", content=system_prefix + static_prompt, dynamic_content=dynamic_prompt)
+    ]
     for msg in messages:
         api_messages.append(LLMMessage(
             role=msg.get("role", "user"),

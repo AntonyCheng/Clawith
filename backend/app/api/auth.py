@@ -1,11 +1,14 @@
 """Authentication API routes."""
 
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, status, UploadFile as FastUploadFile
+from fastapi.responses import FileResponse
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import (
     create_access_token,
     get_authenticated_user,
@@ -14,7 +17,7 @@ from app.core.security import (
     verify_password_async,
 )
 from app.dao import identity_dao, system_setting_dao, tenant_dao, user_dao
-from app.database import transaction
+from app.database import get_db, transaction
 from app.models.user import User
 from app.schemas.schemas import (
     ForgotPasswordRequest,
@@ -39,6 +42,7 @@ from app.schemas.schemas import (
     UserUpdate,
     VerifyEmailRequest,
 )
+from app.services.storage import ensure_local_path, get_storage_backend
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -1224,3 +1228,83 @@ async def resend_verification(
         await _send_verification_email_task(user, background_tasks, settings)
 
     return generic_response
+
+
+# ─── User Avatar Upload ─────────────────────────────────────
+# Mirrors agents.py avatar endpoints but scoped to the current authenticated
+# user. The router is exposed at /api/users/* so the front-end can call a stable
+# URL that doesn't conflict with the existing /api/auth/* surface.
+
+users_router = APIRouter(prefix="/users", tags=["users"])
+
+AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+MAX_AVATAR_SIZE = 2 * 1024 * 1024  # 2MB
+
+
+def _user_avatar_storage_key(user_id: uuid.UUID) -> str:
+    return f"_user_avatars/{user_id}.png"
+
+
+def _user_avatar_url(user_id: uuid.UUID) -> str:
+    return f"/api/users/{user_id}/avatar"
+
+
+# Public read: addressed by user_id, mirrors get_agent_avatar.
+# Unauthenticated so <img src> can load it (browsers don't send Authorization
+# headers on image requests).
+@users_router.get("/{user_id}/avatar")
+async def get_user_avatar(user_id: uuid.UUID):
+    """Serve a user avatar image. Publicly addressed by user UUID."""
+    storage = get_storage_backend()
+    key = _user_avatar_storage_key(user_id)
+    if not await storage.exists(key):
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    path = await ensure_local_path(key)
+    return FileResponse(path, media_type="image/png")
+
+
+@users_router.post("/me/avatar")
+async def upload_my_avatar(
+    file: FastUploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload or replace the current user's avatar (PNG/JPG, max 2MB)."""
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in AVATAR_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only PNG and JPG images are supported")
+    content = await file.read()
+    if len(content) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="Image must be smaller than 2MB")
+
+    storage = get_storage_backend()
+    avatar_key = _user_avatar_storage_key(current_user.id)
+    mime = "image/png" if ext == ".png" else "image/jpeg"
+    await storage.write_bytes(avatar_key, content, content_type=mime)
+
+    avatar_url = _user_avatar_url(current_user.id)
+    async with transaction() as session:
+        user = await user_dao.get_with_identity(current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.avatar_url = avatar_url
+
+    return {"avatar_url": avatar_url}
+
+
+@users_router.delete("/me/avatar")
+async def delete_my_avatar(
+    current_user: User = Depends(get_current_user),
+):
+    """Delete the current user's avatar and fall back to no custom avatar."""
+    storage = get_storage_backend()
+    key = _user_avatar_storage_key(current_user.id)
+    if await storage.exists(key):
+        await storage.delete(key)
+
+    async with transaction() as session:
+        user = await user_dao.get_with_identity(current_user.id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.avatar_url = None
+
+    return {"status": "ok"}

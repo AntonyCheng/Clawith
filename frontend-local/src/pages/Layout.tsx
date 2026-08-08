@@ -33,6 +33,7 @@ import {
 } from '@tabler/icons-react';
 import { useAppStore } from '../stores';
 import TalentMarketModal from '../components/TalentMarketModal';
+import UserAvatar from '../components/UserAvatar';
 
 /* ────── Tabler Icons ────── */
 const SidebarIcons = {
@@ -95,6 +96,10 @@ function AccountSettingsModal({ user, onClose, isChinese }: { user: any; onClose
     const [username, setUsername] = useState(user?.username || '');
     const [email, setEmail] = useState(user?.email || '');
     const [displayName, setDisplayName] = useState(user?.display_name || '');
+    const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
+    const [imgFailed, setImgFailed] = useState(false);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const avatarInputRef = useRef<HTMLInputElement>(null);
     const [oldPassword, setOldPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -103,8 +108,52 @@ function AccountSettingsModal({ user, onClose, isChinese }: { user: any; onClose
     const [msg, setMsg] = useState('');
     const [msgType, setMsgType] = useState<'success' | 'error'>('success');
 
+    useEffect(() => {
+        setAvatarUrl(user?.avatar_url || '');
+        setImgFailed(false);
+    }, [user?.avatar_url]);
+
     const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
         setMsg(text); setMsgType(type); setTimeout(() => setMsg(''), 3000);
+    };
+
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            showMsg(isChinese ? '图片不能超过 2MB' : 'Image must be smaller than 2MB', 'error');
+            e.target.value = '';
+            return;
+        }
+        if (!/^image\/(png|jpe?g)$/i.test(file.type)) {
+            showMsg(isChinese ? '仅支持 PNG、JPG' : 'Only PNG or JPG allowed', 'error');
+            e.target.value = '';
+            return;
+        }
+        setUploadingAvatar(true);
+        try {
+            const { avatar_url: url } = await authApi.uploadAvatar(file);
+            setAvatarUrl(url);
+            setImgFailed(false);
+            setUser({ ...user, avatar_url: url });
+            showMsg(isChinese ? '头像已更新' : 'Avatar updated');
+        } catch (err: any) {
+            showMsg(err?.message || (isChinese ? '上传失败' : 'Upload failed'), 'error');
+        }
+        setUploadingAvatar(false);
+        e.target.value = '';
+    };
+
+    const handleAvatarDelete = async () => {
+        try {
+            await authApi.deleteAvatar();
+            setAvatarUrl('');
+            setImgFailed(false);
+            setUser({ ...user, avatar_url: null });
+            showMsg(isChinese ? '头像已删除' : 'Avatar removed');
+        } catch {
+            showMsg(isChinese ? '删除失败' : 'Delete failed', 'error');
+        }
     };
 
     const handleSaveProfile = async () => {
@@ -174,6 +223,61 @@ function AccountSettingsModal({ user, onClose, isChinese }: { user: any; onClose
                     <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', fontSize: '18px', cursor: 'pointer', padding: '4px 8px' }}>×</button>
                 </div>
                 {msg && <div style={{ padding: '8px 12px', borderRadius: '6px', fontSize: '12px', marginBottom: '16px', background: msgType === 'success' ? 'rgba(0,180,120,0.12)' : 'rgba(255,80,80,0.12)', color: msgType === 'success' ? 'var(--success)' : 'var(--error)' }}>{msg}</div>}
+                {/* Avatar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '20px' }}>
+                    <div style={{
+                        width: '64px', height: '64px', borderRadius: '50%', overflow: 'hidden',
+                        background: (avatarUrl && !imgFailed) ? 'transparent' : 'rgb(230, 0, 18)',
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', color: 'rgb(255, 255, 255)',
+                        fontSize: '24px', fontWeight: 600, flexShrink: 0,
+                        ...((avatarUrl && !imgFailed) ? { fontSize: 0 } : {}),
+                    }}>
+                        {avatarUrl && !imgFailed ? (
+                            <img
+                                src={avatarUrl}
+                                alt={isChinese ? '头像' : 'avatar'}
+                                onError={() => setImgFailed(true)}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                        ) : (
+                            ((Array.from(user?.display_name || user?.username || '?')[0] as string) || '?').toUpperCase()
+                        )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <input
+                            type="file"
+                            accept="image/png,image/jpeg"
+                            ref={avatarInputRef}
+                            style={{ display: 'none' }}
+                            onChange={handleAvatarUpload}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={() => avatarInputRef.current?.click()}
+                                disabled={uploadingAvatar}
+                                style={{ padding: '6px 16px', fontSize: '12px' }}
+                            >
+                                {uploadingAvatar ? '...' : (avatarUrl ? (isChinese ? '重新上传' : 'Re-upload') : (isChinese ? '上传头像' : 'Upload Avatar'))}
+                            </button>
+                            {avatarUrl && (
+                                <button
+                                    type="button"
+                                    onClick={handleAvatarDelete}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', fontSize: '12px' }}
+                                >
+                                    {isChinese ? '删除' : 'Delete'}
+                                </button>
+                            )}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+                            {isChinese ? '支持 PNG、JPG，最大 2MB' : 'PNG or JPG, max 2MB'}
+                        </div>
+                    </div>
+                </div>
+
                 {/* Profile */}
                 <h4 style={{ margin: '0 0 12px', fontSize: '13px', color: 'var(--text-secondary)' }}>{isChinese ? '个人信息' : 'Profile'}</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
@@ -932,8 +1036,14 @@ export default function Layout() {
                     title={agent.name}
                     onClick={() => setAgentDrawerOpen(false)}
                 >
-                    <span className="sidebar-item-icon" style={{ position: 'relative' }}>
-                        <span className={`agent-avatar${agent.agent_type === 'openclaw' ? ' openclaw' : ''}`}>{avatarChar}</span>
+                    <span className="sidebar-item-icon">
+                        <span className={`agent-avatar${agent.agent_type === 'openclaw' ? ' openclaw' : ''}${agent.avatar_url ? ' has-image' : ''}`}>
+                            {agent.avatar_url ? (
+                                <img src={agent.avatar_url} alt={agent.name} />
+                            ) : (
+                                avatarChar
+                            )}
+                        </span>
                         {agent.agent_type === 'openclaw' && (
                             <span className="agent-avatar-link" style={{ display: 'flex' }}>
                                 <IconArrowUpRight size={10} stroke={2.5} />
@@ -973,7 +1083,7 @@ export default function Layout() {
             {sortedAgents.map(agent => renderAgent(agent, { drawer }))}
             {agents.length === 0 && (
                 <div className="sidebar-section">
-                    <div className="sidebar-section-title">{t('nav.myAgents')}</div>
+                    <div className="sidebar-section-title">{t('nav.myAgentsEmpty')}</div>
                 </div>
             )}
             {agents.length > 0 && sortedAgents.length === 0 && q && (
@@ -991,7 +1101,7 @@ export default function Layout() {
             onMouseLeave={scheduleCloseAgentDrawer}
         >
             <div className="sidebar-agent-drawer-header">
-                <span>{isChinese ? '智能体' : 'Agents'}</span>
+                <span>{isChinese ? '数字员工' : 'Agents'}</span>
                 <button
                     type="button"
                     onClick={() => {
@@ -1040,13 +1150,13 @@ export default function Layout() {
 
 
                     <div className="sidebar-section" data-tour-target="main-nav">
-                        <NavLink to="/plaza" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
+                        <NavLink key="plaza" to="/plaza" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
                             <span className="sidebar-item-icon" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                                 <IconBuildingMonument size={14} stroke={1.5} />
                             </span>
                             <span className="sidebar-item-text">{t('nav.plaza', 'Plaza')}</span>
                         </NavLink>
-                        <NavLink to="/dashboard" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
+                        <NavLink key="dashboard" to="/dashboard" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
                             <span className="sidebar-item-icon" style={{ display: 'flex' }}>{SidebarIcons.home}</span>
                             <span className="sidebar-item-text">{t('nav.dashboard')}</span>
                         </NavLink>
@@ -1074,12 +1184,16 @@ export default function Layout() {
                 >
                     {!isSidebarCollapsed && (
                         <div className="sidebar-agent-header">
-                            <span>{isChinese ? '智能体' : 'Agents'}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <IconUser size={14} stroke={1.5} />
+                                {isChinese ? '数字员工' : 'Agents'}
+                            </span>
                             <button
                                 type="button"
                                 data-tour-target="hire-agent"
                                 onClick={() => setShowTalentMarket(true)}
                                 title={t('nav.hire', t('nav.newAgent'))}
+                                style={{ background: '#E60012', color: '#fff' }}
                             >
                                 <IconPlus size={15} stroke={2} />
                             </button>
@@ -1117,6 +1231,13 @@ export default function Layout() {
                                     }}>{(unreadCount as number) > 99 ? '99+' : unreadCount}</span>
                                 )}
                             </button>
+                            {canAccessPlatformSettings && (
+                                <button className="btn btn-ghost" onClick={() => navigate('/admin/platform-settings')} style={{
+                                    padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }} title={isChinese ? '平台设置' : 'Platform Settings'}>
+                                    <IconSettings size={16} stroke={1.75} />
+                                </button>
+                            )}
                             <button className="btn btn-ghost sidebar-collapse-btn" onClick={toggleSidebar} style={{
                                 padding: '4px 8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 color: 'var(--text-tertiary)',
@@ -1156,12 +1277,6 @@ export default function Layout() {
                                         <IconUser size={15} stroke={1.5} />
                                         <span>{isChinese ? '账户设置' : 'Account Settings'}</span>
                                     </button>
-                                    {canAccessPlatformSettings && (
-                                        <button className="account-dropdown-item" onClick={() => { navigate('/admin/platform-settings'); setShowAccountMenu(false); }}>
-                                            <IconSettings size={15} stroke={1.5} />
-                                            <span>{t('nav.platformSettings', 'Platform Settings')}</span>
-                                        </button>
-                                    )}
                                     <div style={{ height: '1px', background: 'var(--border-subtle)', margin: '4px 0' }} />
                                     <button className="account-dropdown-item account-dropdown-danger" onClick={() => { handleLogout(); setShowAccountMenu(false); }}>
                                         <IconLogout size={15} stroke={1.5} />
@@ -1175,19 +1290,16 @@ export default function Layout() {
                                 className="sidebar-account-row"
                                 onClick={() => setShowAccountMenu(v => !v)}
                             >
-                                <div style={{
-                                    width: '28px', height: '28px', borderRadius: 'var(--radius-md)',
-                                    background: '#e7effd', border: '1px solid var(--border-subtle)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    color: '#1D61F7', flexShrink: 0,
-                                }}>
-                                    {SidebarIcons.user}
-                                </div>
+                                <UserAvatar
+                                    name={user?.display_name || user?.username || '?'}
+                                    size={28}
+                                    src={user?.avatar_url}
+                                />
                                 <div className="sidebar-footer-user-info" style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {user?.display_name}
                                     </div>
-                                    <div style={{ fontSize: '11px', color: '#667696' }}>
+                                    <div style={{ fontSize: '11px', color: '#aaaaaa' }}>
                                         {user?.role === 'platform_admin' ? t('roles.platformAdmin') :
                                             user?.role === 'org_admin' ? t('roles.orgAdmin') :
                                                 user?.role === 'agent_admin' ? t('roles.agentAdmin') : t('roles.member')}
@@ -1316,19 +1428,15 @@ export default function Layout() {
                                     key={n.id}
                                     onClick={() => {
                                         if (!n.is_read) markOneRead(n.id);
-                                        if (n.type === 'broadcast' || !n.link) {
-                                            setSelectedNotification(n);
-                                        } else if (n.link) {
-                                            navigate(n.link); setShowNotifications(false);
-                                        }
+                                        setSelectedNotification(n);
                                     }}
                                     style={{
-                                        padding: '14px 24px', cursor: 'pointer',
-                                        borderBottom: '1px solid var(--border-subtle)',
+                                        padding: '14px 24px', cursor: 'default',
+                                        borderBottom: '1px solid rgba(242, 242, 242, 1)',
                                         background: n.is_read ? 'transparent' : 'var(--bg-secondary)',
                                         transition: 'background 0.15s',
                                     }}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-tertiary)')}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'rgb(236, 236, 236)')}
                                     onMouseLeave={e => (e.currentTarget.style.background = n.is_read ? 'transparent' : 'var(--bg-secondary)')}
                                 >
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>

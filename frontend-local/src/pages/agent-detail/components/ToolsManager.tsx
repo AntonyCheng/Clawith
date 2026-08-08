@@ -357,7 +357,7 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                 gap: '12px',
                 padding: '10px 14px',
                 borderTop: '1px solid var(--border-subtle)',
-                background: 'var(--bg-primary)',
+                background: '#FFFFFF',
             }}>
                 <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
@@ -366,7 +366,7 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                             <span style={{ fontSize: '10px', background: 'var(--primary)', color: '#fff', borderRadius: '4px', padding: '1px 5px', flexShrink: 0 }}>MCP</span>
                         )}
                         {tool.type === 'builtin' && (
-                            <span style={{ fontSize: '10px', background: 'var(--bg-tertiary)', color: 'var(--text-secondary)', borderRadius: '4px', padding: '1px 5px', flexShrink: 0 }}>Built-in</span>
+                            <span style={{ fontSize: '10px', background: '#ffffff', color: 'var(--text-secondary)', borderRadius: '4px', padding: '1px 5px', flexShrink: 0, border: '1px solid var(--border-subtle)' }}>Built-in</span>
                         )}
                         {hasAgentOverride && (
                             <span style={{ fontSize: '10px', background: 'rgba(99,102,241,0.15)', color: 'var(--accent-color)', borderRadius: '4px', padding: '1px 5px', flexShrink: 0 }}>{t('enterprise.tools.configured', 'Configured')}</span>
@@ -468,7 +468,7 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                             }}
                             style={{
                                 width: '100%',
-                                background: 'var(--bg-secondary)',
+                                background: '#FFFFFF',
                                 padding: '13px 16px',
                                 display: 'grid',
                                 gridTemplateColumns: '1fr auto',
@@ -523,7 +523,7 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                                     <button
                                         type="button"
                                         onClick={() => openCategoryConfig(meta.configCategory)}
-                                        style={{ background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                        style={{ background: '#FFFFFF', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '4px 8px', fontSize: '11px', cursor: 'pointer', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                                         title={t('agent.tools.configureCategory', 'Configure {{category}}', { category: label })}
                                     ><IconSettings size={12} stroke={1.8} /> {t('agent.tools.config', 'Config')}</button>
                                 )}
@@ -613,7 +613,7 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                                 boxSizing: 'border-box',
                                 border: '1px solid var(--border-subtle)',
                                 borderRadius: '8px',
-                                background: 'var(--bg-primary)',
+                                background: 'rgba(246, 248, 250, 1)',
                                 color: 'var(--text-primary)',
                                 padding: '8px 10px 8px 32px',
                                 fontSize: '13px',
@@ -629,17 +629,17 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                             style={{
                                 border: '1px solid var(--border-subtle)',
                                 borderRadius: '999px',
-                                background: toolStatusFilter === filter ? 'var(--text-primary)' : 'var(--bg-primary)',
-                                color: toolStatusFilter === filter ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                                background: toolStatusFilter === filter ? '#dc2626' : 'var(--bg-primary)',
+                                color: toolStatusFilter === filter ? '#ffffff' : 'var(--text-secondary)',
                                 padding: '6px 10px',
                                 fontSize: '11px',
                                 cursor: 'pointer',
                             }}
                         >
-                            {filter === 'all' ? t('common.all', 'All')
-                                : filter === 'enabled' ? t('common.enabled', 'Enabled')
-                                    : filter === 'disabled' ? t('common.disabled', 'Disabled')
-                                        : t('agent.tools.configured', 'Configured')}
+                            {filter === 'all' ? t('common.all', '全部')
+                                : filter === 'enabled' ? t('common.enabled', '已启用')
+                                    : filter === 'disabled' ? t('common.disabled', '已禁用')
+                                        : t('agent.tools.configured', '已配置')}
                         </button>
                     ))}
                     <button
@@ -651,14 +651,14 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                         style={{
                             border: '1px solid var(--border-subtle)',
                             borderRadius: '8px',
-                            background: 'var(--bg-primary)',
-                            color: 'var(--text-secondary)',
+                            background: '#dc2626',
+                            color: '#ffffff',
                             padding: '6px 10px',
                             fontSize: '11px',
                             cursor: 'pointer',
                         }}
                     >
-                        {expandedCategories.size >= Object.keys(groupedActiveTools).length ? t('agent.tools.collapseAll', 'Collapse all') : t('agent.tools.expandAll', 'Expand all')}
+                        {expandedCategories.size >= Object.keys(groupedActiveTools).length ? t('agent.tools.collapseAll', '全部收起') : t('agent.tools.expandAll', '全部展开')}
                     </button>
                 </div>
 
@@ -694,7 +694,7 @@ export default function ToolsManager({ agentId, canManage = false }: { agentId: 
                 return (
                     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.55)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                         onClick={() => { setConfigTool(null); setConfigCategory(null); }}>
-                        <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg-primary)', borderRadius: '12px', padding: '24px', width: '480px', maxWidth: '95vw', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+                        <div onClick={e => e.stopPropagation()} style={{ background: '#FFFFFF', borderRadius: '12px', padding: '24px', width: '480px', maxWidth: '95vw', maxHeight: '80vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                 <div>
                                     <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><IconSettings size={20} stroke={1.8} /> {title}</h3>

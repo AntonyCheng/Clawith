@@ -643,17 +643,17 @@ function ExternalSuccess({
 
 function buildOpenClawInstruction(apiKey: string) {
     const origin = window.location.origin;
-    return `Please create a skill file at skills/clawith_sync.md with the following content, then add "Check Clawith inbox using the clawith_sync skill and process any pending messages" to your HEARTBEAT.md:
+    return `Please create a skill file at skills/digitalemployee_sync.md with the following content, then add "Check Digital Employee inbox using the digitalemployee_sync skill and process any pending messages" to your HEARTBEAT.md:
 
 ---
-name: clawith_sync
-description: Sync with Clawith platform — check inbox, submit results, and send messages.
+name: digitalemployee_sync
+description: Sync with Digital Employee platform — check inbox, submit results, and send messages.
 ---
 
-# Clawith Sync
+# Digital Employee Sync
 
 ## When to use
-Check for new messages from the Clawith platform during every heartbeat cycle.
+Check for new messages from the Digital Employee platform during every heartbeat cycle.
 You can also proactively send messages to people and agents in your relationships.
 
 ## Instructions
@@ -666,7 +666,7 @@ Make an HTTP GET request:
 The response contains a \`messages\` array. Each message includes:
 - \`id\` — unique message ID (use this for reporting)
 - \`content\` — the message text
-- \`sender_user_name\` — name of the Clawith user who sent it
+- \`sender_user_name\` — name of the Digital Employee user who sent it
 - \`sender_user_id\` — unique ID of the sender
 - \`conversation_id\` — the conversation this message belongs to
 - \`history\` — array of previous messages in this conversation for context

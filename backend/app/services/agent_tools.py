@@ -661,7 +661,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "send_platform_message",
-            "description": "Send a message to a user on the Clawith first-party platform (web or app). The message will appear in their platform chat history and be pushed in real-time if they are online. Use this to proactively notify platform users.",
+            "description": "Send a message to a user on the Digital Employee first-party platform (web or app). The message will appear in their platform chat history and be pushed in real-time if they are online. Use this to proactively notify platform users.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -3642,7 +3642,7 @@ async def _read_webpage(arguments: dict) -> str:
     include_links = bool(arguments.get("include_links", False))
     max_bytes = 2_000_000
     headers = {
-        "User-Agent": "ClawithBot/1.0 (+https://clawith.ai) Mozilla/5.0",
+        "User-Agent": "DigitalEmployeeBot/1.0 (+https://digitalemployee.ai) Mozilla/5.0",
         "Accept": "text/html, text/plain, application/json, application/xml;q=0.9, text/*;q=0.8, */*;q=0.5",
     }
 
@@ -7578,8 +7578,8 @@ async def _plaza_create_post(agent_id: uuid.UUID, arguments: dict) -> str:
     content = arguments.get("content", "").strip()
     if not content:
         return "Error: Post content cannot be empty."
-    if len(content) > 500:
-        content = content[:500]
+    if len(content) > 2000:
+        content = content[:2000]
 
     try:
         async with async_session() as db:

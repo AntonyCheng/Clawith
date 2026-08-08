@@ -31,7 +31,7 @@ def _hidden_agent_exists_for_author(author_id_column):
 # ── Schemas ─────────────────────────────────────────
 
 class PostCreate(BaseModel):
-    content: str = Field(..., max_length=500)
+    content: str = Field(..., max_length=2000)
     author_id: uuid.UUID
     author_type: str = "human"  # "agent" or "human"
     author_name: str
@@ -50,6 +50,7 @@ class PostOut(BaseModel):
     author_id: uuid.UUID
     author_type: str
     author_name: str
+    author_avatar_url: str | None = None
     content: str
     likes_count: int
     comments_count: int
@@ -65,6 +66,7 @@ class CommentOut(BaseModel):
     author_id: uuid.UUID
     author_type: str
     author_name: str
+    author_avatar_url: str | None = None
     content: str
     created_at: datetime
 
@@ -77,6 +79,213 @@ class PostDetail(PostOut):
 
 
 # ── Helpers ─────────────────────────────────────────
+
+async def _resolve_author_avatar(
+    db,
+    author_id,
+    author_type: str,
+    tenant_id: uuid.UUID | None,
+) -> str | None:
+    """Look up the avatar_url for a single post/comment author.
+
+    Returns None when the author cannot be found, the avatar column is empty,
+    or the author lives in another tenant.
+    """
+    if author_id is None or not author_type:
+        return None
+    try:
+        author_uuid = uuid.UUID(str(author_id))
+    except (TypeError, ValueError):
+        return None
+    if author_type == "agent":
+        q = select(AgentModel.avatar_url, AgentModel.tenant_id).where(AgentModel.id == author_uuid)
+        row = (await db.execute(q)).first()
+        if not row:
+            return None
+        avatar_url, author_tenant = row[0], row[1]
+    elif author_type == "human":
+        q = select(User.avatar_url, User.tenant_id).where(User.id == author_uuid)
+        row = (await db.execute(q)).first()
+        if not row:
+            return None
+        avatar_url, author_tenant = row[0], row[1]
+    else:
+        return None
+    if not avatar_url:
+        return None
+    if tenant_id and author_tenant and str(author_tenant) != str(tenant_id):
+        return None
+    return avatar_url
+
+
+async def _resolve_author_name(
+    db,
+    author_id,
+    author_type: str,
+    tenant_id: uuid.UUID | None,
+) -> str | None:
+    """Look up the authoritative display name for a post/comment author.
+
+    Returns None when the author cannot be found or lives in another tenant.
+    Used to overwrite the client-supplied author_name with a trusted value
+    so the UI always has a non-empty name (and shows the right person).
+    """
+    if author_id is None or not author_type:
+        return None
+    try:
+        author_uuid = uuid.UUID(str(author_id))
+    except (TypeError, ValueError):
+        return None
+    if author_type == "agent":
+        q = select(AgentModel.name, AgentModel.tenant_id).where(AgentModel.id == author_uuid)
+        row = (await db.execute(q)).first()
+        if not row:
+            return None
+        name, author_tenant = row[0], row[1]
+    elif author_type == "human":
+        q = select(User.display_name, User.tenant_id).where(User.id == author_uuid)
+        row = (await db.execute(q)).first()
+        if not row:
+            return None
+        name, author_tenant = row[0], row[1]
+    else:
+        return None
+    if not name:
+        return None
+    if tenant_id and author_tenant and str(author_tenant) != str(tenant_id):
+        return None
+    return name
+
+
+async def _resolve_avatars_for_posts(
+    db,
+    posts,
+    tenant_id: uuid.UUID | None,
+) -> dict[str, str]:
+    """Batch resolve avatars for a list of PlazaPost objects. Returns {post_id: avatar_url}."""
+    result: dict[str, str] = {}
+    if not posts:
+        return result
+    agent_ids = list({p.author_id for p in posts if p.author_type == "agent" and p.author_id})
+    user_ids = list({p.author_id for p in posts if p.author_type == "human" and p.author_id})
+
+    agent_map: dict[str, str | None] = {}
+    if agent_ids:
+        try:
+            ids_uuid = [uuid.UUID(str(i)) for i in agent_ids]
+        except (TypeError, ValueError):
+            ids_uuid = []
+        if ids_uuid:
+            q = select(AgentModel.id, AgentModel.avatar_url, AgentModel.tenant_id).where(AgentModel.id.in_(ids_uuid))
+            rows = (await db.execute(q)).all()
+            for row in rows:
+                avatar_url = row[1]
+                tenant = row[2]
+                if not avatar_url:
+                    agent_map[str(row[0])] = None
+                    continue
+                if tenant_id and tenant and str(tenant) != str(tenant_id):
+                    agent_map[str(row[0])] = None
+                else:
+                    agent_map[str(row[0])] = avatar_url
+
+    user_map: dict[str, str | None] = {}
+    if user_ids:
+        try:
+            ids_uuid = [uuid.UUID(str(i)) for i in user_ids]
+        except (TypeError, ValueError):
+            ids_uuid = []
+        if ids_uuid:
+            q = select(User.id, User.avatar_url, User.tenant_id).where(User.id.in_(ids_uuid))
+            rows = (await db.execute(q)).all()
+            for row in rows:
+                avatar_url = row[1]
+                tenant = row[2]
+                if not avatar_url:
+                    user_map[str(row[0])] = None
+                    continue
+                if tenant_id and tenant and str(tenant) != str(tenant_id):
+                    user_map[str(row[0])] = None
+                else:
+                    user_map[str(row[0])] = avatar_url
+
+    for p in posts:
+        key = str(p.author_id)
+        url = agent_map.get(key) if p.author_type == "agent" else user_map.get(key)
+        if url:
+            result[str(p.id)] = url
+    return result
+
+
+async def _resolve_avatars_for_comments(
+    db,
+    comments,
+    tenant_id: uuid.UUID | None,
+) -> dict[str, str]:
+    """Batch resolve avatars for a list of PlazaComment objects. Returns {comment_id: avatar_url}."""
+    result: dict[str, str] = {}
+    if not comments:
+        return result
+    agent_ids = list({c.author_id for c in comments if c.author_type == "agent" and c.author_id})
+    user_ids = list({c.author_id for c in comments if c.author_type == "human" and c.author_id})
+
+    agent_map: dict[str, str | None] = {}
+    if agent_ids:
+        try:
+            ids_uuid = [uuid.UUID(str(i)) for i in agent_ids]
+        except (TypeError, ValueError):
+            ids_uuid = []
+        if ids_uuid:
+            q = select(AgentModel.id, AgentModel.avatar_url, AgentModel.tenant_id).where(AgentModel.id.in_(ids_uuid))
+            rows = (await db.execute(q)).all()
+            for row in rows:
+                avatar_url = row[1]
+                tenant = row[2]
+                if not avatar_url:
+                    agent_map[str(row[0])] = None
+                    continue
+                if tenant_id and tenant and str(tenant) != str(tenant_id):
+                    agent_map[str(row[0])] = None
+                else:
+                    agent_map[str(row[0])] = avatar_url
+
+    user_map: dict[str, str | None] = {}
+    if user_ids:
+        try:
+            ids_uuid = [uuid.UUID(str(i)) for i in user_ids]
+        except (TypeError, ValueError):
+            ids_uuid = []
+        if ids_uuid:
+            q = select(User.id, User.avatar_url, User.tenant_id).where(User.id.in_(ids_uuid))
+            rows = (await db.execute(q)).all()
+            for row in rows:
+                avatar_url = row[1]
+                tenant = row[2]
+                if not avatar_url:
+                    user_map[str(row[0])] = None
+                    continue
+                if tenant_id and tenant and str(tenant) != str(tenant_id):
+                    user_map[str(row[0])] = None
+                else:
+                    user_map[str(row[0])] = avatar_url
+
+    for c in comments:
+        key = str(c.author_id)
+        url = agent_map.get(key) if c.author_type == "agent" else user_map.get(key)
+        if url:
+            result[str(c.id)] = url
+    return result
+
+
+def _attach_avatar(pyd_obj, avatar_url: str | None):
+    """Pydantic v1 safe attribute set; ignore if model is frozen."""
+    if avatar_url is None:
+        return
+    try:
+        object.__setattr__(pyd_obj, "author_avatar_url", avatar_url)
+    except Exception:
+        pass
+
 
 async def _notify_mentions(db, content: str, author_id: uuid.UUID, author_name: str,
                            post_id: uuid.UUID, tenant_id: uuid.UUID | None):
@@ -177,7 +386,13 @@ async def list_posts(
         result = await db.execute(q)
         posts = result.scalars().all()
 
-        return [PostOut.model_validate(p) for p in posts]
+        avatar_map = await _resolve_avatars_for_posts(db, posts, effective_tenant_id)
+        out: list[PostOut] = []
+        for p in posts:
+            po = PostOut.model_validate(p)
+            _attach_avatar(po, avatar_map.get(str(p.id)))
+            out.append(po)
+        return out
 
 
 @router.get("/stats")
@@ -221,16 +436,57 @@ async def plaza_stats(
         today_posts = (await db.execute(today_q)).scalar() or 0
         # Top 5 contributors by post count
         top_q = (
-            select(PlazaPost.author_name, PlazaPost.author_type, func.count(PlazaPost.id).label("post_count"))
+            select(
+                PlazaPost.author_id,
+                PlazaPost.author_name,
+                PlazaPost.author_type,
+                func.count(PlazaPost.id).label("post_count"),
+            )
             .where(post_filter)
-            .group_by(PlazaPost.author_name, PlazaPost.author_type)
+            .group_by(PlazaPost.author_id, PlazaPost.author_name, PlazaPost.author_type)
             .order_by(desc("post_count"))
             .limit(5)
         )
         top_result = await db.execute(top_q)
+        top_rows = top_result.fetchall()
+        top_contributors_ids: dict[str, str] = {}  # composite key "type:id" -> avatar_url
+        agent_ids = list({row[0] for row in top_rows if row[2] == "agent" and row[0]})
+        user_ids = list({row[0] for row in top_rows if row[2] == "human" and row[0]})
+        if agent_ids:
+            agent_avatar_rows = (await db.execute(
+                select(AgentModel.id, AgentModel.avatar_url, AgentModel.tenant_id)
+                .where(AgentModel.id.in_(agent_ids))
+            )).all()
+            for r in agent_avatar_rows:
+                url = r[1]
+                tenant = r[2]
+                if not url:
+                    continue
+                if effective_tenant_id and tenant and str(tenant) != str(effective_tenant_id):
+                    continue
+                top_contributors_ids[f"agent:{r[0]}"] = url
+        if user_ids:
+            user_avatar_rows = (await db.execute(
+                select(User.id, User.avatar_url, User.tenant_id)
+                .where(User.id.in_(user_ids))
+            )).all()
+            for r in user_avatar_rows:
+                url = r[1]
+                tenant = r[2]
+                if not url:
+                    continue
+                if effective_tenant_id and tenant and str(tenant) != str(effective_tenant_id):
+                    continue
+                top_contributors_ids[f"human:{r[0]}"] = url
         top_contributors = [
-            {"name": row[0], "type": row[1], "posts": row[2]}
-            for row in top_result.fetchall()
+            {
+                "id": str(row[0]),
+                "name": row[1],
+                "type": row[2],
+                "posts": row[3],
+                "avatar_url": top_contributors_ids.get(f"{row[2]}:{row[0]}"),
+            }
+            for row in top_rows
         ]
         return {
             "total_posts": total_posts,
@@ -261,20 +517,33 @@ async def create_post(body: PostCreate, current_user: User = Depends(get_current
             author_id=body.author_id,
             author_type=body.author_type,
             author_name=body.author_name,
-            content=body.content[:500],
+            content=body.content[:2000],
             tenant_id=effective_tenant_id,
         )
         db.add(post)
         await db.flush()
 
+        # Resolve authoritative author_name from DB so the row never persists with
+        # an empty / spoofed name (the client may not supply a real value).
+        resolved_name = await _resolve_author_name(
+            db, post.author_id, post.author_type, effective_tenant_id
+        )
+        if resolved_name:
+            post.author_name = resolved_name
+
         try:
-            await _notify_mentions(db, body.content, body.author_id, body.author_name, post.id, effective_tenant_id)
+            await _notify_mentions(db, body.content, body.author_id, post.author_name, post.id, effective_tenant_id)
         except Exception:
             pass
 
         await db.commit()
         await db.refresh(post)
-        return PostOut.model_validate(post)
+        post_avatar = await _resolve_author_avatar(
+            db, post.author_id, post.author_type, effective_tenant_id
+        )
+        out = PostOut.model_validate(post)
+        _attach_avatar(out, post_avatar)
+        return out
 
 
 @router.get("/posts/{post_id}", response_model=PostDetail)
@@ -309,14 +578,46 @@ async def get_post(post_id: uuid.UUID, current_user: User = Depends(get_current_
                 )
             )
             private_or_system_comment_ids = {row[0] for row in hidden_agents.all()}
-        comments = [
-            CommentOut.model_validate(c)
-            for c in comments_raw
-            if not (c.author_type == "agent" and c.author_id in private_or_system_comment_ids)
-        ]
+        visible_comments = [c for c in comments_raw if not (c.author_type == "agent" and c.author_id in private_or_system_comment_ids)]
+        comment_avatar_map = await _resolve_avatars_for_comments(db, visible_comments, effective_tenant_id)
+        post_avatar_map = await _resolve_avatars_for_posts(db, [post], effective_tenant_id)
+        comments = []
+        for c in visible_comments:
+            co = CommentOut.model_validate(c)
+            _attach_avatar(co, comment_avatar_map.get(str(c.id)))
+            comments.append(co)
         data = PostOut.model_validate(post).model_dump()
+        data["author_avatar_url"] = post_avatar_map.get(str(post.id))
         data["comments"] = comments
         return PostDetail(**data)
+
+
+@router.delete("/comments/{comment_id}")
+async def delete_comment(comment_id: uuid.UUID, current_user: User = Depends(get_current_user)):
+    """Delete a comment. Admins / post authors / comment authors can delete. Enforces tenant isolation."""
+    effective_tenant_id = str(current_user.tenant_id) if current_user.tenant_id else None
+    async with async_session() as db:
+        result = await db.execute(select(PlazaComment).where(PlazaComment.id == comment_id))
+        comment = result.scalar_one_or_none()
+        if not comment:
+            raise HTTPException(404, "Comment not found")
+
+        result = await db.execute(select(PlazaPost).where(PlazaPost.id == comment.post_id))
+        post = result.scalar_one_or_none()
+        if not post:
+            raise HTTPException(404, "Post not found")
+
+        is_admin = current_user.role in ("platform_admin", "org_admin")
+        is_comment_author = comment.author_id == current_user.id
+        is_post_author = post.author_id == current_user.id
+        if not is_admin and not is_comment_author and not is_post_author:
+            raise HTTPException(403, "Not allowed to delete this comment")
+
+        post.comments_count = max((post.comments_count or 0) - 1, 0)
+        await db.delete(comment)
+        await db.commit()
+        logger.info(f"Plaza comment {comment_id} deleted by user {current_user.id} (admin={is_admin})")
+        return {"deleted": True}
 
 
 @router.delete("/posts/{post_id}")
@@ -374,6 +675,16 @@ async def create_comment(post_id: uuid.UUID, body: CommentCreate, current_user: 
             content=body.content[:300],
         )
         db.add(comment)
+        await db.flush()
+
+        # Resolve authoritative author_name from DB so the row never persists with
+        # an empty / spoofed name (the client may not supply a real value).
+        resolved_name = await _resolve_author_name(
+            db, comment.author_id, comment.author_type, effective_tenant_id
+        )
+        if resolved_name:
+            comment.author_name = resolved_name
+
         # Increment comments_count
         post.comments_count = (post.comments_count or 0) + 1
 
@@ -388,11 +699,11 @@ async def create_comment(post_id: uuid.UUID, body: CommentCreate, current_user: 
                         db,
                         agent_id=post.author_id,
                         type="plaza_reply",
-                        title=f"{body.author_name} commented on your post",
+                        title=f"{comment.author_name} commented on your post",
                         body=body.content[:150],
                         link=f"/plaza?post={post_id}",
                         ref_id=post_id,
-                        sender_name=body.author_name,
+                        sender_name=comment.author_name,
                     )
                     # Also notify human creator
                     agent_result = await db.execute(select(Agent).where(Agent.id == post.author_id))
@@ -402,22 +713,22 @@ async def create_comment(post_id: uuid.UUID, body: CommentCreate, current_user: 
                             db,
                             user_id=post_agent.creator_id,
                             type="plaza_comment",
-                            title=f"{body.author_name} commented on {post_agent.name}'s post",
+                            title=f"{comment.author_name} commented on {post_agent.name}'s post",
                             body=body.content[:100],
                             link=f"/plaza?post={post_id}",
                             ref_id=post_id,
-                            sender_name=body.author_name,
+                            sender_name=comment.author_name,
                         )
                 elif post.author_type == "human":
                     await send_notification(
                         db,
                         user_id=post.author_id,
                         type="plaza_reply",
-                        title=f"{body.author_name} commented on your post",
+                        title=f"{comment.author_name} commented on your post",
                         body=body.content[:150],
                         link=f"/plaza?post={post_id}",
                         ref_id=post_id,
-                        sender_name=body.author_name,
+                        sender_name=comment.author_name,
                     )
             except Exception:
                 pass
@@ -442,24 +753,29 @@ async def create_comment(post_id: uuid.UUID, body: CommentCreate, current_user: 
                         db,
                         agent_id=cid,
                         type="plaza_reply",
-                        title=f"{body.author_name} also commented on a post you commented on",
+                        title=f"{comment.author_name} also commented on a post you commented on",
                         body=body.content[:150],
                         link=f"/plaza?post={post_id}",
                         ref_id=post_id,
-                        sender_name=body.author_name,
+                        sender_name=comment.author_name,
                     )
         except Exception:
             pass
 
         # Extract @mentions and notify mentioned agents/users
         try:
-            await _notify_mentions(db, body.content, body.author_id, body.author_name, post_id, post.tenant_id)
+            await _notify_mentions(db, body.content, body.author_id, comment.author_name, post_id, post.tenant_id)
         except Exception:
             pass
 
         await db.commit()
         await db.refresh(comment)
-        return CommentOut.model_validate(comment)
+        comment_avatar = await _resolve_author_avatar(
+            db, comment.author_id, comment.author_type, effective_tenant_id
+        )
+        out = CommentOut.model_validate(comment)
+        _attach_avatar(out, comment_avatar)
+        return out
 
 
 @router.post("/posts/{post_id}/like")

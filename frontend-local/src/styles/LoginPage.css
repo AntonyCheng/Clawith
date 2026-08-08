@@ -38,32 +38,19 @@
 /* 左侧品牌展示区 */
 .lp-left {
   flex: 1.5;
-  background: url('/lanhu-bg.png') 100% no-repeat;
-  background-size: 100% 100%;
+  background: url('/lanhu-bg.png') center center / auto 100% no-repeat;
   display: flex;
   flex-direction: column;
   padding: 59px 0 0 111px;
   position: relative;
   min-height: 100%;
-}
-
-.lp-left::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(29, 97, 247, 0.15) 0%, rgba(10, 50, 150, 0.3) 100%);
-  pointer-events: none;
+  overflow: hidden;
 }
 
 .lp-brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  position: relative;
-  z-index: 1;
 }
 
 .lp-logo {
@@ -87,8 +74,6 @@
   font-weight: 600;
   color: var(--lp-text-primary);
   margin-top: 53px;
-  position: relative;
-  z-index: 1;
 }
 
 .lp-hero-desc {
@@ -98,17 +83,13 @@
   color: var(--lp-text-primary);
   line-height: 1.6;
   margin-top: 16px;
-  position: relative;
-  z-index: 1;
 }
 
 .lp-hero-underline {
   width: 25px;
   height: 3px;
-  background-color: var(--lp-primary);
+  background-color: #E60027;
   margin-top: 38px;
-  position: relative;
-  z-index: 1;
 }
 
 /* 右侧表单区 */
@@ -285,7 +266,7 @@
 
 .lp-input:focus {
   outline: none;
-  border-color: var(--lp-primary);
+  border-color: rgba(230, 0, 39, 1);
 }
 
 .lp-input::placeholder {
@@ -426,9 +407,9 @@
 }
 
 .lp-modal-item:hover {
-  background: rgba(29, 97, 247, 0.05);
-  border-color: var(--lp-primary);
-  color: var(--lp-primary);
+  background: rgba(230, 0, 39, 0.05);
+  border-color: #E60027;
+  color: #E60027;
 }
 
 .lp-modal-item--dashed {
@@ -439,17 +420,17 @@
 }
 
 .lp-modal-item--dashed:hover {
-  border-color: var(--lp-primary);
-  color: var(--lp-primary);
-  background: rgba(29, 97, 247, 0.05);
+  border-color: #E60027;
+  color: #E60027;
+  background: rgba(230, 0, 39, 0.05);
 }
 
 .lp-modal-cancel {
   margin-top: 16px;
   padding: 10px 16px;
   border-radius: 6px;
-  border: 1px solid var(--lp-primary);
-  background: var(--lp-primary);
+  border: 1px solid #E60027;
+  background: #E60027;
   color: #fff;
   font-size: 14px;
   font-weight: 500;
@@ -459,8 +440,8 @@
 }
 
 .lp-modal-cancel:hover {
-  background: var(--lp-primary-hover);
-  border-color: var(--lp-primary-hover);
+  background: #C40021;
+  border-color: #C40021;
 }
 
 /* 主按钮 */
@@ -468,7 +449,7 @@
   width: 100%;
   height: var(--lp-input-height);
   border-radius: var(--lp-border-radius);
-  background: var(--lp-primary);
+  background: #E60027;
   color: #fff;
   font-size: 16px;
   font-weight: 500;
@@ -482,7 +463,7 @@
 }
 
 .lp-btn-primary:hover {
-  background: var(--lp-primary-hover);
+  background: #C40021;
 }
 
 .lp-btn-primary:disabled {

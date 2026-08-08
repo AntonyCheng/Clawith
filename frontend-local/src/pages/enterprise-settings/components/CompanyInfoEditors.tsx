@@ -308,7 +308,7 @@ export function CompanyNameEditor() {
                     value={name}
                     onChange={e => setName(e.target.value)}
                     placeholder={t('enterprise.companyName.placeholder', 'Enter company name')}
-                    style={{ flex: 1, fontSize: '14px' }}
+                    style={{ flex: 1, fontSize: '14px', background: '#F6F8FA' }}
                     onKeyDown={e => e.key === 'Enter' && handleSave()}
                 />
                 <button className="btn btn-primary" onClick={handleSave} disabled={saving || !name.trim()}>
@@ -457,6 +457,7 @@ export function CompanyTimezoneEditor() {
                             fontSize: '13px',
                             paddingRight: '42px',
                             cursor: saving || !tenantId ? 'not-allowed' : 'text',
+                            background: '#F6F8FA',
                         }}
                         disabled={saving || !tenantId}
                         role="combobox"

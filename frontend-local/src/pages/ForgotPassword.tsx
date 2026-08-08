@@ -25,6 +25,21 @@ export default function ForgotPassword() {
         i18n.changeLanguage(isZh ? 'en' : 'zh');
     };
 
+    const handleValidationMessage = (e: React.InvalidEvent<HTMLInputElement>) => {
+        const target = e.currentTarget;
+        if (target.validity.valueMissing) {
+            target.setCustomValidity(t('auth.fieldRequired'));
+        } else if (target.validity.typeMismatch && target.type === 'email') {
+            target.setCustomValidity(t('auth.emailInvalid'));
+        } else {
+            target.setCustomValidity('');
+        }
+    };
+
+    const clearValidationMessage = (e: React.FormEvent<HTMLInputElement>) => {
+        e.currentTarget.setCustomValidity('');
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
@@ -68,9 +83,6 @@ export default function ForgotPassword() {
                         <img className="lp-logo" src="/logo-new.png" alt="" />
                         <span className="lp-brand-text">{t('app.brand')}</span>
                     </div>
-                    <h1 className="lp-hero-title">{t('login.hero.title')}</h1>
-                    <p className="lp-hero-desc">{t('login.hero.description')}</p>
-                    <div className="lp-hero-underline" />
                 </div>
 
                 {/* ── Right: Form Panel ── */}
@@ -116,9 +128,11 @@ export default function ForgotPassword() {
                                         type="email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
+                                        onInvalid={handleValidationMessage}
+                                        onInput={clearValidationMessage}
                                         required
                                         autoFocus
-                                        placeholder={t('auth.emailPlaceholderReset', 'name@company.com')}
+                                        placeholder={t('auth.emailPlaceholderReset', '请输入邮箱')}
                                     />
                                 </div>
 
@@ -141,6 +155,8 @@ export default function ForgotPassword() {
                                         type="text"
                                         value={usernameHint}
                                         onChange={(e) => setUsernameHint(e.target.value)}
+                                        onInvalid={handleValidationMessage}
+                                        onInput={clearValidationMessage}
                                         required
                                         autoFocus
                                         placeholder={t('auth.usernamePlaceholderHint', 'Enter your account username')}

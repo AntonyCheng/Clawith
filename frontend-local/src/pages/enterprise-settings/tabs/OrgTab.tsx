@@ -262,7 +262,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                 });
                 qc.invalidateQueries({ queryKey: ['tenant', tenant.id] });
             } catch (e: any) {
-                setError(e.message || 'Failed to update SSO configuration');
+                setError(e.message || t('enterprise.org.updateSsoFailed'));
             }
             setSaving(false);
         };
@@ -323,7 +323,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                 className="form-input"
                                 value={ssoDomain}
                                 onChange={e => setSsoDomain(e.target.value)}
-                                placeholder={t('enterprise.identity.ssoDomainPlaceholder', 'e.g. acme.clawith.com')}
+                                placeholder={t('enterprise.identity.ssoDomainPlaceholder', 'e.g. www.digitalemployee.com')}
                                 style={{ fontSize: '13px', width: '100%', maxWidth: '400px' }}
                             />
                             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '6px' }}>
@@ -499,11 +499,11 @@ export default function OrgTab({ tenant }: { tenant: any }) {
     };
 
     const IDP_TYPES = [
-        { type: 'feishu', name: 'Feishu', desc: 'Feishu / Lark Integration', icon: <img src="/feishu.png" width="20" height="20" alt="Feishu" /> },
-        { type: 'wecom', name: 'WeCom', desc: 'WeChat Work Integration', icon: <img src="/wecom.png" width="20" height="20" style={{ borderRadius: '4px' }} alt="WeCom" /> },
-        { type: 'dingtalk', name: 'DingTalk', desc: 'DingTalk App Integration', icon: <img src="/dingtalk.png" width="20" height="20" style={{ borderRadius: '4px' }} alt="DingTalk" /> },
-        { type: 'google_workspace', name: 'Google', desc: 'Google Admin Directory Sync', icon: <img src="/google.svg" width="20" height="20" alt="Google" /> },
-        { type: 'oauth2', name: 'OAuth2', desc: 'Generic OIDC Provider', icon: <div style={{ width: 20, height: 20, background: 'var(--accent-primary)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 700 }}>O</div> }
+        { type: 'feishu', name: 'Feishu', desc: t('enterprise.org.feishuLarkIntegration'), icon: <img src="/feishu.png" width="20" height="20" alt="Feishu" /> },
+        { type: 'wecom', name: 'WeCom', desc: t('enterprise.org.wechatWorkIntegration'), icon: <img src="/wecom.png" width="20" height="20" style={{ borderRadius: '4px' }} alt="WeCom" /> },
+        { type: 'dingtalk', name: 'DingTalk', desc: t('enterprise.org.dingtalkIntegration'), icon: <img src="/dingtalk.png" width="20" height="20" style={{ borderRadius: '4px' }} alt="DingTalk" /> },
+        { type: 'google_workspace', name: 'Google', desc: t('enterprise.org.googleAdminSync'), icon: <img src="/google.svg" width="20" height="20" alt="Google" /> },
+        { type: 'oauth2', name: 'OAuth2', desc: t('enterprise.org.oidcProvider'), icon: <div style={{ width: 20, height: 20, background: 'var(--accent-primary)', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 10, fontWeight: 700 }}>O</div> }
     ];
 
     const handleExpand = (type: string, existingProvider?: any) => {
@@ -556,7 +556,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                 {['feishu', 'dingtalk', 'google_workspace'].includes(type) && (
                     <div style={{ background: 'var(--bg-primary)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border-subtle)', marginBottom: '20px', fontSize: '12px' }}>
                         <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <IconSettings size={15} stroke={1.8} /> {t('enterprise.org.syncSetupGuide', 'Setup Guide & Required Permissions')}
+                            <IconSettings size={15} stroke={1.8} /> {t('enterprise.org.setupGuide')}
                         </div>
                         <div style={{ color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                             {type === 'feishu' && (
@@ -574,8 +574,8 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                             className="btn btn-ghost"
                                             style={{ position: 'absolute', top: '8px', right: '8px', fontSize: '10px', color: '#abb2bf', padding: '4px 8px', background: 'rgba(255,255,255,0.1)', cursor: 'pointer', border: 'none', borderRadius: '4px', height: 'fit-content', minWidth: '60px' }}
                                             textToCopy={FEISHU_SYNC_PERM_JSON}
-                                            label="Copy"
-                                            copiedLabel="Copied✓"
+                                            label={t('enterprise.org.copy')}
+                                            copiedLabel={t('enterprise.org.copied')}
                                         />
                                         {FEISHU_SYNC_PERM_JSON}
                                     </div>
@@ -628,15 +628,15 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                 {type === 'oauth2' ? (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div className="form-group">
-                            <label className="form-label">Client ID</label>
+                            <label className="form-label">{t('admin.clientId')}</label>
                             <input className="form-input" value={form.app_id} onChange={e => setForm({ ...form, app_id: e.target.value })} />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Client Secret</label>
+                            <label className="form-label">{t('admin.clientSecret')}</label>
                             <input className="form-input" type="password" value={form.app_secret} onChange={e => setForm({ ...form, app_secret: e.target.value })} />
                         </div>
                         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                            <label className="form-label">Authorize URL</label>
+                            <label className="form-label">{t('enterprise.org.authorizeUrl')}</label>
                             <input className="form-input" value={form.authorize_url} onChange={e => setForm({ ...form, authorize_url: e.target.value })} />
                         </div>
                     </div>
@@ -705,7 +705,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                 ) : type === 'google_workspace' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                         <div style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
-                            <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '10px' }}>Google OAuth</div>
+                            <div style={{ fontWeight: 600, fontSize: '13px', marginBottom: '10px' }}>{t('enterprise.org.googleOAuth')}</div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                     <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
@@ -713,7 +713,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                     </div>
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Client ID</label>
+                                    <label className="form-label">{t('admin.clientId')}</label>
                                     <input
                                         className="form-input"
                                         value={form.config.client_id || ''}
@@ -722,7 +722,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Client Secret</label>
+                                    <label className="form-label">{t('admin.clientSecret')}</label>
                                     <input
                                         className="form-input"
                                         type="password"
@@ -753,7 +753,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                             style={{ fontSize: '11px', width: 'auto', minWidth: '70px', height: '33px' }}
                                             textToCopy={providerCallbackUrl}
                                             label={t('common.copy', 'Copy')}
-                                            copiedLabel="Copied"
+                                            copiedLabel={t('enterprise.org.copied')}
                                         />
                                     </div>
                                     <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
@@ -761,7 +761,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                     </div>
                                 </div>
                                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="form-label">Directory Sync Authorization</label>
+                                    <label className="form-label">{t('enterprise.org.directorySyncAuth')}</label>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                         <button
                                             className="btn btn-secondary btn-sm"
@@ -769,11 +769,11 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                             onClick={() => existingProvider && handleGoogleAdminAuthorize(existingProvider.id)}
                                             disabled={!existingProvider}
                                         >
-                                            {existingProvider?.config?.google_admin_authorized_email ? 'Re-authorize Admin Sync' : 'Authorize Admin Sync'}
+                                            {existingProvider?.config?.google_admin_authorized_email ? t('enterprise.org.reAuthorizeAdminSync') : t('enterprise.org.authorizeAdminSync')}
                                         </button>
                                         {!existingProvider && (
                                             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                                Please save the provider first.
+                                                {t('enterprise.org.saveFirst')}
                                             </span>
                                         )}
                                         {existingProvider?.config?.google_admin_authorized_email && (
@@ -783,7 +783,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                         )}
                                     </div>
                                     <div style={{ fontSize: '10px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
-                                        Sign in with a Google Workspace admin account to grant directory read access. Clawith will securely store a refresh token and use it for scheduled sync.
+                                        Sign in with a Google Workspace admin account to grant directory read access. Digital Employee will securely store a refresh token and use it for scheduled sync.
                                     </div>
                                 </div>
                             </div>
@@ -795,11 +795,11 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{t('enterprise.identity.providerHints.feishu')}</div>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">App ID</label>
+                            <label className="form-label">{t('enterprise.org.appId')}</label>
                             <input className="form-input" value={form.config.app_id || ''} onChange={e => setForm({ ...form, config: { ...form.config, app_id: e.target.value } })} placeholder="cli_xxxxxxxxxxxx" />
                         </div>
                         <div className="form-group">
-                            <label className="form-label">App Secret</label>
+                            <label className="form-label">{t('enterprise.org.appSecret')}</label>
                             <input className="form-input" type="password" value={form.config.app_secret || ''} onChange={e => setForm({ ...form, config: { ...form.config, app_secret: e.target.value } })} />
                         </div>
                     </div>
@@ -833,11 +833,10 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                     return (
                         <div style={{ marginTop: '16px', padding: '12px', background: 'var(--bg-primary)', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
                             <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
-                                WeCom Receive Message Server URL
+                                {t('enterprise.org.wecomReceiveUrl')}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                                Step 1: Go to WeCom App Management (AgentID 1000010) → App Settings → Set Receive Message Server URL.
-                                Use this URL. In the Token field, enter your Verify Token. In EncodingAESKey, enter your key below.
+                                {t('enterprise.org.wecomStep1')}
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <code style={{ flex: 1, fontSize: '11px', padding: '6px 10px', background: 'var(--bg-secondary)', borderRadius: '4px', wordBreak: 'break-all', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
@@ -848,21 +847,21 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                         className="btn btn-ghost"
                                         style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}
                                         textToCopy={callbackUrl}
-                                        label="Copy"
-                                        copiedLabel="Copied"
+                                        label={t('enterprise.org.copy')}
+                                        copiedLabel={t('enterprise.org.copied')}
                                     />
                                 )}
                             </div>
                             {!aesKey && (
                                 <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--warning, #f59e0b)' }}>
-                                    Configure the Verify Token and EncodingAESKey fields above, then Save to generate the final URL.
+                                    {t('enterprise.org.verifyTokenHint')}
                                 </div>
                             )}
                             <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                Step 2: After URL verification passes, configure Enterprise Trusted IP with your server IPs in the WeCom console.
+                                {t('enterprise.org.wecomStep2')}
                             </div>
                             <div style={{ marginTop: '4px', fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                Step 3: Paste the App Secret (from that same app page) into the App Secret field above.
+                                {t('enterprise.org.wecomStep3')}
                             </div>
                         </div>
                     );
@@ -881,18 +880,18 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
                         {['feishu', 'dingtalk', 'google_workspace'].includes(p.provider_type) && (
                             <button className="btn btn-secondary btn-sm" style={{ fontSize: '12px' }} onClick={() => triggerSync(p.id)} disabled={!!syncing}>
-                                {syncing === p.id ? 'Syncing...' : 'Sync Directory'}
+                                {syncing === p.id ? t('enterprise.org.syncing') : t('enterprise.org.syncDirectory')}
                             </button>
                         )}
                         {syncResult && (
                             <div style={{ padding: '6px 10px', borderRadius: '4px', fontSize: '11px', background: syncResult.error || (syncResult.errors && syncResult.errors.length > 0) ? 'rgba(255,100,0,0.1)' : 'rgba(0,200,0,0.1)' }}>
                                 {syncResult.error
-                                    ? `Error: ${syncResult.error}`
-                                    : `Sync complete: ${syncResult.departments || 0} depts, ${syncResult.members || 0} members synced.`}
+                                    ? t('enterprise.org.syncError', { error: syncResult.error })
+                                    : t('enterprise.org.syncComplete', { depts: syncResult.departments || 0, members: syncResult.members || 0 })}
                                 {syncResult.errors && syncResult.errors.length > 0 && (
                                     <div style={{ marginTop: '4px', color: 'var(--color-warning, #f90)' }}>
                                         {/* Show first error to help diagnose permission issues */}
-                                        {`Warning: ${syncResult.errors[0]}`}
+                                        {t('enterprise.org.syncWarning', { warning: syncResult.errors[0] })}
                                         {syncResult.errors.length > 1 && ` (+${syncResult.errors.length - 1} more)`}
                                     </div>
                                 )}
@@ -970,7 +969,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                         {existingProvider ? (
                                             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: '8px' }}>
-                                                <span className="badge badge-success" style={{ fontSize: '10px' }}>Active</span>
+                                                <span className="badge badge-success" style={{ fontSize: '10px' }}>{t('enterprise.org.active')}</span>
                                                 {existingProvider.last_synced_at && (
                                                     <span style={{ fontSize: '10px', color: 'var(--text-tertiary)' }}>
                                                         Synced: {new Date(existingProvider.last_synced_at).toLocaleDateString()}
@@ -978,7 +977,7 @@ export default function OrgTab({ tenant }: { tenant: any }) {
                                                 )}
                                             </div>
                                         ) : (
-                                            <span className="badge badge-secondary" style={{ fontSize: '10px' }}>Not configured</span>
+                                            <span className="badge badge-secondary" style={{ fontSize: '10px' }}>{t('enterprise.org.notConfigured')}</span>
                                         )}
                                         <div style={{ color: 'var(--text-tertiary)', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', fontSize: '12px' }}>
                                             ▼

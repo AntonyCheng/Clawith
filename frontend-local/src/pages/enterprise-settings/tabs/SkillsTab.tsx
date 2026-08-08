@@ -55,7 +55,7 @@ export default function SkillsTab() {
             const results = await skillApi.clawhub.search(searchQuery);
             setSearchResults(results);
         } catch (e: any) {
-            showToast(e.message || 'Search failed', 'error');
+            showToast(e.message || t('enterprise.skills.searchFailed'), 'error');
         }
         setSearching(false);
     };
@@ -64,13 +64,13 @@ export default function SkillsTab() {
         setInstalling(slug);
         try {
             const result = await skillApi.clawhub.install(slug);
-            const tierLabel = result.tier === 1 ? 'Tier 1 (Pure Prompt)' : result.tier === 2 ? 'Tier 2 (CLI/API)' : 'Tier 3 (OpenClaw Native)';
-            showToast(`Installed "${result.name}" — ${tierLabel}, ${result.file_count} files`);
+            const tierLabel = result.tier === 1 ? t('enterprise.skills.tier1PurePrompt') : result.tier === 2 ? t('enterprise.skills.tier2CliApi') : t('enterprise.skills.tier3Native');
+            showToast(`${t('enterprise.skills.installed', { name: result.name })} — ${tierLabel}, ${result.file_count} files`);
             setRefreshKey(k => k + 1);
             // Remove from search results
             setSearchResults(prev => prev.filter(r => r.slug !== slug));
         } catch (e: any) {
-            showToast(e.message || 'Install failed', 'error');
+            showToast(e.message || t('enterprise.skills.installFailed'), 'error');
         }
         setInstalling(null);
     };
@@ -83,7 +83,7 @@ export default function SkillsTab() {
             const preview = await skillApi.previewUrl(urlInput);
             setUrlPreview(preview);
         } catch (e: any) {
-            showToast(e.message || 'Preview failed', 'error');
+            showToast(e.message || t('enterprise.skills.previewFailed'), 'error');
         }
         setUrlPreviewing(false);
     };
@@ -93,27 +93,27 @@ export default function SkillsTab() {
         setUrlImporting(true);
         try {
             const result = await skillApi.importFromUrl(urlInput);
-            showToast(`Imported "${result.name}" — ${result.file_count} files`);
+            showToast(`${t('enterprise.skills.imported', { name: result.name })} — ${result.file_count} files`);
             setRefreshKey(k => k + 1);
             setShowUrlModal(false);
             setUrlInput('');
             setUrlPreview(null);
         } catch (e: any) {
-            showToast(e.message || 'Import failed', 'error');
+            showToast(e.message || t('enterprise.skills.importFailed'), 'error');
         }
         setUrlImporting(false);
     };
 
     const tierBadge = (tier: number) => {
-        const styles: Record<number, { bg: string; color: string; label: string }> = {
-            1: { bg: 'rgba(52,199,89,0.12)', color: 'var(--success, #34c759)', label: 'Tier 1 · Pure Prompt' },
-            2: { bg: 'rgba(255,159,10,0.12)', color: 'var(--warning, #ff9f0a)', label: 'Tier 2 · CLI/API' },
-            3: { bg: 'rgba(255,59,48,0.12)', color: 'var(--error, #ff3b30)', label: 'Tier 3 · OpenClaw Native' },
+        const styles: Record<number, { bg: string; color: string; labelKey: string }> = {
+            1: { bg: 'rgba(52,199,89,0.12)', color: 'var(--success, #34c759)', labelKey: 'enterprise.skills.tier1PurePrompt' },
+            2: { bg: 'rgba(255,159,10,0.12)', color: 'var(--warning, #ff9f0a)', labelKey: 'enterprise.skills.tier2CliApi' },
+            3: { bg: 'rgba(255,59,48,0.12)', color: 'var(--error, #ff3b30)', labelKey: 'enterprise.skills.tier3Native' },
         };
         const s = styles[tier] || styles[1];
         return (
             <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, background: s.bg, color: s.color }}>
-                {s.label}
+                {t(s.labelKey)}
             </span>
         );
     };
@@ -206,7 +206,7 @@ export default function SkillsTab() {
                             className="input"
                             autoComplete="off"
                             data-form-type="other"
-                            placeholder="ghp_xxxxxxxxxxxx"
+                            placeholder={t('enterprise.skills.gitHubTokenPlaceholder')}
                             value={tokenInput}
                             onChange={e => setTokenInput(e.target.value)}
                             style={{ flex: 1, fontSize: '13px', fontFamily: 'monospace', WebkitTextSecurity: 'disc' } as React.CSSProperties}
@@ -278,7 +278,7 @@ export default function SkillsTab() {
                                 className="input"
                                 autoComplete="off"
                                 data-form-type="other"
-                                placeholder="sk-ant-xxxxxxxxxxxx"
+                                placeholder={t('enterprise.skills.apiKeyPlaceholder')}
                                 value={clawhubKeyInput}
                                 onChange={e => setClawhubKeyInput(e.target.value)}
                                 style={{ flex: 1, fontSize: '13px', fontFamily: 'monospace', WebkitTextSecurity: 'disc' } as React.CSSProperties}
@@ -405,7 +405,7 @@ export default function SkillsTab() {
                                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.4' }}>
                                             {r.summary?.slice(0, 160)}{r.summary?.length > 160 ? '...' : ''}
                                         </div>
-                                        {r.updatedAt && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>Updated {new Date(r.updatedAt).toLocaleDateString()}</div>}
+                                        {r.updatedAt && <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '4px' }}>{t('enterprise.skills.updatedAt', { date: new Date(r.updatedAt).toLocaleDateString() })}</div>}
                                     </div>
                                     <button
                                         className="btn btn-secondary"
@@ -464,7 +464,7 @@ export default function SkillsTab() {
                                     {tierBadge(urlPreview.tier)}
                                     {urlPreview.has_scripts && (
                                         <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', background: 'rgba(255,59,48,0.1)', color: 'var(--error, #ff3b30)' }}>
-                                            Contains scripts
+                                            {t('enterprise.skills.containsScripts')}
                                         </span>
                                     )}
                                 </div>
@@ -475,9 +475,9 @@ export default function SkillsTab() {
                                     {urlPreview.files?.length} files, {(urlPreview.total_size / 1024).toFixed(1)} KB
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                    <button className="btn btn-secondary" onClick={() => setShowUrlModal(false)} style={{ fontSize: '13px' }}>Cancel</button>
+                                    <button className="btn btn-secondary" onClick={() => setShowUrlModal(false)} style={{ fontSize: '13px' }}>{t('enterprise.skills.cancel')}</button>
                                     <button className="btn btn-primary" onClick={handleUrlImport} disabled={urlImporting} style={{ fontSize: '13px' }}>
-                                        {urlImporting ? 'Importing...' : 'Import'}
+                                        {urlImporting ? t('enterprise.skills.importing') : t('enterprise.skills.importSkill')}
                                     </button>
                                 </div>
                             </div>

@@ -2,12 +2,14 @@
 
 import hashlib
 import json
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, status, UploadFile as FastUploadFile
+from fastapi.responses import FileResponse
 from loguru import logger
 from sqlalchemy import cast, func, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +25,7 @@ from app.models.audit import ChatMessage
 from app.models.chat_session import ChatSession
 from app.models.user import User
 from app.schemas.schemas import AgentCreate, AgentOut, AgentUpdate
-from app.services.storage import get_storage_backend
+from app.services.storage import ensure_local_path, get_storage_backend
 from app.services.access_relationships import ensure_access_granted_platform_relationships
 from app.services.quota_guard import check_agent_creation_quota, QuotaExceeded
 from app.models.tenant import Tenant
@@ -1292,3 +1294,93 @@ async def list_gateway_messages(
             }
         )
     return out
+
+
+# ─── Avatar Upload ─────────────────────────────────────
+
+AVATAR_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+MAX_AVATAR_SIZE = 2 * 1024 * 1024  # 2MB
+
+
+def _agent_avatar_storage_key(agent_id: uuid.UUID) -> str:
+    return f"_agent_avatars/{agent_id}.png"
+
+
+@router.get("/{agent_id}/avatar")
+async def get_agent_avatar(
+    agent_id: uuid.UUID,
+):
+    """Serve an agent avatar image. Publicly addressed by agent UUID."""
+    storage = get_storage_backend()
+    key = _agent_avatar_storage_key(agent_id)
+    if not await storage.exists(key):
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    path = await ensure_local_path(key)
+    return FileResponse(path, media_type="image/png")
+
+
+@router.post("/{agent_id}/avatar")
+async def upload_agent_avatar(
+    agent_id: uuid.UUID,
+    file: FastUploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload or replace agent avatar image (PNG/JPG, max 2MB)."""
+    _agent, access_level = await check_agent_access(db, current_user, agent_id)
+    if access_level != "manage" and current_user.role not in ("platform_admin", "org_admin", "super_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to update this agent")
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in AVATAR_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Only PNG and JPG images are supported")
+    content = await file.read()
+    if len(content) > MAX_AVATAR_SIZE:
+        raise HTTPException(status_code=400, detail="Image must be smaller than 2MB")
+
+    storage = get_storage_backend()
+    avatar_key = _agent_avatar_storage_key(agent_id)
+    mime = "image/png" if ext == ".png" else "image/jpeg"
+    await storage.write_bytes(avatar_key, content, content_type=mime)
+
+    avatar_url = f"/api/agents/{agent_id}/avatar"
+    _agent.avatar_url = avatar_url
+    await db.flush()
+
+    # Sync Participant avatar
+    p_r = await db.execute(select(Participant).where(Participant.type == "agent", Participant.ref_id == agent_id))
+    p = p_r.scalar_one_or_none()
+    if p:
+        p.avatar_url = avatar_url
+        await db.flush()
+
+    return {"avatar_url": avatar_url}
+
+
+@router.delete("/{agent_id}/avatar")
+async def delete_agent_avatar(
+    agent_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete the agent's avatar and fall back to no custom avatar."""
+    _agent, access_level = await check_agent_access(db, current_user, agent_id)
+    if access_level != "manage" and current_user.role not in ("platform_admin", "org_admin", "super_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to update this agent")
+
+    storage = get_storage_backend()
+    key = _agent_avatar_storage_key(agent_id)
+    if await storage.exists(key):
+        await storage.delete(key)
+
+    _agent.avatar_url = None
+    await db.flush()
+
+    # Sync Participant avatar
+    p_r = await db.execute(select(Participant).where(Participant.type == "agent", Participant.ref_id == agent_id))
+    p = p_r.scalar_one_or_none()
+    if p:
+        p.avatar_url = None
+        await db.flush()
+
+    return {"status": "ok"}

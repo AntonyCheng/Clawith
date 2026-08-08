@@ -119,12 +119,10 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
             {/* ── API Key Management ── */}
             <div className="card" style={{ marginBottom: '12px' }}>
                 <h4 style={{ marginBottom: '4px' }}>
-                    API Key
+                    {t('enterprise.openclaw.apiKey')}
                 </h4>
                 <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '12px' }}>
-                    {isChinese
-                        ? 'OpenClaw 通过此 Key 连接平台。重新生成后旧 Key 将立即失效。'
-                        : 'OpenClaw uses this key to connect to the platform. Regenerating will immediately invalidate the old key.'}
+                    {t('enterprise.openclaw.apiKeyDesc')}
                 </p>
 
                 {/* API Key Display Logic */}
@@ -148,8 +146,8 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                 <LinearCopyButton
                                     className="btn btn-secondary"
                                     textToCopy={activeKey}
-                                    label="Copy"
-                                    copiedLabel="Copied"
+                                    label={t('admin.copy')}
+                                    copiedLabel={t('admin.copied')}
                                     style={{ padding: '4px 12px', fontSize: '12px', whiteSpace: 'nowrap', minWidth: '70px', height: 'fit-content' }}
                                 />
                                 {canManage && <button
@@ -157,7 +155,7 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                     onClick={() => setShowConfirm(true)}
                                     style={{ padding: '4px 12px', fontSize: '12px', whiteSpace: 'nowrap' }}
                                 >
-                                    {isChinese ? '重新生成' : 'Regenerate'}
+                                    {t('enterprise.openclaw.regenerate')}
                                 </button>}
                             </div>
                         );
@@ -172,8 +170,8 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                 letterSpacing: '0.5px',
                             }}>
                                 {isLegacyHash
-                                    ? (isChinese ? '旧版密钥（已加密隐藏），请重新生成以查看明文' : 'Legacy key (encrypted), please regenerate to view')
-                                    : (isChinese ? '未生成' : 'Not generated')}
+                                    ? t('enterprise.openclaw.legacyKey')
+                                    : t('enterprise.openclaw.notGenerated')}
                             </div>
                             {canManage && <button
                                 className="btn btn-secondary"
@@ -181,8 +179,8 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                 style={{ padding: '6px 16px', fontSize: '12px', whiteSpace: 'nowrap' }}
                             >
                                 {isLegacyHash
-                                    ? (isChinese ? '重新生成' : 'Regenerate')
-                                    : (isChinese ? '生成' : 'Generate')}
+                                    ? t('enterprise.openclaw.regenerate')
+                                    : t('enterprise.openclaw.generate')}
                             </button>}
                         </div>
                     );
@@ -197,17 +195,13 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                     }}>
                         <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>
                             {hasKey
-                                ? (isChinese ? '确认重新生成 API Key？' : 'Regenerate API Key?')
-                                : (isChinese ? '生成 API Key？' : 'Generate API Key?')}
+                                ? t('enterprise.openclaw.regenerateKeyQuestion')
+                                : t('enterprise.openclaw.generateKeyQuestion')}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
                             {hasKey
-                                ? (isChinese
-                                    ? '当前 Key 将立即失效，所有使用旧 Key 的设备将断开连接。'
-                                    : 'The current key will be revoked immediately. All devices using the old key will be disconnected.')
-                                : (isChinese
-                                    ? '将为此 Agent 生成一个新的 API Key。'
-                                    : 'A new API Key will be generated for this agent.')}
+                                ? t('enterprise.openclaw.currentKeyRevoked')
+                                : t('enterprise.openclaw.newKeyGenerated')}
                         </div>
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                             <button
@@ -215,7 +209,7 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                 onClick={() => setShowConfirm(false)}
                                 style={{ padding: '5px 14px', fontSize: '12px' }}
                             >
-                                {isChinese ? '取消' : 'Cancel'}
+                                {t('admin.cancel')}
                             </button>
                             <button
                                 className="btn btn-primary"
@@ -224,8 +218,8 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                 style={{ padding: '5px 14px', fontSize: '12px' }}
                             >
                                 {regenerating
-                                    ? (isChinese ? '生成中...' : 'Generating...')
-                                    : (isChinese ? '确认' : 'Confirm')}
+                                    ? t('enterprise.openclaw.generating')
+                                    : t('enterprise.openclaw.confirm')}
                             </button>
                         </div>
                     </div>
@@ -344,12 +338,10 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                     border: '1px solid rgba(255,80,80,0.2)',
                 }}>
                     <h4 style={{ marginBottom: '4px', color: 'var(--error)' }}>
-                        {isChinese ? '危险操作' : 'Danger Zone'}
+                        {t('enterprise.openclaw.dangerZone')}
                     </h4>
                     <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '12px' }}>
-                        {isChinese
-                            ? '删除后无法恢复，所有聊天记录、活动日志和关联数据都将被永久清除。'
-                            : 'This action cannot be undone. All chat history, activity logs, and associated data will be permanently deleted.'}
+                        {t('enterprise.openclaw.dangerZoneDesc')}
                     </p>
 
                     {showDeleteConfirm ? (
@@ -358,14 +350,10 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                             background: 'rgba(255,80,80,0.06)', border: '1px solid rgba(255,80,80,0.2)',
                         }}>
                             <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-primary)' }}>
-                                {isChinese
-                                    ? `确认删除 Agent "${agent?.name}"？`
-                                    : `Delete agent "${agent?.name}"?`}
+                                {t('enterprise.openclaw.confirmDeleteAgent', { name: agent?.name })}
                             </div>
                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                                {isChinese
-                                    ? '此操作不可撤销。'
-                                    : 'This action is irreversible.'}
+                                {t('enterprise.openclaw.irreversible')}
                             </div>
                             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                                 <button
@@ -373,7 +361,7 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                     onClick={() => setShowDeleteConfirm(false)}
                                     style={{ padding: '5px 14px', fontSize: '12px' }}
                                 >
-                                    {isChinese ? '取消' : 'Cancel'}
+                                    {t('admin.cancel')}
                                 </button>
                                 <button
                                     className="btn btn-danger"
@@ -382,8 +370,8 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                                     style={{ padding: '5px 14px', fontSize: '12px' }}
                                 >
                                     {deleting
-                                        ? (isChinese ? '删除中...' : 'Deleting...')
-                                        : (isChinese ? '确认删除' : 'Delete')}
+                                        ? t('enterprise.openclaw.deleting')
+                                        : t('enterprise.openclaw.delete')}
                                 </button>
                             </div>
                         </div>
@@ -393,7 +381,7 @@ export default function OpenClawSettings({ agent, agentId, canManage }: OpenClaw
                             onClick={() => setShowDeleteConfirm(true)}
                             style={{ padding: '6px 20px', fontSize: '12px' }}
                         >
-                            {isChinese ? '删除此 Agent' : 'Delete this Agent'}
+                            {t('enterprise.openclaw.deleteThisAgent')}
                         </button>
                     )}
                 </div>

@@ -102,21 +102,21 @@ export default function SkillsTab(props: Props) {
                             style={{ fontSize: '13px' }}
                             onClick={() => { setShowAgentUrlImport(true); setAgentUrlInput(''); }}
                         >
-                            Import from URL
+                            {t('agent.skills.importFromUrl', 'Import from URL')}
                         </button>
                         <button
                             className="btn btn-secondary"
                             style={{ fontSize: '13px' }}
                             onClick={() => { setShowAgentClawhub(true); setAgentClawhubQuery(''); setAgentClawhubResults([]); }}
                         >
-                            Browse ClawHub
+                            {t('agent.skills.browseClawHubBtn', 'Browse ClawHub')}
                         </button>
                         <button
                             className="btn btn-primary"
                             style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                             onClick={() => setShowImportSkillModal(true)}
                         >
-                            Import from Presets
+                            {t('agent.skills.importFromPresetsBtn', 'Import from Presets')}
                         </button>
                     </div>}
                 </div>

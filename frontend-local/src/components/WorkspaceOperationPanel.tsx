@@ -28,6 +28,7 @@ interface WorkspaceFileNode {
     name: string;
     path: string;
     is_dir: boolean;
+    modified_at?: string | null;
     children?: WorkspaceFileNode[];
 }
 
@@ -193,6 +194,18 @@ function formatRevisionTime(value?: string | null): string {
     const hh = String(dt.getHours()).padStart(2, '0');
     const min = String(dt.getMinutes()).padStart(2, '0');
     return `${mm}-${dd} ${hh}:${min}`;
+}
+
+function formatFileTime(value?: string | null): string {
+    if (!value) return '';
+    const dt = new Date(parseFloat(value) * 1000); // 秒 → 毫秒
+    if (Number.isNaN(dt.getTime())) return '';
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    const hh = String(dt.getHours()).padStart(2, '0');
+    const min = String(dt.getMinutes()).padStart(2, '0');
+    return `${yyyy}/${mm}/${dd} ${hh}:${min}`;
 }
 
 function buildPreviewVersion(content: string): string {
@@ -882,7 +895,7 @@ export default function WorkspaceOperationPanel({
     const deleteTreePath = async (path: string, label: string, selected?: boolean) => {
         if (!canModifyPath(path)) return;
         const ok = await dialog.confirm(
-            t('agent.workspace.confirmDelete', 'Are you sure you want to delete {{name}}?', { name: label }),
+            t('agent.workspace.confirmDelete', { name: label }),
             { title: t('common.delete', 'Delete'), danger: true, confirmLabel: t('common.delete', 'Delete') },
         );
         if (!ok) return;
@@ -1174,6 +1187,7 @@ export default function WorkspaceOperationPanel({
                         >
                             <span className="workspace-op-tree-chevron">{expanded ? '▾' : '▸'}</span>
                             <span>{node.name}</span>
+                            {node.modified_at && <span className="workspace-op-tree-dir-time">{formatFileTime(node.modified_at)}</span>}
                         </button>
                         {node.path !== WORKSPACE_ROOT && node.path !== SKILLS_ROOT && node.path !== MEMORY_ROOT && node.path !== ENTERPRISE_ROOT && canModifyPath(node.path) && (
                             <button
@@ -1207,7 +1221,10 @@ export default function WorkspaceOperationPanel({
                 onClick={() => switchToPath(node.path)}
                 title={node.path}
             >
-                <div className="workspace-op-tree-file-name">{node.name}</div>
+                <div className="workspace-op-tree-file-name">
+                    <span>{node.name}</span>
+                    {node.modified_at && <span className="workspace-op-tree-dir-time">{formatFileTime(node.modified_at)}</span>}
+                </div>
                 {!editing && canModifyPath(node.path) && (
                     <button
                         className="workspace-op-tree-file-delete"

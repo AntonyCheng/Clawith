@@ -105,7 +105,7 @@ export default function Login() {
             .catch(() => {
                 if (cancelled) return;
                 setOauthProviders([]);
-                setOauthError('Failed to load social login providers.');
+                setOauthError(t('auth.oauthLoadFailed', 'social login 加载失败'));
             })
             .finally(() => {
                 if (cancelled) return;
@@ -214,6 +214,21 @@ export default function Login() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleValidationMessage = (e: React.InvalidEvent<HTMLInputElement>) => {
+        const target = e.currentTarget;
+        if (target.validity.valueMissing) {
+            target.setCustomValidity(t('auth.fieldRequired'));
+        } else if (target.validity.typeMismatch && target.type === 'email') {
+            target.setCustomValidity(t('auth.emailInvalid'));
+        } else {
+            target.setCustomValidity('');
+        }
+    };
+
+    const clearValidationMessage = (e: React.FormEvent<HTMLInputElement>) => {
+        e.currentTarget.setCustomValidity('');
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -412,9 +427,6 @@ export default function Login() {
                     <img className="lp-logo" src="/logo-new.png" alt="" />
                     <span className="lp-brand-text">{t('app.brand')}</span>
                 </div>
-                <h1 className="lp-hero-title">{t('login.hero.title')}</h1>
-                <p className="lp-hero-desc">{t('login.hero.description')}</p>
-                <div className="lp-hero-underline" />
             </div>
 
             {/* ── Right: Form Panel ── */}
@@ -513,12 +525,6 @@ export default function Login() {
 
                             {shouldShowGlobalOAuth && (
                                 <div>
-                                    {oauthLoading && (
-                                        <div className="lp-sso-loading">
-                                            Loading social login providers...
-                                        </div>
-                                    )}
-
                                     {!oauthLoading && oauthProviders.length > 0 && (
                                         <div className="lp-sso-buttons">
                                             {oauthProviders.map(p => {
@@ -544,7 +550,7 @@ export default function Login() {
                                         </div>
                                     )}
 
-                                    {!oauthLoading && oauthProviders.length === 0 && oauthError && (
+                                    {oauthError && (
                                         <div className="lp-sso-error">
                                             {oauthError}
                                         </div>
@@ -613,6 +619,8 @@ export default function Login() {
                                             type="email"
                                             value={form.login_identifier}
                                             onChange={(e) => setForm({ ...form, login_identifier: e.target.value })}
+                                            onInvalid={handleValidationMessage}
+                                            onInput={clearValidationMessage}
                                             required
                                             autoFocus
                                             placeholder={t('auth.emailPlaceholder')}
@@ -627,6 +635,8 @@ export default function Login() {
                                                 type="password"
                                                 value={form.password}
                                                 onChange={(e) => setForm({ ...form, password: e.target.value })}
+                                                onInvalid={handleValidationMessage}
+                                                onInput={clearValidationMessage}
                                                 required
                                                 placeholder={t('auth.passwordPlaceholder')}
                                             />

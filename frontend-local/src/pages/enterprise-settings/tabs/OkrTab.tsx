@@ -8,9 +8,7 @@ import { fetchJson } from '../utils/fetchJson';
 export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
     const qc = useQueryClient();
     const dialog = useDialog();
-    const { i18n } = useTranslation();
-    // Derive language from i18n — same pattern as OKR.tsx
-    const zh = i18n.language?.startsWith('zh');
+    const { t: tt } = useTranslation();
     const okrSaveTimerRef = useRef<number | null>(null);
     const [okrSaveState, setOkrSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [okrSaveError, setOkrSaveError] = useState('');
@@ -39,7 +37,7 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
         },
         onError: (error: any) => {
             setOkrSaveState('error');
-            setOkrSaveError(error?.message || (zh ? '保存失败，请重试' : 'Save failed, please retry'));
+            setOkrSaveError(error?.message || tt('common.saveFailed', 'Save failed, please retry'));
         },
     });
 
@@ -64,12 +62,12 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
             const result = await fetchJson<any>('/okr/trigger-daily-collection', { method: 'POST' });
             setDailyTestState('success');
             setDailyTestMessage(
-                result?.message || (zh ? '测试收集已触发。' : 'Daily collection test triggered.')
+                result?.message || tt('enterprise.okr.dailyCollectionTriggered', 'Daily collection test triggered.')
             );
             qc.invalidateQueries({ queryKey: ['okr-members-without-okr-settings'] });
         } catch (error: any) {
             setDailyTestState('error');
-            setDailyTestMessage(error?.message || (zh ? '测试触发失败，请重试。' : 'Failed to trigger the test collection.'));
+            setDailyTestMessage(error?.message || tt('enterprise.okr.testCollectionFailed', 'Failed to trigger the test collection.'));
         }
     };
 
@@ -99,13 +97,10 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                             <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', marginBottom: '4px' }}>
-                                {zh ? 'OKR 系统开关' : 'OKR System'}
+                                {tt('enterprise.okr.okrSystem')}
                             </div>
                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                {zh
-                                    ? '启用后，组织内成员和数字员工均可使用 OKR 功能管理目标。Agent 将主动跟进并报告进展。'
-                                    : 'When enabled, all members and AI agents in the organization can use OKR to manage objectives. The OKR Agent will proactively track and report progress.'
-                                }
+                                {tt('enterprise.okr.okrSystemEnabled')}
                             </div>
                         </div>
                         {/* Wider toggle so the knob has comfortable room */}
@@ -130,12 +125,10 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                     {!s.enabled && !periodFrequencyLocked && (
                         <div style={{ marginTop: '20px' }}>
                             <div style={{ fontWeight: 500, marginBottom: '8px', fontSize: '13px' }}>
-                                {zh ? '首次启用前选择 OKR 周期' : 'Choose OKR cadence before first enablement'}
+                                {tt('enterprise.okr.chooseCadenceFirst')}
                             </div>
                             <div style={{ marginBottom: '10px', fontSize: '12px', color: 'var(--text-tertiary)', lineHeight: 1.5, maxWidth: '560px' }}>
-                                {zh
-                                    ? '请选择季度或月度。首次启用 OKR 后，周期频率将被锁定，避免历史 OKR 和报表口径混乱。'
-                                    : 'Choose quarterly or monthly. After OKR is enabled for the first time, this cadence will be locked to keep history and reports consistent.'}
+                                {tt('enterprise.okr.chooseCadenceDesc')}
                             </div>
                             <select
                                 className="form-input"
@@ -143,8 +136,8 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                 onChange={(e) => saveOkrSettings({ ...s, period_frequency: e.target.value })}
                                 style={{ maxWidth: '300px', cursor: 'pointer' }}
                             >
-                                <option value="quarterly">{zh ? '按季度' : 'Quarterly'}</option>
-                                <option value="monthly">{zh ? '按月' : 'Monthly'}</option>
+                                <option value="quarterly">{tt('enterprise.okr.quarterly')}</option>
+                                <option value="monthly">{tt('enterprise.okr.monthly')}</option>
                             </select>
                         </div>
                     )}
@@ -162,8 +155,8 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                     : 'var(--text-tertiary)',
                         }}
                     >
-                        {okrSaveState === 'saving' && (zh ? '正在保存 OKR 设置...' : 'Saving OKR settings...')}
-                        {okrSaveState === 'saved' && (zh ? 'OKR 设置已保存' : 'OKR settings saved')}
+                        {okrSaveState === 'saving' && tt('enterprise.okr.savingOkrSettings')}
+                        {okrSaveState === 'saved' && tt('enterprise.okr.settingsSaved')}
                         {okrSaveState === 'error' && okrSaveError}
                     </div>
                 )}
@@ -203,18 +196,14 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                         marginBottom: '4px',
                                     }}>
                                         {companyOkrExists
-                                            ? (zh ? '公司 OKR 已设定' : 'Company OKR is set')
-                                            : (zh ? '第一步：设定公司 OKR' : 'Step 1: Set company OKR')
+                                            ? tt('enterprise.okr.companyOkrSet')
+                                            : tt('enterprise.okr.step1SetCompanyOkr')
                                         }
                                     </div>
                                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
                                         {companyOkrExists
-                                            ? (zh
-                                                ? '公司目标已记录到当前周期。你可以在 OKR 页面查看详情，或催促成员设定个人 OKR。'
-                                                : 'Company objectives are recorded for the current period. Visit the OKR page to view details or nudge members to set their individual OKRs.')
-                                            : (zh
-                                                ? '开启 OKR 后的第一步是让 OKR Agent 帮你记录公司的目标。点击右侧按钮，跳转到 OKR Agent 的对话页面，告诉它本周期公司的目标，它会帮你创建。'
-                                                : 'The first step after enabling OKR is to let the OKR Agent record your company objectives. Click the button to open a chat with the OKR Agent and describe your goals for this period.')
+                                            ? tt('enterprise.okr.companyObjectivesDesc')
+                                            : tt('enterprise.okr.firstStepDesc')
                                         }
                                     </div>
                                 </div>
@@ -239,13 +228,13 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                                         </svg>
                                         {companyOkrExists
-                                            ? (zh ? '继续和 OKR Agent 对话' : 'Chat with OKR Agent')
-                                            : (zh ? '前往 OKR Agent 对话' : 'Open OKR Agent Chat')
+                                            ? tt('enterprise.okr.chatWithOkrAgent')
+                                            : tt('enterprise.okr.openOkrAgentChat')
                                         }
                                     </a>
                                 ) : (
                                     <span style={{ fontSize: '12px', color: 'var(--text-tertiary)', flexShrink: 0 }}>
-                                        {zh ? 'OKR Agent 未找到' : 'OKR Agent not found'}
+                                        {tt('enterprise.okr.okrAgentNotFound')}
                                     </span>
                                 )}
                             </div>
@@ -262,12 +251,10 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                         }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '2px' }}>
-                                    {zh ? '同步关系网络' : 'Sync Relationship Network'}
+                                    {tt('enterprise.okr.syncRelationships')}
                                 </div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                                    {zh
-                                        ? '将组织架构中的成员和公司可见的 Agent 自动关联到 OKR Agent'
-                                        : 'Auto-link all org members and company-visible agents to OKR Agent'}
+                                    {tt('enterprise.okr.syncRelationshipsDesc')}
                                 </div>
                             </div>
                             <button
@@ -280,20 +267,19 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                                         });
                                         if (res.ok) {
-                                            await dialog.alert(zh ? '关系网络同步成功！' : 'Relationships synced successfully!', {
+                                            await dialog.alert(tt('enterprise.okr.syncComplete'), {
                                                 type: 'success',
-                                                title: zh ? '同步完成' : 'Sync Complete',
                                             });
                                             qc.invalidateQueries({ queryKey: ['okr-members-without-okr-settings'] });
                                         } else {
                                             const err = await res.json().catch(() => ({}));
-                                            await dialog.alert(zh ? '关系网络同步失败' : 'Relationship sync failed', {
+                                            await dialog.alert(tt('enterprise.okr.relationshipSyncFailed'), {
                                                 type: 'error',
                                                 details: String(err.detail || res.status),
                                             });
                                         }
                                     } catch (e) {
-                                        await dialog.alert(zh ? '同步失败，请重试' : 'Sync failed, please retry', {
+                                        await dialog.alert(tt('enterprise.okr.syncFailedRetry'), {
                                             type: 'error',
                                             details: String((e as any)?.message || e),
                                         });
@@ -305,21 +291,21 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                     whiteSpace: 'nowrap', flexShrink: 0,
                                 }}
                             >
-                                {zh ? '立即同步' : 'Sync Now'}
+                                {tt('enterprise.okr.syncNow')}
                             </button>
                         </div>
 
                         {/* Period preference */}
                         <div style={{ marginBottom: '24px' }}>
                             <div style={{ fontWeight: 500, marginBottom: '12px', fontSize: '13px' }}>
-                                {zh ? '周期偏好' : 'Period Preference'}
+                                {tt('enterprise.okr.periodPreference')}
                             </div>
                             <select
                                 className="form-input"
                                 value={s.period_frequency}
                                 disabled={periodFrequencyLocked}
                                 title={periodFrequencyLocked
-                                    ? (zh ? 'OKR 周期已锁定，不能修改' : 'OKR cadence is locked and cannot be changed')
+                                    ? tt('enterprise.okr.cadenceLocked')
                                     : undefined}
                                 onChange={(e) => saveOkrSettings({ ...s, period_frequency: e.target.value })}
                                 style={{
@@ -328,14 +314,12 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                     cursor: periodFrequencyLocked ? 'not-allowed' : 'pointer',
                                 }}
                             >
-                                <option value="quarterly">{zh ? '按季度' : 'Quarterly'}</option>
-                                <option value="monthly">{zh ? '按月' : 'Monthly'}</option>
+                                <option value="quarterly">{tt('enterprise.okr.quarterly')}</option>
+                                <option value="monthly">{tt('enterprise.okr.monthly')}</option>
                             </select>
                             {periodFrequencyLocked && (
                                 <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-tertiary)', lineHeight: 1.5 }}>
-                                    {zh
-                                        ? 'OKR 周期在首次启用后会被锁定，以保证历史 OKR、报表和催办逻辑使用同一套口径。'
-                                        : 'The OKR cadence is locked after first enablement so history, reports, and nudges keep one consistent meaning.'}
+                                    {tt('enterprise.okr.cadenceLockedDesc')}
                                 </div>
                             )}
                         </div>
@@ -350,13 +334,10 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                 />
                                 <div>
                                     <div style={{ fontWeight: 500, fontSize: '13px' }}>
-                                        {zh ? '启用成员日报收集' : 'Enable Member Daily Collection'}
+                                        {tt('enterprise.okr.enableMemberDaily')}
                                     </div>
                                     <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
-                                        {zh
-                                            ? '成员只提交日报。公司日报会在次日 09:00 自动生成，周报和月报也会自动汇总。'
-                                            : 'Members only submit daily reports. The company daily report is generated at 09:00 the next day, and weekly/monthly summaries are generated automatically.'
-                                        }
+                                        {tt('enterprise.okr.enableMemberDailyDesc')}
                                     </div>
                                 </div>
                             </div>
@@ -368,11 +349,11 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                             checked={s.daily_report_skip_non_workdays ?? true}
                                             onChange={(e) => saveOkrSettings({ ...s, daily_report_skip_non_workdays: e.target.checked })}
                                         />
-                                        {zh ? '自动跳过休息日' : 'Skip non-workdays automatically'}
+                                        {tt('enterprise.okr.skipNonWorkdays')}
                                     </label>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                        {zh ? '开始收集时间:' : 'Collection time:'}
+                                        {tt('enterprise.okr.collectionTime')}
                                     </div>
                                     <input
                                         type="time"
@@ -389,22 +370,18 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                         style={{ padding: '6px 12px', fontSize: '12px' }}
                                     >
                                         {dailyTestState === 'running'
-                                            ? (zh ? '测试中...' : 'Testing...')
-                                            : (zh ? '立即测试收集' : 'Test Collection Now')}
+                                            ? tt('enterprise.okr.testing')
+                                            : tt('enterprise.okr.testCollectionNow')}
                                     </button>
                                     </div>
                                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: '560px' }}>
-                                        {zh
-                                            ? `当前按公司时区 ${effectiveTimezone} 执行定时收集。`
-                                            : `Scheduled collection currently follows the company timezone: ${effectiveTimezone}.`}
+                                        {tt('enterprise.okr.timezoneDesc', { timezone: effectiveTimezone })}
                                     </div>
-                                    {effectiveTimezone === 'UTC' && (
-                                        <div style={{ fontSize: '12px', color: 'var(--warning, #d97706)', lineHeight: 1.6, maxWidth: '560px' }}>
-                                            {zh
-                                                ? '你当前公司时区还是 UTC。如果你希望按中国时间触发，请先到“公司信息”里把国家/地区调整为中国或把公司时区改成 Asia/Shanghai。'
-                                                : 'Your company timezone is still UTC. If you expect China local time, update Company Info to China / Asia/Shanghai first.'}
-                                        </div>
-                                    )}
+                                        {effectiveTimezone === 'UTC' && (
+                                            <div style={{ fontSize: '12px', color: 'var(--warning, #d97706)', lineHeight: 1.6, maxWidth: '560px' }}>
+                                                {tt('enterprise.okr.timezoneWarning')}
+                                            </div>
+                                        )}
                                     {dailyTestState !== 'idle' && (
                                         <div
                                             style={{
@@ -419,14 +396,12 @@ export default function OkrTab({ tenantId, t }: { tenantId: string; t: any }) {
                                             }}
                                         >
                                             {dailyTestMessage || (dailyTestState === 'running'
-                                                ? (zh ? '正在触发一次测试收集...' : 'Triggering a test collection...')
+                                                ? tt('enterprise.okr.triggeringTest')
                                                 : '')}
                                         </div>
                                     )}
                                     <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', lineHeight: 1.6, maxWidth: '560px' }}>
-                                        {zh
-                                            ? '每天到这个时间后，OKR Agent 会开始向成员收集当天日报。公司日报固定在次日 09:00 生成；公司周报固定在周一 09:00 生成；公司月报固定在每月 1 日 09:00 生成。'
-                                            : 'At this time each day, the OKR Agent starts collecting member daily reports. The company daily report is generated at 09:00 the next day, the weekly report at 09:00 every Monday, and the monthly report at 09:00 on the 1st of each month.'}
+                                        {tt('enterprise.okr.scheduleDesc')}
                                     </div>
                                 </div>
                             )}

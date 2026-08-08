@@ -16,6 +16,7 @@ import type { WorkspaceActivity, WorkspaceLiveDraft } from '../../components/Wor
 import { activityApi, agentApi, channelApi, enterpriseApi, fileApi, focusApi, scheduleApi, skillApi, taskApi, tenantApi, triggerApi, uploadFileWithProgress } from '../../services/api';
 import type { FocusApiItem } from '../../services/api';
 import ModelSwitcher from '../../components/ModelSwitcher';
+import SkillSwitcher from '../../components/SkillSwitcher';
 import { useAppStore } from '../../stores';
 import { useAuthStore } from '../../stores';
 import { copyToClipboard } from '../../utils/clipboard';
@@ -56,6 +57,7 @@ import MindTab from './tabs/MindTab';
 import SettingsTab from './tabs/SettingsTab';
 import SkillsTab from './tabs/SkillsTab';
 import ToolsTab from './tabs/ToolsTab';
+import ToolsSkillsSummary from './components/AgentInfoToolsSkills';
 import { useAgentDetailRoute } from './hooks/useAgentDetailRoute';
 import { fetchAuth } from './utils/fetchAuth';
 
@@ -574,7 +576,7 @@ function AccessPermissionsPanel({
                                 borderRadius: '8px',
                                 cursor: disabled ? 'not-allowed' : 'pointer',
                                 border: selected ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-                                background: selected ? 'rgba(99,102,241,0.06)' : 'transparent',
+                                background: selected ? '#fff' : 'transparent',
                                 opacity: disabled ? 0.55 : 1,
                                 transition: 'all 0.15s',
                             }}
@@ -619,7 +621,7 @@ function AccessPermissionsPanel({
                                     borderRadius: '8px',
                                     cursor: 'pointer',
                                     border: localAccessLevel === opt.val ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-                                    background: localAccessLevel === opt.val ? 'rgba(99,102,241,0.06)' : 'transparent',
+                                    background: localAccessLevel === opt.val ? '#fff' : 'transparent',
                                     transition: 'all 0.15s',
                                 }}
                             >
@@ -1929,8 +1931,12 @@ function RelationshipEditor({ agentId, readOnly = false }: { agentId: string; re
                                             lineHeight: 1.2,
                                         }}
                                     >
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'rgba(16,185,129,0.12)', color: 'rgb(16,185,129)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', flexShrink: 0 }}>
-                                            {agent.name?.[0] || 'A'}
+                                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', overflow: 'hidden', background: 'rgba(16,185,129,0.12)', color: 'rgb(16,185,129)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', flexShrink: 0 }}>
+                                            {agent.avatar_url ? (
+                                                <img src={agent.avatar_url} alt={agent.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                                <span>{agent.name?.[0] || 'A'}</span>
+                                            )}
                                         </div>
                                         <div style={{ minWidth: 0 }}>
                                             <div style={{ fontWeight: 600 }}>{agent.name}</div>
@@ -3512,7 +3518,7 @@ export default function AgentDetailPage() {
     }, [historyMsgs, activeSession?.id, scheduleHistoryScrollToBottom]);
     // Memoized component for each chat message to avoid re-renders while typing
     const ChatMessageItem = React.useMemo(() => React.memo(({
-        msg, i, isLeft, t, senderLabel, avatarText, forceSenderLabel = false, hideAvatar = false,
+        msg, i, isLeft, t, senderLabel, avatarText, avatarUrl, forceSenderLabel = false, hideAvatar = false,
     }: {
         msg: any;
         i: number;
@@ -3520,6 +3526,7 @@ export default function AgentDetailPage() {
         t: any;
         senderLabel?: string;
         avatarText?: string;
+        avatarUrl?: string;
         forceSenderLabel?: boolean;
         hideAvatar?: boolean;
     }) => {
@@ -3567,10 +3574,14 @@ export default function AgentDetailPage() {
         return (
             <div key={i} className={`chat-msg-row${isLeft ? '' : ' chat-msg-row--user'}`}>
                 <div
-                    className={`chat-msg-avatar${isLeft ? '' : ' chat-msg-avatar--user'}`}
+                    className={`chat-msg-avatar${isLeft ? '' : ' chat-msg-avatar--user'}${avatarUrl ? ' has-image' : ''}`}
                     style={hideAvatar ? { visibility: 'hidden' } : undefined}
                 >
-                    {resolvedAvatarText}
+                    {avatarUrl ? (
+                        <img src={avatarUrl} alt="" />
+                    ) : (
+                        resolvedAvatarText
+                    )}
                 </div>
                 <div className="chat-msg-col">
                     <div className={isLeft ? '' : 'chat-msg-user-line'}>
@@ -3798,6 +3809,31 @@ export default function AgentDetailPage() {
         }
 
         dispatchChatMessage(activeSocket, activeRuntimeKey, payload);
+    };
+
+    const handleSkillInsert = (skillName: string) => {
+        // Append "使用/skillName " to the textarea at the cursor (or end if no focus).
+        // Mirrors the slash-command convention used elsewhere in the LLM prompt.
+        const prefix = `使用/${skillName} `;
+        const ta = chatInputRef.current;
+        if (ta) {
+            const start = ta.selectionStart ?? chatInput.length;
+            const end = ta.selectionEnd ?? chatInput.length;
+            const next = chatInput.slice(0, start) + prefix + chatInput.slice(end);
+            setChatInput(next);
+            // Restore caret just after the inserted prefix on the next tick so React
+            // has time to flush the controlled value back into the DOM.
+            requestAnimationFrame(() => {
+                ta.focus();
+                const pos = start + prefix.length;
+                ta.setSelectionRange(pos, pos);
+                // Match the auto-grow used in onChange.
+                ta.style.height = 'auto';
+                ta.style.height = ta.scrollHeight + 'px';
+            });
+        } else {
+            setChatInput(prev => prev + prefix);
+        }
     };
 
     const handleChatFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -4129,9 +4165,18 @@ export default function AgentDetailPage() {
     const [editingName, setEditingName] = useState(false);
     const [nameInput, setNameInput] = useState('');
     const [infoCardOpen, setInfoCardOpen] = useState(false);
-    const infoCardCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const clearCardCloseTimer = () => { if (infoCardCloseTimer.current) { clearTimeout(infoCardCloseTimer.current); infoCardCloseTimer.current = null; } };
-    const scheduleCardClose = () => { clearCardCloseTimer(); infoCardCloseTimer.current = setTimeout(() => setInfoCardOpen(false), 180); };
+    const infoCardRef = useRef<HTMLDivElement | null>(null);
+    useEffect(() => {
+        if (!infoCardOpen) return;
+        const handleMouseDown = (e: MouseEvent) => {
+            const target = e.target as Node | null;
+            if (infoCardRef.current && target && !infoCardRef.current.contains(target)) {
+                setInfoCardOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleMouseDown);
+        return () => document.removeEventListener('mousedown', handleMouseDown);
+    }, [infoCardOpen]);
     const showToast = (message: string, type: 'success' | 'error' = 'success') => {
         setUploadToast({ message, type });
         setTimeout(() => setUploadToast(null), 3000);
@@ -4228,6 +4273,13 @@ export default function AgentDetailPage() {
                         </div>
                         <div className="agent-info-card-body">
                             <div className="agent-info-profile-panel">
+                                <div className="agent-info-profile-avatar">
+                                    {agent.avatar_url ? (
+                                        <img src={agent.avatar_url} alt={agent.name} />
+                                    ) : (
+                                        <span>{agent.name?.[0] || 'A'}</span>
+                                    )}
+                                </div>
                                 {agent.role_description && (
                                     <div className="agent-info-profile-role" title={agent.role_description}>{agent.role_description}</div>
                                 )}
@@ -4262,6 +4314,18 @@ export default function AgentDetailPage() {
                                     </button>
                                 )}
                             </div>
+                        </div>
+                    </div>
+                    {/* 第2列：工具 & 技能 */}
+                    <div className="agent-info-card-section">
+                        <div className="agent-info-card-section-header">
+                            <span className="agent-info-section-icon agent-info-section-icon--indigo">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>
+                            </span>
+                            <span className="agent-info-card-section-title">{t('agent.toolsAndSkills', '工具和技能')}</span>
+                        </div>
+                        <div className="agent-info-card-body">
+                            {isChatRoute && id && <ToolsSkillsSummary agentId={id} />}
                         </div>
                     </div>
                     <div className="agent-info-card-section agent-info-card-section--stacked">
@@ -4793,12 +4857,17 @@ export default function AgentDetailPage() {
                 {activeTab === 'chat' && (
                     <div className="page-header agent-detail-header">
                         <div
+                            ref={infoCardRef}
                             className="agent-detail-identity agent-detail-identity--compact"
-                            onMouseEnter={clearCardCloseTimer}
-                            onMouseLeave={scheduleCardClose}
                         >
                             <div className="agent-detail-identity-trigger">
-                                <div className="agent-detail-avatar">{(Array.from(agent.name || 'A')[0] as string || 'A').toUpperCase()}</div>
+                                <div className={`agent-detail-avatar${!agent.avatar_url ? ' agent-detail-avatar--fallback' : ''}`}>
+                                    {agent.avatar_url ? (
+                                        <img src={agent.avatar_url} alt={agent.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        <span>{(Array.from(agent.name || 'A')[0] as string || 'A').toUpperCase()}</span>
+                                    )}
+                                </div>
                                 <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                                     {canManage && editingName ? (
                                         <input
@@ -5891,6 +5960,11 @@ export default function AgentDetailPage() {
                                                             onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
                                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+                                                                    <IconMessageCircle
+                                                                        size={12}
+                                                                        stroke={2.4}
+                                                                        style={{ flexShrink: 0, color: 'rgba(230, 0, 18, 1)', opacity: 0.7 }}
+                                                                    />
                                                                     <div style={{ fontSize: '12px', fontWeight: isActive ? 600 : 400, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{s.title}</div>
                                                                     {s.is_primary && (
                                                                         <span style={{
@@ -5974,6 +6048,11 @@ export default function AgentDetailPage() {
                                                                 onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'var(--bg-secondary)'; }}
                                                                 onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '1px' }}>
+                                                                    <IconMessageCircle
+                                                                        size={11}
+                                                                        stroke={1.7}
+                                                                        style={{ flexShrink: 0, color: 'var(--text-secondary)', opacity: 0.7 }}
+                                                                    />
                                                                     <div style={{ fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)', flex: 1 }}>{s.title}</div>
                                                                     {s.is_primary && (
                                                                         <span style={{
@@ -6126,6 +6205,7 @@ export default function AgentDetailPage() {
                                                                     t={t}
                                                                     senderLabel={isHumanReadonly ? (isLeft ? ((agent as any)?.name || 'Agent') : (activeSession.username || 'User')) : undefined}
                                                                     avatarText={isHumanReadonly ? (isLeft ? (((agent as any)?.name || 'Agent')[0]) : ((activeSession.username || 'User')[0])) : undefined}
+                                                                    avatarUrl={isLeft ? (agent as any)?.avatar_url : currentUser?.avatar_url}
                                                                     forceSenderLabel={isHumanReadonly}
                                                                 />
                                                             </React.Fragment>
@@ -6306,7 +6386,13 @@ export default function AgentDetailPage() {
                                                             const groupIsRunning = hasRunningTool || (!hasToolItems && isLastEntry && (isWaiting || isStreaming));
                                                             return (
                                                                 <div key={`ag-${entry.key}`} className="chat-msg-row chat-msg-row--analysis">
-                                                                    <div className="chat-msg-avatar">{(((agent as any)?.name || 'Agent')[0])}</div>
+                                                                    <div className="chat-msg-avatar">
+                                                                        {(agent as any)?.avatar_url ? (
+                                                                            <img src={(agent as any).avatar_url} alt="" />
+                                                                        ) : (
+                                                                            (((agent as any)?.name || 'Agent')[0])
+                                                                        )}
+                                                                    </div>
                                                                     <AnalysisCard
                                                                         items={entry.items}
                                                                         t={t}
@@ -6336,6 +6422,7 @@ export default function AgentDetailPage() {
                                                                             t={t}
                                                                             senderLabel={(agent as any)?.name || 'Agent'}
                                                                             avatarText={((agent as any)?.name || 'Agent')[0]}
+                                                                            avatarUrl={(agent as any)?.avatar_url}
                                                                             hideAvatar={hideAssistantAvatar}
                                                                         />
                                                                     )}
@@ -6351,6 +6438,7 @@ export default function AgentDetailPage() {
                                                                 t={t}
                                                                 senderLabel={msg.role === 'assistant' ? ((agent as any)?.name || 'Agent') : (currentUser?.display_name || undefined)}
                                                                 avatarText={msg.role === 'assistant' ? (((agent as any)?.name || 'Agent')[0]) : (currentUser?.display_name?.[0] || undefined)}
+                                                                avatarUrl={msg.role === 'assistant' ? (agent as any)?.avatar_url : currentUser?.avatar_url}
                                                                 hideAvatar={hideAssistantAvatar}
                                                             />
                                                         );
@@ -6359,7 +6447,11 @@ export default function AgentDetailPage() {
                                                 }
                                                 {isWaiting && (
                                                     <div className="chat-msg-row">
-                                                        <div className="chat-msg-avatar">A</div>
+                                                        <div className="chat-msg-avatar">
+                                                            {(agent as any)?.avatar_url ? (
+                                                                <img src={(agent as any).avatar_url} alt="" />
+                                                            ) : 'A'}
+                                                        </div>
                                                         <div className="chat-msg-bubble chat-msg-bubble--thinking">
                                                             <div className="thinking-indicator">
                                                                 <div className="thinking-dots">
@@ -6510,6 +6602,11 @@ export default function AgentDetailPage() {
                                                             tenantDefaultId={myTenant?.default_model_id || null}
                                                             disabled={showNoModelState || !wsConnected}
                                                         />
+                                                        <SkillSwitcher
+                                                            agentId={id!}
+                                                            onInsert={handleSkillInsert}
+                                                            disabled={showNoModelState || !wsConnected}
+                                                        />
                                                         <div style={{ flex: 1 }} />
                                                         {(isStreaming || isWaiting) ? (
                                                             <button
@@ -6604,29 +6701,32 @@ export default function AgentDetailPage() {
                             filteredLogs = activityLogs.filter((l: any) => messageTypes.includes(l.action_type));
                         }
 
-                        const filterBtn = (key: string, label: React.ReactNode, indent = false) => (
-                            <button
-                                key={key}
-                                onClick={() => setLogFilter(key)}
-                                style={{
-                                    padding: indent ? '4px 10px 4px 20px' : '6px 14px',
-                                    fontSize: indent ? '11px' : '12px',
-                                    fontWeight: logFilter === key ? 600 : 400,
-                                    color: logFilter === key ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                                    background: logFilter === key ? 'rgba(99,102,241,0.1)' : 'transparent',
-                                    border: logFilter === key ? '1px solid var(--accent-primary)' : '1px solid var(--border-subtle)',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    transition: 'all 0.15s',
-                                    whiteSpace: 'nowrap' as const,
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '5px',
-                                }}
-                            >
-                                {label}
-                            </button>
-                        );
+                        const filterBtn = (key: string, label: React.ReactNode, indent = false) => {
+                            const isSelected = logFilter === key;
+                            return (
+                                <button
+                                    key={key}
+                                    onClick={() => setLogFilter(key)}
+                                    style={{
+                                        padding: indent ? '4px 10px 4px 20px' : '6px 14px',
+                                        fontSize: indent ? '11px' : '12px',
+                                        fontWeight: isSelected ? 600 : 400,
+                                        color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                                        background: isSelected ? '#dc2626' : 'transparent',
+                                        border: isSelected ? '1px solid #dc2626' : '1px solid var(--border-subtle)',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s',
+                                        whiteSpace: 'nowrap' as const,
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '5px',
+                                    }}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        };
 
                         return (
                             <div>

@@ -22,7 +22,7 @@ class PlatformService:
         Priority:
         1. Environment variable (PUBLIC_BASE_URL) - from .env or docker
         2. Incoming request's base URL (browser address)
-        3. Hardcoded fallback (https://try.clawith.ai)
+        3. Hardcoded fallback (https://try.digitalemployee.ai)
         """
         # 1. Try environment variable
         env_url = os.environ.get("PUBLIC_BASE_URL")
@@ -35,7 +35,7 @@ class PlatformService:
             return str(request.base_url).rstrip("/")
 
         # 3. Absolute fallback
-        return "https://try.clawith.ai"
+        return "https://try.digitalemployee.ai"
 
 
     async def get_tenant_sso_base_url(

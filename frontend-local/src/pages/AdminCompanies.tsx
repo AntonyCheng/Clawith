@@ -129,7 +129,7 @@ function PlatformTab() {
     const [systemEmailConfig, setSystemEmailConfig] = useState({
         SYSTEM_EMAIL_ENABLED: false,
         SYSTEM_EMAIL_FROM_ADDRESS: '',
-        SYSTEM_EMAIL_FROM_NAME: 'Clawith',
+        SYSTEM_EMAIL_FROM_NAME: 'DigitalEmployee',
         SYSTEM_SMTP_HOST: '',
         SYSTEM_SMTP_PORT: 465,
         SYSTEM_SMTP_USERNAME: '',
@@ -190,7 +190,7 @@ function PlatformTab() {
                             ? !!d.value.SYSTEM_EMAIL_ENABLED
                             : !!(d.value.SYSTEM_EMAIL_FROM_ADDRESS && d.value.SYSTEM_SMTP_HOST),
                         SYSTEM_EMAIL_FROM_ADDRESS: d.value.SYSTEM_EMAIL_FROM_ADDRESS || '',
-                        SYSTEM_EMAIL_FROM_NAME: d.value.SYSTEM_EMAIL_FROM_NAME || 'Clawith',
+                        SYSTEM_EMAIL_FROM_NAME: d.value.SYSTEM_EMAIL_FROM_NAME || 'DigitalEmployee',
                         SYSTEM_SMTP_HOST: d.value.SYSTEM_SMTP_HOST || '',
                         SYSTEM_SMTP_PORT: d.value.SYSTEM_SMTP_PORT || 465,
                         SYSTEM_SMTP_USERNAME: d.value.SYSTEM_SMTP_USERNAME || '',
@@ -256,9 +256,9 @@ function PlatformTab() {
         try {
             await adminApi.updatePlatformSettings({ [key]: value });
             setSettings((s: any) => ({ ...s, [key]: value }));
-            showToast('Setting updated');
+            showToast(t('admin.settingUpdated'));
         } catch (e: any) {
-            showToast(e.message || 'Failed', 'error');
+            showToast(e.message || t('common.error'), 'error');
         }
         setSettingsLoading(false);
     };
@@ -314,9 +314,9 @@ function PlatformTab() {
             });
             setEmailConfigSaved(true);
             setTimeout(() => setEmailConfigSaved(false), 2000);
-            showToast('Email config saved');
+            showToast(t('admin.emailConfigSaved'));
         } catch (e: any) {
-            showToast('Failed to save email config: ' + (e.message || 'Unknown error'), 'error');
+            showToast(t('admin.saveFailed') + (e.message || 'Unknown error'), 'error');
         } finally {
             setEmailConfigSaving(false);
         }
@@ -333,7 +333,7 @@ function PlatformTab() {
             });
             setTestEmailResult({ ok: true, msg: t('enterprise.systemEmail.testSuccess', 'Test email sent successfully!') });
         } catch (e: any) {
-            setTestEmailResult({ ok: false, msg: e.message || 'Failed to send test email' });
+            setTestEmailResult({ ok: false, msg: e.message || t('admin.testEmailFailed') });
         }
         setTestEmailSending(false);
     };
@@ -349,7 +349,7 @@ function PlatformTab() {
             setTimeout(() => setTemplatesSaved(false), 2000);
             showToast(t('enterprise.emailTemplates.saved', 'Email templates saved'));
         } catch (e: any) {
-            showToast(e.message || 'Failed to save templates', 'error');
+            showToast(e.message || t('admin.saveTemplatesFailed'), 'error');
         }
         setTemplatesSaving(false);
     };
@@ -385,7 +385,7 @@ function PlatformTab() {
     const saveOauthProvider = async (providerType: 'google' | 'github') => {
         const provider = oauthProviders[providerType];
         if (!provider?.client_id?.trim() || !provider?.client_secret?.trim()) {
-            showToast(`${socialProviderMeta[providerType].name} Client ID and Client Secret are required`, 'error');
+            showToast(t('admin.oauthClientIdSecretRequired', 'Client ID and Client Secret are required'), 'error');
             return;
         }
 
@@ -426,9 +426,9 @@ function PlatformTab() {
                     is_active: !!result.is_active,
                 }
             }));
-            showToast(`${socialProviderMeta[providerType].name} OAuth saved`);
+            showToast(t('admin.oauthSaved', 'OAuth saved'));
         } catch (e: any) {
-            showToast(e.message || `Failed to save ${socialProviderMeta[providerType].name} OAuth`, 'error');
+            showToast(e.message || t('admin.oauthSaveFailed', 'Failed to save OAuth'), 'error');
         } finally {
             setOauthSaving(prev => ({ ...prev, [providerType]: false }));
         }
@@ -441,7 +441,7 @@ function PlatformTab() {
     const switchTrack = (checked: boolean): React.CSSProperties => ({
         position: 'absolute', inset: 0,
         background: checked ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-        borderRadius: '11px', transition: 'background 0.2s',
+        borderRadius: '11px', transition: 'background 0.2s', color: 'var(--text-secondary)',
     });
     const switchThumb = (checked: boolean): React.CSSProperties => ({
         position: 'absolute', left: checked ? '20px' : '2px', top: '2px',
@@ -464,11 +464,11 @@ function PlatformTab() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {[
                         { key: 'allow_self_create_company', label: t('admin.allowSelfCreate', 'Allow users to create their own companies'), desc: t('admin.allowSelfCreateDesc', 'When disabled, only platform admins can create companies.') },
-                        { key: 'sso_custom_domain_redirect_enabled', label: t('admin.ssoCustomDomainRedirect', 'Enable tenant SSO custom domain redirect'), desc: t('admin.ssoCustomDomainRedirectDesc', 'When disabled, all tenants will be blocked from using custom domains or dedicated links to redirect to SSO providers.') },
+                        // { key: 'sso_custom_domain_redirect_enabled', label: t('admin.ssoCustomDomainRedirect', 'Enable tenant SSO custom domain redirect'), desc: t('admin.ssoCustomDomainRedirectDesc', 'When disabled, all tenants will be blocked from using custom domains or dedicated links to redirect to SSO providers.') },
                     ].map(s => (
                         <div key={s.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
                             <div>
-                                <div style={{ fontSize: '13px', fontWeight: 500 }}>{s.label}</div>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>{s.label}</div>
                                 <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{s.desc}</div>
                             </div>
                             <label style={switchStyle(!!settings[s.key], settingsLoading)}>
@@ -483,12 +483,12 @@ function PlatformTab() {
                 </div>
             </div>
 
-            <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
+            {/* <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-secondary)' }}>
-                    OAuth Login
+                    {t('admin.oauthLogin')}
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '16px' }}>
-                    Configure platform-wide social login providers. Once enabled, users can sign in from the main login page with Google or GitHub.
+                    {t('admin.oauthLoginDesc')}
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
                     {(['google', 'github'] as const).map((providerType) => {
@@ -520,28 +520,28 @@ function PlatformTab() {
 
                                 <div style={{ display: 'grid', gap: '12px' }}>
                                     <div>
-                                        <label className="form-label" style={{ fontSize: '12px', marginBottom: '6px' }}>Client ID</label>
+                                        <label className="form-label" style={{ fontSize: '12px', marginBottom: '6px' }}>{t('admin.clientId')}</label>
                                         <input
                                             className="form-input"
                                             value={provider?.client_id || ''}
                                             onChange={e => setOauthField(providerType, 'client_id', e.target.value)}
-                                            placeholder={providerType === 'google' ? 'xxxxxxxx.apps.googleusercontent.com' : 'GitHub OAuth App Client ID'}
+                                            placeholder={t('admin.googleClientIdPlaceholder', 'xxxxxxxx.apps.googleusercontent.com')}
                                             style={{ fontSize: '13px' }}
                                         />
                                     </div>
                                     <div>
-                                        <label className="form-label" style={{ fontSize: '12px', marginBottom: '6px' }}>Client Secret</label>
+                                        <label className="form-label" style={{ fontSize: '12px', marginBottom: '6px' }}>{t('admin.clientSecret')}</label>
                                         <input
                                             className="form-input"
                                             type="password"
                                             value={provider?.client_secret || ''}
                                             onChange={e => setOauthField(providerType, 'client_secret', e.target.value)}
-                                            placeholder={`${meta.name} Client Secret`}
+                                            placeholder={t('admin.clientSecretPlaceholder', `${meta.name} Client Secret`)}
                                             style={{ fontSize: '13px' }}
                                         />
                                     </div>
                                     <div>
-                                        <label className="form-label" style={{ fontSize: '12px', marginBottom: '6px' }}>Scope</label>
+                                        <label className="form-label" style={{ fontSize: '12px', marginBottom: '6px' }}>{t('admin.scope')}</label>
                                         <input
                                             className="form-input"
                                             value={provider?.scope || meta.scope}
@@ -559,8 +559,8 @@ function PlatformTab() {
                                                 className="btn btn-ghost"
                                                 style={{ fontSize: '11px', padding: '4px 8px', whiteSpace: 'nowrap' }}
                                                 textToCopy={callbackUrl}
-                                                label="Copy"
-                                                copiedLabel="Copied"
+                                                label={t('admin.copy')}
+                                                copiedLabel={t('admin.copied')}
                                             />
                                         </div>
                                     </div>
@@ -570,7 +570,7 @@ function PlatformTab() {
                                         </button>
                                         {provider?.id && (
                                             <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                                {provider.is_active ? 'Enabled on login page' : 'Saved but disabled'}
+                                                {provider.is_active ? t('admin.enabledOnLoginPage') : t('admin.savedButDisabled')}
                                             </span>
                                         )}
                                     </div>
@@ -579,7 +579,7 @@ function PlatformTab() {
                         );
                     })}
                 </div>
-            </div>
+            </div> */}
 
             {/* Notification Bar */}
             <div className="card" style={{ padding: '16px', marginBottom: '16px' }}>
@@ -664,7 +664,7 @@ function PlatformTab() {
                             className="form-input"
                             value={systemEmailConfig.SYSTEM_EMAIL_FROM_ADDRESS}
                             onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_EMAIL_FROM_ADDRESS: e.target.value })}
-                            placeholder="noreply@yourcompany.com"
+                            placeholder={t('admin.systemEmailPlaceholder')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>
@@ -676,7 +676,7 @@ function PlatformTab() {
                             className="form-input"
                             value={systemEmailConfig.SYSTEM_EMAIL_FROM_NAME}
                             onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_EMAIL_FROM_NAME: e.target.value })}
-                            placeholder="Clawith"
+                            placeholder={t('admin.fromNamePlaceholder')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>
@@ -688,7 +688,7 @@ function PlatformTab() {
                             className="form-input"
                             value={systemEmailConfig.SYSTEM_SMTP_HOST}
                             onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_SMTP_HOST: e.target.value })}
-                            placeholder="smtp.gmail.com"
+                            placeholder={t('admin.smtpHostPlaceholder')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>
@@ -701,7 +701,7 @@ function PlatformTab() {
                             type="number"
                             value={systemEmailConfig.SYSTEM_SMTP_PORT}
                             onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_SMTP_PORT: parseInt(e.target.value) || 465 })}
-                            placeholder="465"
+                            placeholder={t('admin.smtpPortPlaceholder')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>
@@ -713,20 +713,20 @@ function PlatformTab() {
                             className="form-input"
                             value={systemEmailConfig.SYSTEM_SMTP_USERNAME}
                             onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_SMTP_USERNAME: e.target.value })}
-                            placeholder="your-email@gmail.com"
+                            placeholder={t('admin.emailPlaceholder')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>
                     <div>
                         <label className="form-label" style={{ fontSize: '12px', marginBottom: '6px' }}>
-                            {t('enterprise.systemEmail.password', 'SMTP Password / App Password')}
+                            {t('admin.smtpPasswordPlaceholder')}
                         </label>
                         <input
                             className="form-input"
                             type="password"
                             value={systemEmailConfig.SYSTEM_SMTP_PASSWORD}
                             onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_SMTP_PASSWORD: e.target.value })}
-                            placeholder="••••••••"
+                            placeholder={t('admin.smtpPasswordPlaceholder')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>
@@ -739,7 +739,7 @@ function PlatformTab() {
                             type="number"
                             value={systemEmailConfig.SYSTEM_SMTP_TIMEOUT_SECONDS}
                             onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_SMTP_TIMEOUT_SECONDS: parseInt(e.target.value) || 15 })}
-                            placeholder="15"
+                            placeholder={t('admin.timeoutPlaceholder')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>
@@ -751,7 +751,7 @@ function PlatformTab() {
                                 onChange={e => setSystemEmailConfig({ ...systemEmailConfig, SYSTEM_SMTP_SSL: e.target.checked })}
                                 style={{ width: '16px', height: '16px' }}
                             />
-                            <span style={{ fontSize: '13px' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                                 {t('enterprise.systemEmail.useSsl', 'Use SSL/TLS')}
                             </span>
                         </label>
@@ -824,7 +824,7 @@ function PlatformTab() {
                                     onClick={() => setExpandedTemplate(isExpanded ? null : scenario.key)}
                                 >
                                     <div>
-                                        <div style={{ fontWeight: 500, fontSize: '13px' }}>{scenario.label}</div>
+                                        <div style={{ fontWeight: 500, fontSize: '13px', color: 'var(--text-secondary)' }}>{scenario.label}</div>
                                         <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', marginTop: '2px' }}>{scenario.desc}</div>
                                     </div>
                                     <div style={{ color: 'var(--text-tertiary)', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', fontSize: '12px' }}>▼</div>
@@ -1009,7 +1009,7 @@ function CompaniesTab() {
             setShowCreate(false);
             loadCompanies();
         } catch (e: any) {
-            showToast(e.message || 'Failed', 'error');
+            showToast(e.message || t('common.error'), 'error');
         }
         setCreating(false);
     };
@@ -1025,9 +1025,9 @@ function CompaniesTab() {
         try {
             await adminApi.toggleCompany(id);
             loadCompanies();
-            showToast(`Company ${action}d`);
+            showToast(t('admin.companyToggled', `Company ${action}d`));
         } catch (e: any) {
-            showToast(e.message || 'Failed', 'error');
+            showToast(e.message || t('common.error'), 'error');
         }
     };
 
@@ -1044,7 +1044,7 @@ function CompaniesTab() {
 
     const columns: { key: SortKey; label: string; flex: string }[] = [
         { key: 'name', label: t('admin.company', 'Company'), flex: '2fr' },
-        { key: 'sso_enabled', label: 'SSO', flex: '100px' },
+        { key: 'sso_enabled', label: t('admin.sso'), flex: '100px' },
         { key: 'org_admin_email', label: t('admin.orgAdmin', 'Admin Email'), flex: '1.5fr' },
         { key: 'user_count', label: t('admin.users', 'Users'), flex: '70px' },
         { key: 'agent_count', label: t('admin.agents', 'Agents'), flex: '70px' },
@@ -1165,7 +1165,7 @@ function CompaniesTab() {
                             onKeyDown={e => e.key === 'Enter' && handleCreate()}
                             style={{ flex: 1 }} autoFocus />
                         <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !newName.trim()}>
-                            {creating ? '...' : t('common.create', 'Create')}
+                            {creating ? t('common.loading') : t('common.create', 'Create')}
                         </button>
                         <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>
                             {t('common.cancel', 'Cancel')}
@@ -1261,7 +1261,7 @@ function CompaniesTab() {
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                             {c.sso_enabled ? (
                                 <>
-                                    <span style={{ color: 'var(--accent-primary)', display: 'inline-flex' }} title="SSO Enabled"><IconShieldCheck size={14} stroke={1.8} /></span>
+                                    <span style={{ color: 'var(--accent-primary)', display: 'inline-flex' }} title={t('admin.ssoEnabled')}><IconShieldCheck size={14} stroke={1.8} /></span>
                                     {c.sso_domain && (
                                         <span style={{ 
                                             fontSize: '9px', background: 'rgba(59,130,246,0.1)', 
@@ -1274,7 +1274,7 @@ function CompaniesTab() {
                                     )}
                                 </>
                             ) : (
-                                <span style={{ color: 'var(--text-tertiary)', opacity: 0.3 }} title="SSO Disabled">—</span>
+                                <span style={{ color: 'var(--text-tertiary)', opacity: 0.3 }} title={t('admin.ssoDisabled')}>—</span>
                             )}
                         </div>
                         <div style={{ fontSize: '12px', color: c.org_admin_email ? 'var(--text-primary)' : 'var(--text-tertiary)' }}>
@@ -1372,7 +1372,7 @@ function EditCompanyModal({ company, onClose, onUpdated }: { company: any, onClo
             onUpdated();
             onClose();
         } catch (e: any) {
-            setError(e.message || 'Failed to update');
+            setError(e.message || t('admin.updateFailed'));
         }
         setSaving(false);
     };
@@ -1425,7 +1425,7 @@ function EditCompanyModal({ company, onClose, onUpdated }: { company: any, onClo
                             className="form-input"
                             value={ssoDomain}
                             onChange={e => setSsoDomain(e.target.value)}
-                            placeholder={t('admin.ssoDomainPlaceholder', 'e.g. acme.clawith.com')}
+                            placeholder={t('admin.ssoDomainPlaceholder', 'e.g. www.digitalemployee.com')}
                             style={{ fontSize: '13px' }}
                         />
                     </div>

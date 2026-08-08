@@ -66,8 +66,8 @@ BUILTIN_TOOLS = [
     FINISH_TOOL_SEED,
     {
         "name": "list_files",
-        "display_name": "List Files",
-        "description": "List files and folders in a directory within the workspace. Use this before writing new workspace documents so you can inspect the current folder structure, reuse existing topical subfolders when appropriate, and avoid dumping files directly into the workspace root unless there is a clear reason. Can also list enterprise_info/ for shared company information.",
+        "display_name": "列出文件",
+        "description": "列出工作区中某个目录下的文件和文件夹。在向 workspace/ 写入新文档之前请先调用本工具，以便查看当前目录结构、合理复用已有的主题子目录，并在没有充分理由时避免将文件直接散落在 workspace/ 根目录。也可以用来列出 enterprise_info/ 中的共享公司信息。",
         "category": "file",
         "icon": "📁",
         "is_default": True,
@@ -82,8 +82,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "read_file",
-        "display_name": "Read File",
-        "description": "Read file contents from the workspace. Can read soul.md, memory/memory.md, skills/, and enterprise_info/. Focus is stored in system tools, not focus.md. Use offset and limit for reading large files in chunks.",
+        "display_name": "读取文件",
+        "description": "读取工作区中的文件内容。可读取 soul.md、memory/memory.md、skills/ 以及 enterprise_info/ 等文件。Focus 信息保存在系统工具中，而非 focus.md。读取大文件时请配合 offset 和 limit 分页。",
         "category": "file",
         "icon": "📄",
         "is_default": True,
@@ -105,8 +105,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "list_focus_items",
-        "display_name": "List Focus Items",
-        "description": "List structured Focus items from the system database.",
+        "display_name": "列出 Focus 项",
+        "description": "从系统数据库中列出结构化的 Focus 项。",
         "category": "file",
         "icon": "◎",
         "is_default": True,
@@ -121,8 +121,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "upsert_focus_item",
-        "display_name": "Upsert Focus Item",
-        "description": "Create or update a structured Focus item in the system database.",
+        "display_name": "新建或更新 Focus 项",
+        "description": "在系统数据库中新建或更新一个结构化的 Focus 项。",
         "category": "file",
         "icon": "◎",
         "is_default": True,
@@ -142,8 +142,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "complete_focus_item",
-        "display_name": "Complete Focus Item",
-        "description": "Mark a structured Focus item completed.",
+        "display_name": "完成 Focus 项",
+        "description": "将一个结构化的 Focus 项标记为已完成。",
         "category": "file",
         "icon": "◎",
         "is_default": True,
@@ -159,8 +159,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "write_file",
-        "display_name": "Write File",
-        "description": "Write or update a file in the workspace. Before creating a new document under workspace/, first inspect the relevant directories with list_files, prefer an existing topical subfolder over the workspace root, and create a new subfolder when the content belongs to a new category. Avoid placing standalone document files directly in workspace/ root unless the user explicitly wants that. Can update memory/memory.md, create documents in workspace/, create skills in skills/.",
+        "display_name": "写入文件",
+        "description": "在工作区中写入或更新一个文件。在 workspace/ 下创建新文档前，请先用 list_files 查看相关目录结构：优先复用已有的主题子目录，当内容属于新主题时再新建子目录。除非用户明确要求，请不要把独立的文档文件直接放在 workspace/ 根目录。可以更新 memory/memory.md，在 workspace/ 下创建文档，或在 skills/ 下创建技能。",
         "category": "file",
         "icon": "✏️",
         "is_default": True,
@@ -177,8 +177,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "delete_file",
-        "display_name": "Delete File",
-        "description": "Delete a file from the workspace. Cannot delete soul.md or tasks.json.",
+        "display_name": "删除文件",
+        "description": "删除工作区中的一个文件。无法删除 soul.md 或 tasks.json。",
         "category": "file",
         "icon": "🗑️",
         "is_default": True,
@@ -194,8 +194,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "move_file",
-        "display_name": "Move File",
-        "description": "Move or rename a file or folder within the workspace. Use this instead of execute_code for reorganizing workspace files, moving generated documents into subfolders, or renaming files. Cannot move soul.md, tasks.json, or enterprise_info/. If destination_path is an existing folder or ends with '/', the original filename is preserved inside that folder. Does not overwrite by default.",
+        "display_name": "移动文件",
+        "description": "在工作区内移动或重命名文件/文件夹。整理工作区文件、将生成的文档移入子目录或重命名文件时请使用本工具，而不是 execute_code。无法移动 soul.md、tasks.json 或 enterprise_info/。若 destination_path 是已存在的目录或以 '/' 结尾，则保留原文件名放入该目录。默认不覆盖目标。",
         "category": "file",
         "icon": "↪",
         "is_default": True,
@@ -214,8 +214,8 @@ BUILTIN_TOOLS = [
     # --- Enhanced file management tools ---
     {
         "name": "edit_file",
-        "display_name": "Edit File",
-        "description": "Surgically replace a specific string inside an existing file without rewriting the whole content. Prefer this over write_file when you only need to change one or more sections.",
+        "display_name": "编辑文件",
+        "description": "对现有文件中的指定字符串进行精确局部替换，而无需重写整个文件。如果只是要修改其中一节或多节，请优先使用本工具而不是 write_file。",
         "category": "file",
         "icon": "✂️",
         "is_default": True,
@@ -234,8 +234,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "search_files",
-        "display_name": "Search Files",
-        "description": "Search for content patterns across files using regex. Returns matching lines with file paths and line numbers. Results capped at 50 per query.",
+        "display_name": "搜索内容",
+        "description": "使用正则在工作区文件中搜索内容模式，返回匹配的行及其所在文件的路径与行号。每次查询最多返回 50 条结果。",
         "category": "file",
         "icon": "🔍",
         "is_default": True,
@@ -254,8 +254,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "find_files",
-        "display_name": "Find Files",
-        "description": "Find files matching glob patterns. Returns file paths with sizes and modification info. Results capped at 100 per query.",
+        "display_name": "查找文件",
+        "description": "按 glob 模式查找文件，返回文件路径、大小和修改时间。每次查询最多返回 100 条结果。",
         "category": "file",
         "icon": "📁",
         "is_default": True,
@@ -272,8 +272,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "read_document",
-        "display_name": "Read Document",
-        "description": "Read office document contents (PDF, Word, Excel, PPT) and extract text.",
+        "display_name": "读取文档",
+        "description": "读取 Office 文档（PDF、Word、Excel、PPT）的内容并提取其中的文本。",
         "category": "file",
         "icon": "📑",
         "is_default": True,
@@ -289,8 +289,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "convert_csv_to_xlsx",
-        "display_name": "CSV to Excel",
-        "description": "Convert a CSV source file into an Excel .xlsx file. Create/edit the CSV first, then use this tool.",
+        "display_name": "CSV 转 Excel",
+        "description": "将 CSV 源文件转换为 Excel .xlsx 文件。请先创建/编辑好 CSV 文件，再调用本工具。",
         "category": "file",
         "icon": "📊",
         "is_default": True,
@@ -307,8 +307,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "convert_html_to_pdf",
-        "display_name": "HTML to PDF",
-        "description": "Convert an HTML source file into a PDF document. Uses headless Chrome by default for higher-fidelity rendering of modern CSS and screen layouts, with WeasyPrint as a fallback.",
+        "display_name": "HTML 转 PDF",
+        "description": "将 HTML 源文件转换为 PDF 文档。默认使用无头 Chrome 进行渲染，以更忠实地呈现现代 CSS 与屏幕布局，并以 WeasyPrint 作为后备方案。",
         "category": "file",
         "icon": "📄",
         "is_default": True,
@@ -331,8 +331,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "convert_html_to_pptx",
-        "display_name": "HTML to PowerPoint",
-        "description": "Convert an HTML source file into a PowerPoint .pptx file. By default, render_mode='editable' opens the HTML in headless Chrome, samples real element positions/styles, and maps explicit .slide/data-slide nodes or top-level page sections into editable PPT elements. Use render_mode='visual' as a high-fidelity screenshot fallback when exact visual preservation is more important than editability.",
+        "display_name": "HTML 转 PPT",
+        "description": "将 HTML 源文件转换为 PowerPoint .pptx 文件。默认 render_mode='editable' 会在无头 Chrome 中打开 HTML、采集真实元素的位置与样式，并将显式的 .slide / data-slide 节点或顶层 section 映射为可编辑的 PPT 元素。当「视觉保真度优先于可编辑性」时，可使用 render_mode='visual' 作为高保真截图后备方案。",
         "category": "file",
         "icon": "📽️",
         "is_default": True,
@@ -353,8 +353,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "convert_markdown_to_docx",
-        "display_name": "Markdown to Word",
-        "description": "Convert a Markdown source file into a Word .docx file.",
+        "display_name": "Markdown 转 Word",
+        "description": "将 Markdown 源文件转换为 Word .docx 文件。",
         "category": "file",
         "icon": "📝",
         "is_default": True,
@@ -371,8 +371,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "convert_markdown_to_pdf",
-        "display_name": "Markdown to PDF",
-        "description": "Convert a Markdown source file into a PDF document.",
+        "display_name": "Markdown 转 PDF",
+        "description": "将 Markdown 源文件转换为 PDF 文档。",
         "category": "file",
         "icon": "📄",
         "is_default": True,
@@ -390,8 +390,8 @@ BUILTIN_TOOLS = [
     # --- Aware trigger management tools ---
     {
         "name": "set_trigger",
-        "display_name": "Set Trigger",
-        "description": "Set a new trigger to wake yourself up at a specific time or condition. Every trigger is attached to a focus item; if focus_ref is omitted, the system creates a focus item from the reason. Trigger types: 'cron' (recurring schedule), 'once' (fire once at a time), 'interval' (every N minutes), 'poll' (HTTP monitoring), 'on_message' (when another agent or human user replies).",
+        "display_name": "新建触发器",
+        "description": "为自己在指定时间或条件下创建一个新的触发器，以便届时被唤醒。每个触发器都会挂在一个 Focus 项上；如果未提供 focus_ref，系统会根据 reason 自动创建一个 Focus 项。触发器类型：'cron'（按计划循环触发）、'once'（在指定时间触发一次）、'interval'（每 N 分钟触发一次）、'poll'（HTTP 监听）、'on_message'（在收到另一个数字员工或人类用户的回复时触发）。",
         "category": "aware",
         "icon": "⚡",
         "is_default": True,
@@ -411,8 +411,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "update_trigger",
-        "display_name": "Update Trigger",
-        "description": "Update an existing trigger's configuration or reason.",
+        "display_name": "更新触发器",
+        "description": "更新一个已存在触发器的配置或触发原因。",
         "category": "aware",
         "icon": "🔄",
         "is_default": True,
@@ -430,8 +430,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "cancel_trigger",
-        "display_name": "Cancel Trigger",
-        "description": "Cancel (disable) a trigger by name. Use when a task is completed.",
+        "display_name": "取消触发器",
+        "description": "按名称取消（停用）一个触发器。在任务完成时使用。",
         "category": "aware",
         "icon": "⏹️",
         "is_default": True,
@@ -447,8 +447,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "list_triggers",
-        "display_name": "List Triggers",
-        "description": "List all your active triggers with name, type, config, reason, fire count, and status.",
+        "display_name": "列出触发器",
+        "description": "列出所有处于活动状态的触发器，包含名称、类型、配置、原因、触发次数和状态。",
         "category": "aware",
         "icon": "📋",
         "is_default": True,
@@ -461,8 +461,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "send_channel_file",
-        "display_name": "Send File",
-        "description": "Send a file to a specific person or back to the current conversation. If member_name is provided, the system resolves the recipient across all connected channels (Feishu, Slack, etc.) and delivers the file via the appropriate channel.",
+        "display_name": "发送文件",
+        "description": "向指定人员发送文件，或把文件送回当前会话。如果提供 member_name，系统会跨所有已接入的渠道（飞书、Slack 等）解析收件人，并通过相应的渠道投递文件。",
         "category": "communication",
         "icon": "📎",
         "is_default": True,
@@ -483,8 +483,8 @@ BUILTIN_TOOLS = [
     # 'Tool names must be unique' errors when the DB lacked a UNIQUE constraint.
     {
         "name": "send_platform_message",
-        "display_name": "Platform Message",
-        "description": "Send a proactive message to a user on the Clawith first-party platform (web or app). The message appears in their platform chat history and is pushed in real-time if they are online.",
+        "display_name": "平台消息",
+        "description": "在数字员工自有平台（Web 或 App）上向用户主动发送一条消息。该消息会出现在他们的平台聊天记录中，并在其在线时实时推送。",
         "category": "communication",
         "icon": "🌐",
         "is_default": True,
@@ -501,8 +501,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "send_message_to_agent",
-        "display_name": "Agent Message",
-        "description": "Send a message to a digital employee colleague. Decision guide: target needs to DO WORK and return results? → task_delegate. Just FYI? → notify. Quick factual question? → consult. When unsure, prefer task_delegate.",
+        "display_name": "数字员工消息",
+        "description": "向另一位数字员工发送消息。决策指南：对方需要执行任务并返回结果？→ task_delegate。仅需知会？→ notify。快速事实性提问？→ consult。不确定时优先使用 task_delegate。",
         "category": "communication",
         "icon": "🤖",
         "is_default": True,
@@ -520,8 +520,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "send_file_to_agent",
-        "display_name": "Agent File Transfer",
-        "description": "Send a workspace file to another digital employee. The file is copied to the target agent's workspace/inbox/files/ and an inbox note is created.",
+        "display_name": "数字员工文件传输",
+        "description": "将工作区中的文件发送给另一位数字员工。文件会被复制到对方工作区的 workspace/inbox/files/ 目录，并生成一条收件箱记录。",
         "category": "communication",
         "icon": "📤",
         "is_default": True,
@@ -539,8 +539,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "web_search",
-        "display_name": "Web Search",
-        "description": "[Deprecated] Unified search tool with engine selector. Use the dedicated tools (DuckDuckGo Search, Tavily Search, Google Search, Bing Search, Exa Search) instead for better control per engine.",
+        "display_name": "网页搜索",
+        "description": "[已废弃] 带引擎选择器的统一搜索工具。请改用专用工具（DuckDuckGo Search、Tavily Search、Google Search、Bing Search、Exa Search）以便按引擎精细控制。",
         "category": "search",
         "icon": "🔍",
         "is_default": False,
@@ -605,8 +605,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "jina_search",
-        "display_name": "Jina Search",
-        "description": "Search the internet using Jina AI (s.jina.ai). Returns high-quality results with full content. Requires Jina AI API key for higher rate limits.",
+        "display_name": "Jina 搜索",
+        "description": "使用 Jina AI（s.jina.ai）检索互联网，返回高质量的完整内容结果。需要 Jina AI API Key 才能获得更高的速率限制。",
         "category": "search",
         "icon": "🔮",
         "is_default": False,
@@ -633,8 +633,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "jina_read",
-        "display_name": "Jina Read",
-        "description": "Read and extract full content from a URL using Jina AI Reader (r.jina.ai). Returns clean markdown. Requires Jina AI API key for higher rate limits.",
+        "display_name": "Jina 读取",
+        "description": "使用 Jina AI Reader（r.jina.ai）从指定 URL 中读取并抽取完整内容，返回干净的 Markdown 文本。需要 Jina AI API Key 才能获得更高的速率限制。",
         "category": "search",
         "icon": "📖",
         "is_default": False,
@@ -661,8 +661,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "read_webpage",
-        "display_name": "Read Webpage",
-        "description": "Fetch a public HTTP/HTTPS URL directly and extract readable webpage text. Use this when you already have a specific link and need its page content without relying on an external reader service.",
+        "display_name": "读取网页",
+        "description": "直接抓取一个公开的 HTTP/HTTPS URL，并从中提取可读的网页正文。当你已经有具体链接、不想依赖外部 Reader 服务时，请使用本工具。",
         "category": "search",
         "icon": "🌐",
         "is_default": True,
@@ -680,8 +680,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "exa_search",
-        "display_name": "Exa Search",
-        "description": "AI-powered web search using Exa (exa.ai). Supports semantic search, category filtering, domain filtering, and multiple content modes (text, highlights, summary). Requires an Exa API key.",
+        "display_name": "Exa 搜索",
+        "description": "使用 Exa（exa.ai）进行 AI 驱动的网页搜索。支持语义搜索、类别过滤、域名过滤以及多种内容返回模式（text、highlights、summary）。需要 Exa API Key。",
         "category": "search",
         "icon": "🔎",
         "is_default": False,
@@ -734,8 +734,8 @@ BUILTIN_TOOLS = [
     # task without going through the unified engine-selector flow.
     {
         "name": "duckduckgo_search",
-        "display_name": "DuckDuckGo Search",
-        "description": "Search the internet using DuckDuckGo. Free, no API key required. Returns titles, URLs, and snippets.",
+        "display_name": "DuckDuckGo 搜索",
+        "description": "使用 DuckDuckGo 检索互联网。免费，无需 API Key，返回包含标题、URL 和摘要的结果。",
         "category": "search",
         "icon": "🦆",
         "is_default": True,
@@ -752,8 +752,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "tavily_search",
-        "display_name": "Tavily Search",
-        "description": "AI-optimized web search using Tavily. Returns high-quality results with summaries. Requires a Tavily API key.",
+        "display_name": "Tavily 搜索",
+        "description": "使用 Tavily 进行面向 AI 优化的网页搜索，返回带摘要的高质量结果。需要 Tavily API Key。",
         "category": "search",
         "icon": "🔍",
         "is_default": False,
@@ -780,8 +780,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "google_search",
-        "display_name": "Google Search",
-        "description": "Search using Google Custom Search JSON API. Returns titles, URLs, and snippets. Requires a Google API key and Custom Search Engine ID (format: API_KEY:CX_ID).",
+        "display_name": "Google 搜索",
+        "description": "使用 Google Custom Search JSON API 进行搜索，返回标题、URL 和摘要。需要同时提供 Google API Key 和 Custom Search Engine ID（格式：API_KEY:CX_ID）。",
         "category": "search",
         "icon": "🔍",
         "is_default": False,
@@ -820,8 +820,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bing_search",
-        "display_name": "Bing Search",
-        "description": "Search using Bing Web Search API. Returns titles, URLs, and snippets. Requires a Bing Search API key from Microsoft Azure.",
+        "display_name": "Bing 搜索",
+        "description": "使用 Bing Web Search API 进行搜索，返回标题、URL 和摘要。需要从 Microsoft Azure 申请 Bing Search API Key。",
         "category": "search",
         "icon": "🔍",
         "is_default": False,
@@ -860,8 +860,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "plaza_get_new_posts",
-        "display_name": "Plaza: Browse",
-        "description": "Get recent posts from the Agent Plaza (shared social feed). Returns posts and comments since a given timestamp.",
+        "display_name": "Plaza：浏览",
+        "description": "获取 Agent Plaza（共享信息流）的最新帖子，返回自指定时间戳以来的帖子和评论。",
         "category": "social",
         "icon": "🏛️",
         "is_default": True,
@@ -876,8 +876,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "plaza_create_post",
-        "display_name": "Plaza: Post",
-        "description": "Publish a new post to the Agent Plaza. Share work insights, tips, or interesting discoveries. Do NOT share private information.",
+        "display_name": "Plaza：发帖",
+        "description": "在 Agent Plaza 上发布一条新帖子，用于分享工作心得、技巧或有趣的发现。请勿分享任何隐私信息。",
         "category": "social",
         "icon": "📝",
         "is_default": True,
@@ -893,8 +893,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "plaza_add_comment",
-        "display_name": "Plaza: Comment",
-        "description": "Add a comment to an existing plaza post. Engage with colleagues' posts.",
+        "display_name": "Plaza：评论",
+        "description": "对一条已有的 Plaza 帖子发表评论，与同事的帖子互动。",
         "category": "social",
         "icon": "💬",
         "is_default": True,
@@ -911,8 +911,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "execute_code",
-        "display_name": "Code Executor",
-        "description": "Execute code (Python, Bash, Node.js) in a local sandboxed subprocess within the agent's workspace. Useful for data processing, calculations, file transformations, and automation.",
+        "display_name": "代码执行",
+        "description": "在数字员工工作区内的本地沙箱子进程中执行代码（Python、Bash、Node.js）。适用于数据处理、计算、文件转换和自动化任务。",
         "category": "code",
         "icon": "💻",
         "is_default": True,
@@ -977,8 +977,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "execute_code_e2b",
-        "display_name": "Code Executor (E2B Cloud)",
-        "description": "Execute code (Python, Bash, Node.js) in a secure E2B cloud sandbox. Provides full network access and an isolated environment without consuming local resources. Requires an E2B API key.",
+        "display_name": "代码执行（E2B 云端）",
+        "description": "在安全的 E2B 云沙箱中执行代码（Python、Bash、Node.js）。提供完整的网络访问和隔离环境，且不占用本地资源。需要 E2B API Key。",
         "category": "code",
         "icon": "☁️",
         "is_default": False,
@@ -1029,8 +1029,8 @@ BUILTIN_TOOLS = [
 
     {
         "name": "upload_image",
-        "display_name": "Upload Image",
-        "description": "Upload images from the workspace or a URL to ImageKit CDN and get a public URL. Useful for sharing images externally or embedding them in reports.",
+        "display_name": "上传图片",
+        "description": "将工作区或某个 URL 上的图片上传到 ImageKit CDN，并返回一个公开 URL。适用于对外分享图片或将其嵌入报告。",
         "category": "code",
         "icon": "🖼️",
         "is_default": True,
@@ -1065,8 +1065,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "generate_image_siliconflow",
-        "display_name": "Generate Image (SiliconFlow)",
-        "description": "Generate an image via SiliconFlow FLUX models. China-friendly and fast.",
+        "display_name": "生成图片（SiliconFlow）",
+        "description": "使用 SiliconFlow 的 FLUX 模型生成图片，对国内网络友好且响应速度快。",
         "category": "media",
         "icon": "🎨",
         "is_default": False,
@@ -1112,8 +1112,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "generate_image_openai",
-        "display_name": "Generate Image (OpenAI)",
-        "description": "Generate an image via OpenAI DALL-E models.",
+        "display_name": "生成图片（OpenAI）",
+        "description": "通过 OpenAI DALL-E 系列模型生成图片。",
         "category": "media",
         "icon": "🎨",
         "is_default": False,
@@ -1159,8 +1159,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "generate_image_google",
-        "display_name": "Generate Image (Google/Vertex)",
-        "description": "Generate an image via Google Gemini Image (Nano Banana) or Vertex AI.",
+        "display_name": "生成图片（Google/Vertex）",
+        "description": "通过 Google Gemini Image（Nano Banana）或 Vertex AI 生成图片。",
         "category": "media",
         "icon": "🎨",
         "is_default": False,
@@ -1206,8 +1206,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "generate_image_custom",
-        "display_name": "Generate Image (Custom API)",
-        "description": "Generate an image through a custom OpenAI-compatible or gateway API. Configure the request body template and response image path for providers such as TokenRouter or OpenRouter.",
+        "display_name": "生成图片（自定义 API）",
+        "description": "通过自定义的 OpenAI 兼容 API 或网关生成图片。可配置请求体模板和响应图片路径，适用于 TokenRouter、OpenRouter 等服务。",
         "category": "media",
         "icon": "🎨",
         "is_default": False,
@@ -1282,7 +1282,7 @@ BUILTIN_TOOLS = [
                     "label": "Extra Headers JSON",
                     "type": "textarea",
                     "default": "",
-                    "placeholder": "{\n  \"HTTP-Referer\": \"https://your-app.example\",\n  \"X-Title\": \"Clawith\"\n}",
+                    "placeholder": "{\n  \"HTTP-Referer\": \"https://your-app.example\",\n  \"X-Title\": \"DigitalEmployee\"\n}",
                     "advanced": True,
                 },
                 {
@@ -1299,8 +1299,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "discover_resources",
-        "display_name": "Resource Discovery",
-        "description": "Search public MCP registries (Smithery + ModelScope) for tools and capabilities that can extend your abilities. Use this when you encounter a task you cannot handle with your current tools.",
+        "display_name": "资源发现",
+        "description": "在 Smithery、ModelScope 等公共 MCP 注册中心搜索可以扩展自身能力的工具与功能。当你遇到现有工具无法处理的任务时，可以使用本工具。",
         "category": "discovery",
         "icon": "🔎",
         "is_default": True,
@@ -1334,8 +1334,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "import_mcp_server",
-        "display_name": "Import MCP Server",
-        "description": "Import an MCP server from Smithery registry into the platform. The server's tools become available for use. Use discover_resources first to find the server ID.",
+        "display_name": "导入 MCP 服务器",
+        "description": "从 Smithery 注册中心导入一个 MCP 服务器到平台，导入后该服务器的工具即可被使用。请先调用 discover_resources 找到相应的服务器 ID。",
         "category": "discovery",
         "icon": "📥",
         "is_default": True,
@@ -1370,8 +1370,8 @@ BUILTIN_TOOLS = [
     # --- Email tools ---
     {
         "name": "send_email",
-        "display_name": "Send Email",
-        "description": "Send an email to one or more recipients. Supports subject, body text, CC, and file attachments from workspace.",
+        "display_name": "发送邮件",
+        "description": "向一个或多个收件人发送邮件。支持主题、正文、抄送以及来自工作区的附件。",
         "category": "email",
         "icon": "📧",
         "is_default": False,
@@ -1453,8 +1453,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "read_emails",
-        "display_name": "Read Emails",
-        "description": "Read emails from your inbox. Can limit the number returned and search by criteria (e.g. FROM, SUBJECT, SINCE date).",
+        "display_name": "读取邮件",
+        "description": "读取收件箱中的邮件，可以限制返回数量，也可以按条件搜索（例如 FROM、SUBJECT、SINCE 日期）。",
         "category": "email",
         "icon": "📬",
         "is_default": False,
@@ -1471,8 +1471,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "reply_email",
-        "display_name": "Reply Email",
-        "description": "Reply to an email by its Message-ID. Maintains the email thread with proper In-Reply-To headers.",
+        "display_name": "回复邮件",
+        "description": "通过 Message-ID 回复一封邮件，会通过 In-Reply-To 头保持邮件会话的归属。",
         "category": "email",
         "icon": "↩️",
         "is_default": False,
@@ -1492,13 +1492,11 @@ BUILTIN_TOOLS = [
     # to the OKR Agent and to other agents that want to self-report progress.
     {
         "name": "get_okr",
-        "display_name": "Get OKR Board",
+        "display_name": "获取 OKR 看板",
         "description": (
-            "Get the full OKR board for the current period. Returns all Objectives and Key Results "
-            "for the tenant, organized by company and member level. Includes objective_id values "
-            "for every Objective and kr_id values for every Key Result, so you can update existing "
-            "Objectives and KRs instead of creating duplicates. Used by the OKR Agent to generate "
-            "progress reports and monitor team performance."
+            "获取当前周期的完整 OKR 看板，返回该租户下所有的 Objective 和 Key Result，"
+            "按公司层级和成员层级组织。每个 Objective 都会附上 objective_id，每个 Key Result 都会附上 kr_id，"
+            "便于你在更新已有目标时直接复用，避免创建重复条目。被 OKR 数字员工用来生成进展报告和监控团队表现。"
         ),
         "category": "okr",
         "icon": "🎯",
@@ -1521,12 +1519,12 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "get_my_okr",
-        "display_name": "My OKR",
+        "display_name": "我的 OKR",
         "description": (
-            "Get your own OKR Objectives and Key Results for the current period. "
-            "Returns a structured view of your goals, current progress values, plus objective_id and kr_id references "
-            "you need to update existing OKRs correctly. Call this before changing progress, KR content, "
-            "or Objective text so you reuse the current records instead of creating duplicates."
+            "获取自己在当前周期的 OKR Objective 和 Key Result。"
+            "返回包含目标、当前进度值以及 objective_id、kr_id 引用在内的结构化视图，"
+            "你需要它们才能正确更新已有 OKR。在修改进度、KR 内容或 Objective 文本之前请先调用本工具，"
+            "从而复用现有记录，避免创建重复条目。"
         ),
         "category": "okr",
         "icon": "🎯",
@@ -1549,12 +1547,11 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "update_kr_progress",
-        "display_name": "Update KR Progress",
+        "display_name": "更新 KR 进度",
         "description": (
-            "Update the current progress value for a Key Result. Use get_my_okr first to obtain "
-            "the kr_id. The status (on_track / at_risk / behind / completed) is automatically "
-            "computed from the progress ratio, or you can override it explicitly. "
-            "A progress log entry is recorded for full audit history."
+            "更新某条 Key Result 的当前进度值。请先调用 get_my_okr 获取 kr_id。"
+            "状态（on_track / at_risk / behind / completed）会根据进度比例自动计算，"
+            "也可以由你显式覆盖。同时会写入一条进度日志，作为完整的审计记录。"
         ),
         "category": "okr",
         "icon": "📈",
@@ -1587,13 +1584,11 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "update_kr_content",
-        "display_name": "Update KR Content",
+        "display_name": "更新 KR 内容",
         "description": (
-            "Update the content fields of one of YOUR OWN Key Results, such as title, target value, unit, "
-            "focus reference, or status. Use get_my_okr first to obtain the kr_id. "
-            "This tool is for changing KR definition/content, not reporting progress. "
-            "If the user says to change, revise, adjust, or replace an existing KR target or wording, "
-            "prefer this tool instead of create_key_result."
+            "更新**你自己**某条 Key Result 的内容字段，例如标题、目标值、单位、focus 引用或状态。"
+            "请先调用 get_my_okr 获取 kr_id。本工具用于修改 KR 的定义/内容，而不是上报进度。"
+            "如果用户希望修改、调整或替换已有 KR 的目标值或措辞，请优先使用本工具，而不是 create_key_result。"
         ),
         "category": "okr",
         "icon": "✏️",
@@ -1636,11 +1631,10 @@ BUILTIN_TOOLS = [
         # collect_okr_progress — legacy OKR Agent heartbeat collection path.
         # This replaces the need to contact each member individually.
         "name": "collect_okr_progress",
-        "display_name": "Collect OKR Progress",
+        "display_name": "汇总 OKR 进度",
         "description": (
-            "Legacy batch sync for reported KR progress. Prefer direct OKR tools such as "
-            "get_my_okr and update_kr_progress for new work. Returns a summary of how many "
-            "KRs were updated."
+            "旧版的批量同步路径，用于汇总已上报的 KR 进度。新场景下请优先使用 get_my_okr、"
+            "update_kr_progress 等直接操作 OKR 的工具。返回值包含已更新 KR 的数量汇总。"
         ),
         "category": "okr",
         "icon": "📊",
@@ -1658,13 +1652,11 @@ BUILTIN_TOOLS = [
         # The tool writes the report to WorkReport table and returns the markdown content
         # so the Agent can choose to post it to Plaza or send it to specific channels.
         "name": "generate_okr_report",
-        "display_name": "Generate OKR Report",
+        "display_name": "生成 OKR 报告",
         "description": (
-            "Generate a structured OKR progress report (daily or weekly) for the current "
-            "period. The report summarizes all Objectives and Key Results, highlights items "
-            "at risk or behind, and shows overall team health metrics. The report is saved "
-            "to the database and to your workspace/reports/ folder. Returns the full report "
-            "markdown so you can post it to Plaza or share with the team."
+            "为当前周期生成结构化的 OKR 进展报告（日/周报）。报告中会汇总所有 Objective 和 Key Result，"
+            "标记有风险或落后的条目，并展示团队整体健康度指标。报告会保存到数据库与工作区的 "
+            "workspace/reports/ 目录，返回完整的 Markdown 报告内容，便于你转发到 Plaza 或发给团队。"
         ),
         "category": "okr",
         "icon": "📋",
@@ -1687,11 +1679,10 @@ BUILTIN_TOOLS = [
         # get_okr_settings — lets OKR Agent read the tenant's OKR configuration so it
         # can determine whether reports are due, what time they're scheduled, etc.
         "name": "get_okr_settings",
-        "display_name": "Get OKR Settings",
+        "display_name": "获取 OKR 设置",
         "description": (
-            "Read the OKR configuration for this team, including whether daily/weekly "
-            "reports are enabled, the configured report time, period frequency, and more. "
-            "Use this at the start of your heartbeat to decide whether a report is due today."
+            "读取本团队的 OKR 配置，包括是否启用了日报/周报、配置的报告时间、周期频率等。"
+            "在心跳触发开始时调用本工具，用于判断当天是否需要产出报告。"
         ),
         "category": "okr",
         "icon": "⚙️",
@@ -1708,15 +1699,13 @@ BUILTIN_TOOLS = [
         # create_objective — OKR Agent uses this after conversation-based confirmation
         # to create an O for the company, a user, or an agent. Only OKR Agent has this tool.
         "name": "create_objective",
-        "display_name": "Create Objective",
+        "display_name": "创建 Objective",
         "description": (
-            "Create an OKR Objective for the company, a specific user, or a specific agent. "
-            "Call this after confirming the objective with the relevant person through conversation. "
-            "Use this only when a new Objective needs to be created for the period. "
-            "If the person already has a matching Objective and just wants to revise it, use update_objective instead. "
-            "owner_type must be 'company', 'user', or 'agent'. "
-            "owner_id is not required for company-level objectives. "
-            "period_start and period_end must be ISO date strings (YYYY-MM-DD)."
+            "为公司、某个具体用户或某个数字员工创建一个 OKR Objective。"
+            "在与相关负责人沟通确认目标之后调用本工具。仅当本周期需要新建 Objective 时才使用本工具。"
+            "如果对方已经存在匹配的目标，仅想修订内容，请改用 update_objective。owner_type 必须是"
+            "'company'、'user' 或 'agent'。公司级 Objective 不需要 owner_id。period_start、period_end"
+            "必须是 ISO 日期字符串（YYYY-MM-DD）。"
         ),
         "category": "okr",
         "icon": "🎯",
@@ -1762,14 +1751,12 @@ BUILTIN_TOOLS = [
     {
         # create_key_result — OKR Agent creates a measurable KR under a confirmed objective.
         "name": "create_key_result",
-        "display_name": "Create Key Result",
+        "display_name": "创建 Key Result",
         "description": (
-            "Create a Key Result (KR) under an existing Objective. "
-            "Get the objective_id first using get_okr. "
-            "Use this only for a brand-new KR. If the user is revising the wording, target value, unit, "
-            "or focus reference of an existing KR, use update_kr_content instead. "
-            "target_value is the goal number (e.g. 50000 for 50000 followers). "
-            "unit is optional but recommended for clarity (e.g. '%', 'NPS', '万元', 'followers')."
+            "在已有的 Objective 下创建一个 Key Result（KR）。请先通过 get_okr 获取 objective_id。"
+            "本工具仅用于全新 KR。如果用户希望修改措辞、目标值、单位或 focus 引用等已有 KR 内容，"
+            "请改用 update_kr_content。target_value 是目标数字（例如想要增长到 50000 followers），"
+            "unit 是可选但建议填写的单位（例如 '%'、'NPS'、'万元'、'followers'）。"
         ),
         "category": "okr",
         "icon": "🔑",
@@ -1807,13 +1794,12 @@ BUILTIN_TOOLS = [
         # update_objective — available to ALL agents, but with ownership enforcement:
         # regular agents can only modify their own O; OKR Agent can modify any O.
         "name": "update_objective",
-        "display_name": "Update Objective",
+        "display_name": "更新 Objective",
         "description": (
-            "Modify an Objective's title, description, status, or period dates. "
-            "Regular agents can only update their own Objectives — call get_my_okr first "
-            "to get your objective_id. The OKR Agent can update any member's Objective. "
-            "Only provide the fields you want to change. If the request is to revise an existing OKR's "
-            "goal text rather than create a new one, prefer this tool over create_objective."
+            "修改某个 Objective 的标题、描述、状态或周期起止日期。"
+            "普通数字员工只能修改自己的 Objective——请先调用 get_my_okr 获取 objective_id。"
+            "OKR 数字员工可以修改任意成员的 Objective。只填写需要修改的字段。"
+            "如果只是想修订已有 OKR 的目标文本，而不是新建一个，请优先使用本工具，而不是 create_objective。"
         ),
         "category": "okr",
         "icon": "✏️",
@@ -1857,13 +1843,12 @@ BUILTIN_TOOLS = [
         # Unlike update_kr_progress (self-report), this can update anyone's KR.
         # Used after collecting progress data through conversation.
         "name": "update_any_kr_progress",
-        "display_name": "Update Any KR Progress",
+        "display_name": "更新任意 KR 进度",
         "description": (
-            "Update the progress value of any team member's Key Result. "
-            "This is the OKR Agent's exclusive version of update_kr_progress — it can update "
-            "KRs belonging to any user or agent, not just the caller's own. "
-            "Use this ONLY after confirming the value with the KR owner through conversation. "
-            "Get kr_id from get_okr. Optionally provide a note explaining the source."
+            "更新任意团队成员的 Key Result 进度。本工具是 update_kr_progress 在 OKR 数字员工下的专属版本，"
+            "可以修改任何用户或数字员工的 KR，不仅限于调用者本人。"
+            "仅在与 KR 所有者沟通确认进度值之后调用本工具。可通过 get_okr 获取 kr_id，"
+            "也可以选择性提供 note 说明来源。"
         ),
         "category": "okr",
         "icon": "📈",
@@ -1898,12 +1883,12 @@ BUILTIN_TOOLS = [
         # generate_monthly_okr_report — OKR Agent exclusive: produce the monthly summary report.
         # Called automatically by the monthly_okr_report system cron trigger, or on-demand.
         "name": "generate_monthly_okr_report",
-        "display_name": "Generate Monthly OKR Report",
+        "display_name": "生成月度 OKR 报告",
         "description": (
-            "Generate the monthly OKR progress summary report. Covers all Objectives and Key "
-            "Results for the current period, highlights completed and at-risk items, and provides "
-            "a closing action note. Saved to WorkReport (report_type='monthly') and "
-            "workspace/reports/. Returns the full Markdown so you can send it to admins."
+            "生成月度 OKR 进展汇总报告，覆盖当前周期所有的 Objective 和 Key Result，"
+            "突出已完成和有风险的条目，并附带收官行动建议。"
+            "保存到 WorkReport（report_type='monthly'）和 workspace/reports/ 目录，"
+            "返回完整的 Markdown 内容，便于发送给管理员。"
         ),
         "category": "okr",
         "icon": "📅",
@@ -1919,11 +1904,11 @@ BUILTIN_TOOLS = [
     {
         # upsert_member_daily_report — OKR Agent exclusive: create or revise a member daily report.
         "name": "upsert_member_daily_report",
-        "display_name": "Upsert Member Daily Report",
+        "display_name": "更新成员日报",
         "description": (
-            "Create or update the final normalized daily report for any member in the company. "
-            "Use this after discussing progress with the member and distilling their update into "
-            "one concise final report. The stored content should stay within 2000 characters."
+            "为公司的任意成员创建或更新其最终归一化的日报。"
+            "在与该成员讨论进展并将其更新浓缩为一份简洁的最终日报后调用本工具。"
+            "存储的内容请控制在 2000 字以内。"
         ),
         "category": "okr",
         "icon": "📝",
@@ -1967,8 +1952,8 @@ BUILTIN_TOOLS = [
     # They are NOT enabled by default — agents with Feishu channels should enable them.
     {
         "name": "send_feishu_message",
-        "display_name": "Feishu Message",
-        "description": "Send a message to a human colleague via Feishu. Can only message people in your relationships.",
+        "display_name": "飞书消息",
+        "description": "通过飞书向人类同事发送消息，只能发送给与你存在协作关系的人员。",
         "category": "feishu",
         "icon": "💬",
         "is_default": False,
@@ -1985,8 +1970,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_user_search",
-        "display_name": "Feishu User Search",
-        "description": "Search for a colleague in the Feishu (Lark) directory by name. Returns their open_id, email, and department.",
+        "display_name": "飞书用户搜索",
+        "description": "按姓名在飞书（Lark）通讯录中搜索同事，返回其 open_id、邮箱和所在部门。",
         "category": "feishu",
         "icon": "🔍",
         "is_default": False,
@@ -2002,7 +1987,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bitable_create_app",
-        "display_name": "Bitable Create",
+        "display_name": "多维表格：创建",
         "description": "在飞书云盘中新建一个多维表格（Bitable）应用。创建后返回可直接访问的链接和 App Token，下一步可以通过 bitable_list_tables 查看初始数据表。",
         "category": "feishu",
         "icon": "📊",
@@ -2020,7 +2005,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bitable_list_tables",
-        "display_name": "Bitable List Tables",
+        "display_name": "多维表格：列出数据表",
         "description": "列出飞书多维表格内的所有数据表 (Tables)。url 支持表格链接或 Wiki 链接。使用此工具了解请求的多维表格中有哪些表。",
         "category": "feishu",
         "icon": "📊",
@@ -2037,7 +2022,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bitable_list_fields",
-        "display_name": "Bitable List Fields",
+        "display_name": "多维表格：列出字段",
         "description": "列出飞书多维表格指定数据表中的所有字段 (Fields)。url 支持表格链接或 Wiki 链接。在查询或修改数据前，必须先调用此工具了解字段名称和类型。",
         "category": "feishu",
         "icon": "⌨️",
@@ -2055,7 +2040,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bitable_query_records",
-        "display_name": "Bitable Query Records",
+        "display_name": "多维表格：查询记录",
         "description": "查询飞书多维表格中的数据行。可以提供过滤条件 (filter)。",
         "category": "feishu",
         "icon": "🔍",
@@ -2075,7 +2060,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bitable_create_record",
-        "display_name": "Bitable Create Record",
+        "display_name": "多维表格：新建记录",
         "description": "在飞书多维表格中新增一行数据。fields 参数是一个字典，key 是字段名 (需要先通过 bitable_list_fields 获取)，value 是对应的值。",
         "category": "feishu",
         "icon": "➕",
@@ -2094,7 +2079,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bitable_update_record",
-        "display_name": "Bitable Update Record",
+        "display_name": "多维表格：更新记录",
         "description": "更新飞书多维表格中的指定行数据。",
         "category": "feishu",
         "icon": "✏️",
@@ -2114,7 +2099,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "bitable_delete_record",
-        "display_name": "Bitable Delete Record",
+        "display_name": "多维表格：删除记录",
         "description": "删除飞书多维表格中的指定行数据。",
         "category": "feishu",
         "icon": "🗑️",
@@ -2133,8 +2118,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_doc_search",
-        "display_name": "Feishu Doc Search",
-        "description": "Search Feishu cloud documents by keyword using the official document search API. Useful when a wiki or knowledge base has too many files to browse manually.",
+        "display_name": "飞书文档搜索",
+        "description": "使用飞书官方文档搜索 API 按关键字搜索云文档。当 wiki 或知识库中的文件过多，难以手动浏览时，可以使用本工具。",
         "category": "feishu",
         "icon": "🔎",
         "is_default": False,
@@ -2157,8 +2142,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_doc_read",
-        "display_name": "Feishu Doc Read",
-        "description": "Read the text content of a Feishu document (Docx). Provide the document token from its URL.",
+        "display_name": "飞书文档读取",
+        "description": "读取飞书文档（Docx）的文本内容。请提供来自文档 URL 的 document_token。",
         "category": "feishu",
         "icon": "📄",
         "is_default": False,
@@ -2175,8 +2160,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_doc_create",
-        "display_name": "Feishu Doc Create",
-        "description": "Create a new Feishu document with a given title. Returns the new document token and URL.",
+        "display_name": "飞书文档创建",
+        "description": "创建一个指定标题的飞书文档，返回新文档的 token 和 URL。",
         "category": "feishu",
         "icon": "📝",
         "is_default": False,
@@ -2193,8 +2178,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_doc_append",
-        "display_name": "Feishu Doc Append",
-        "description": "Append text content to an existing Feishu document as new paragraphs at the end.",
+        "display_name": "飞书文档追加",
+        "description": "向一份已存在的飞书文档末尾追加新的段落文本。",
         "category": "feishu",
         "icon": "📎",
         "is_default": False,
@@ -2211,8 +2196,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_drive_share",
-        "display_name": "Feishu Drive Share",
-        "description": "Manage collaborators for any Feishu Drive file (docx, bitable, sheet, etc.). Add, remove, or list collaborators with view/edit/full_access permissions.",
+        "display_name": "飞书云盘协作",
+        "description": "管理任一飞书云盘文件（docx、bitable、sheet 等）的协作成员：可添加、移除或列出成员，并指定 view / edit / full_access 等权限。",
         "category": "feishu",
         "icon": "🔗",
         "is_default": False,
@@ -2233,8 +2218,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_drive_delete",
-        "display_name": "Feishu Drive Delete",
-        "description": "Delete a file or folder from Feishu Drive. The file is moved to the recycle bin. Supports all file types: docx, bitable, sheet, folder, etc.",
+        "display_name": "飞书云盘删除",
+        "description": "从飞书云盘中删除一个文件或文件夹，删除后会进入回收站。支持所有文件类型：docx、bitable、sheet、folder 等。",
         "category": "feishu",
         "icon": "🗑️",
         "is_default": False,
@@ -2251,8 +2236,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_calendar_list",
-        "display_name": "Feishu Calendar List",
-        "description": "List Feishu calendar events. No email or authorization needed.",
+        "display_name": "飞书日历列表",
+        "description": "列出飞书日历事件，无需邮箱或额外授权。",
         "category": "feishu",
         "icon": "📅",
         "is_default": False,
@@ -2269,8 +2254,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_calendar_create",
-        "display_name": "Feishu Calendar Create",
-        "description": "Create a Feishu calendar event. Supports inviting colleagues by name. No email needed.",
+        "display_name": "飞书日历创建",
+        "description": "创建一个飞书日历事件，可按姓名邀请同事，无需邮箱。",
         "category": "feishu",
         "icon": "📅",
         "is_default": False,
@@ -2291,8 +2276,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_calendar_update",
-        "display_name": "Feishu Calendar Update",
-        "description": "Update an existing Feishu calendar event. Provide only the fields you want to change.",
+        "display_name": "飞书日历更新",
+        "description": "更新一个已存在的飞书日历事件，只填写需要修改的字段即可。",
         "category": "feishu",
         "icon": "📅",
         "is_default": False,
@@ -2312,8 +2297,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_calendar_delete",
-        "display_name": "Feishu Calendar Delete",
-        "description": "Delete (cancel) a Feishu calendar event.",
+        "display_name": "飞书日历删除",
+        "description": "删除（取消）一个飞书日历事件。",
         "category": "feishu",
         "icon": "🗑️",
         "is_default": False,
@@ -2330,7 +2315,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_approval_create",
-        "display_name": "Feishu Approval Create",
+        "display_name": "飞书审批创建",
         "description": "发起一个飞书审批流实例。你需要知道审批定义的 approval_code 和表单对应字段的内容。",
         "category": "feishu",
         "icon": "📝",
@@ -2349,7 +2334,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_approval_query",
-        "display_name": "Feishu Approval Query",
+        "display_name": "飞书审批查询",
         "description": "查询指定的飞书审批实例列表。可以支持按状态查询（PENDING, APPROVED, REJECTED, CANCELED, DELETED）。",
         "category": "feishu",
         "icon": "📋",
@@ -2367,7 +2352,7 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "feishu_approval_get",
-        "display_name": "Feishu Approval Get",
+        "display_name": "飞书审批详情",
         "description": "获取指定飞书审批实例的详细信息与当前审批状态。",
         "category": "feishu",
         "icon": "📊",
@@ -2385,8 +2370,8 @@ BUILTIN_TOOLS = [
     # --- Pages: public HTML hosting ---
     {
         "name": "publish_page",
-        "display_name": "Publish Page",
-        "description": "Publish an HTML file from workspace as a public page. Returns a public URL that anyone can access without login. Only .html/.htm files can be published.",
+        "display_name": "发布网页",
+        "description": "将工作区中的一个 HTML 文件发布为公开页面，返回一个无需登录即可访问的公开 URL。仅支持发布 .html / .htm 文件。",
         "category": "pages",
         "icon": "🌐",
         "is_default": True,
@@ -2402,8 +2387,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "list_published_pages",
-        "display_name": "List Published Pages",
-        "description": "List all pages published by this agent, showing their public URLs and view counts.",
+        "display_name": "列出已发布网页",
+        "description": "列出本数字员工发布过的所有页面，展示公开 URL 与访问次数。",
         "category": "pages",
         "icon": "📋",
         "is_default": True,
@@ -2417,8 +2402,8 @@ BUILTIN_TOOLS = [
     # --- Skill Management ---
     {
         "name": "search_clawhub",
-        "display_name": "Search ClawHub",
-        "description": "Search the ClawHub skill registry for skills matching a query. Returns a list of available skills with name, description, and last updated date.",
+        "display_name": "搜索 ClawHub",
+        "description": "在 ClawHub 技能注册中心搜索匹配查询条件的技能，返回的列表中包含技能名、描述与最后更新时间。",
         "category": "discovery",
         "icon": "🔎",
         "is_default": True,
@@ -2434,8 +2419,8 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "install_skill",
-        "display_name": "Install Skill",
-        "description": "Install a skill into this agent's workspace. Accepts a ClawHub slug (e.g. 'market-research') or a GitHub URL.",
+        "display_name": "安装技能",
+        "description": "将一个技能安装到本数字员工的工作区中。可以传入 ClawHub 的 slug（例如 'market-research'）或者一个 GitHub URL。",
         "category": "discovery",
         "icon": "📥",
         "is_default": True,
@@ -2451,11 +2436,11 @@ BUILTIN_TOOLS = [
     },
     {
         "name": "update_kr_content",
-        "display_name": "Update KR Content",
+        "display_name": "更新 KR 内容",
         "description": (
-            "Update the content fields of one of YOUR OWN Key Results. "
-            "Call get_my_okr first to obtain the kr_id, then change title, target_value, unit, "
-            "focus_ref, or status as needed. This does not record a progress update."
+            "更新**你自己**某条 Key Result 的内容字段。先调用 get_my_okr 获取 kr_id，"
+            "然后按需修改 title、target_value、unit、focus_ref 或 status。"
+            "本工具不会记录一次进度更新。"
         ),
         "category": "okr",
         "icon": "✏️",
@@ -2501,8 +2486,8 @@ BUILTIN_TOOLS = [
 AGENTBAY_TOOLS = [
     {
         "name": "agentbay_browser_navigate",
-        "display_name": "AgentBay: Browser Navigate",
-        "description": "[ENV: Browser] Navigate to a URL in the AgentBay HEADLESS BROWSER environment. IMPORTANT: This browser runs in an ISOLATED environment — it does NOT share filesystem, processes, or downloads with the Cloud Desktop (computer_* tools) or Code Sandbox (code_execute/command_exec). Files downloaded here are NOT accessible from other environments. Tip: after navigating, use browser_observe to identify interactive elements, then use browser_type/browser_click to interact.",
+        "display_name": "AgentBay：浏览器导航",
+        "description": "[环境：浏览器] 在 AgentBay 无头浏览器环境中打开一个 URL。重要：该浏览器运行在隔离环境中，与云桌面（computer_* 工具）和代码沙箱（code_execute/command_exec）不共享文件系统、进程或下载。这里下载的文件无法从其他环境中访问。提示：导航后请用 browser_observe 识别页面中的可交互元素，再通过 browser_type/browser_click 进行操作。",
         "category": "agentbay",
         "icon": "🌐",
         "is_default": False,
@@ -2540,8 +2525,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_browser_screenshot",
-        "display_name": "AgentBay: Browser Screenshot",
-        "description": "[ENV: Browser] Take a screenshot of the current page in the headless browser. This browser is ISOLATED from the Cloud Desktop and Code Sandbox. Use this after clicking, typing, or submitting a form to verify the result — it preserves the current page state. Never call browser_navigate just to take a screenshot.",
+        "display_name": "AgentBay：浏览器截图",
+        "description": "[环境：浏览器] 对无头浏览器中当前页面截图。该浏览器与云桌面、代码沙箱相互隔离。在点击、输入或提交表单之后，使用本工具来确认结果——它会保留当前页面状态。不要只是为了截图而调用 browser_navigate。",
         "category": "agentbay",
         "icon": "📸",
         "is_default": False,
@@ -2554,8 +2539,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_browser_save_screenshot",
-        "display_name": "AgentBay: Save Browser Screenshot",
-        "description": "[ENV: Browser] Save the current headless browser screenshot to workspace/screenshots/. Use only when the user explicitly asks to save, share, keep, or show a screenshot. For routine visual observation, use agentbay_browser_screenshot instead because it stays internal and does not create workspace files.",
+        "display_name": "AgentBay：保存浏览器截图",
+        "description": "[环境：浏览器] 将无头浏览器当前的截图保存到 workspace/screenshots/。仅在用户明确要求保存、分享、保留或查看截图时调用。常规的视觉观察请使用 agentbay_browser_screenshot，因为它只在内部使用，不会产生工作区文件。",
         "category": "agentbay",
         "icon": "A",
         "is_default": False,
@@ -2565,8 +2550,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_browser_click",
-        "display_name": "AgentBay: Browser Click",
-        "description": "[ENV: Browser] Click an element in the headless browser (ISOLATED from Desktop and Code Sandbox). selector can be a CSS selector (e.g. #btn) or natural language description (e.g. 'the Send button').",
+        "display_name": "AgentBay：浏览器点击",
+        "description": "[环境：浏览器] 在无头浏览器中点击某个元素（与桌面、代码沙箱相互隔离）。selector 可以是 CSS 选择器（如 #btn），也可以是自然语言描述（如「发送按钮」）。",
         "category": "agentbay",
         "icon": "🖱️",
         "is_default": False,
@@ -2582,8 +2567,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_browser_type",
-        "display_name": "AgentBay: Browser Type",
-        "description": "[ENV: Browser] Type text into an element in the headless browser (ISOLATED from Desktop and Code Sandbox). selector can be a CSS selector or natural language description (e.g. 'phone number input').",
+        "display_name": "AgentBay：浏览器输入",
+        "description": "[环境：浏览器] 在无头浏览器中的某个元素里输入文本（与桌面、代码沙箱相互隔离）。selector 可以是 CSS 选择器或自然语言描述（如「手机号输入框」）。",
         "category": "agentbay",
         "icon": "⌨️",
         "is_default": False,
@@ -2600,8 +2585,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_code_execute",
-        "display_name": "AgentBay: Code Execute",
-        "description": "[ENV: Code Sandbox] Execute code (Python, Bash, Node.js) in the AgentBay Code Sandbox. IMPORTANT: This sandbox is an ISOLATED environment — it does NOT share filesystem, processes, or network with the Headless Browser (browser_* tools) or Cloud Desktop (computer_* tools). Files created here are NOT accessible from other environments.",
+        "display_name": "AgentBay：代码执行",
+        "description": "[环境：代码沙箱] 在 AgentBay 代码沙箱中执行代码（Python、Bash、Node.js）。重要：本沙箱运行在隔离环境中，与无头浏览器（browser_* 工具）、云桌面（computer_* 工具）不共享文件系统、进程或网络。在此处创建的文件无法从其他环境访问。",
         "category": "agentbay",
         "icon": "💻",
         "is_default": False,
@@ -2619,8 +2604,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_code_write_file",
-        "display_name": "AgentBay: Write Code Sandbox File",
-        "description": "[ENV: Code Sandbox] Write a text file inside the AgentBay Code Sandbox.",
+        "display_name": "AgentBay：写代码沙箱文件",
+        "description": "[环境：代码沙箱] 在 AgentBay 代码沙箱中写一个文本文件。",
         "category": "agentbay",
         "icon": "📝",
         "is_default": False,
@@ -2646,8 +2631,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_code_read_file",
-        "display_name": "AgentBay: Read Code Sandbox File",
-        "description": "[ENV: Code Sandbox] Read a text file from the AgentBay Code Sandbox.",
+        "display_name": "AgentBay：读代码沙箱文件",
+        "description": "[环境：代码沙箱] 读取 AgentBay 代码沙箱中的一个文本文件。",
         "category": "agentbay",
         "icon": "📖",
         "is_default": False,
@@ -2666,8 +2651,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_code_edit_file",
-        "display_name": "AgentBay: Edit Code Sandbox File",
-        "description": "[ENV: Code Sandbox] Edit a text file inside the AgentBay Code Sandbox by replacing exact text.",
+        "display_name": "AgentBay：编辑代码沙箱文件",
+        "description": "[环境：代码沙箱] 在 AgentBay 代码沙箱中通过对精确文本做替换的方式编辑文本文件。",
         "category": "agentbay",
         "icon": "✏️",
         "is_default": False,
@@ -2704,8 +2689,8 @@ AGENTBAY_TOOLS = [
     # ── Browser: Extract & Observe ────────────────────────────────────────
     {
         "name": "agentbay_browser_extract",
-        "display_name": "AgentBay: Browser Extract",
-        "description": "[ENV: Browser] Extract structured data from the current browser page using a natural language instruction. This browser is ISOLATED from the Cloud Desktop and Code Sandbox. More efficient than taking a screenshot and parsing with vision.",
+        "display_name": "AgentBay：浏览器抽取",
+        "description": "[环境：浏览器] 通过自然语言指令从当前浏览器页面中抽取结构化数据。该浏览器与云桌面、代码沙箱相互隔离。比「先截图再用视觉模型解析」更高效。",
         "category": "agentbay",
         "icon": "📊",
         "is_default": False,
@@ -2722,8 +2707,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_browser_observe",
-        "display_name": "AgentBay: Browser Observe",
-        "description": "[ENV: Browser] Observe the current browser page state and return a list of interactive elements. This browser is ISOLATED from the Cloud Desktop and Code Sandbox. Helps the agent understand what can be clicked/interacted with on the page.",
+        "display_name": "AgentBay：浏览器观察",
+        "description": "[环境：浏览器] 观察当前浏览器页面状态，返回可交互元素的列表。该浏览器与云桌面、代码沙箱相互隔离。帮助数字员工理解页面上有哪些元素可以点击或交互。",
         "category": "agentbay",
         "icon": "👁️",
         "is_default": False,
@@ -2740,8 +2725,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_browser_login",
-        "display_name": "AgentBay: Browser Login",
-        "description": "[ENV: Browser] Use AgentBay's AI-driven login skill to automate complex login flows (CAPTCHAs, OTP, multi-step auth) in the headless browser. This browser is ISOLATED from the Cloud Desktop and Code Sandbox.",
+        "display_name": "AgentBay：浏览器登录",
+        "description": "[环境：浏览器] 使用 AgentBay 的 AI 驱动登录技能，在无头浏览器中自动化完成复杂登录流程（验证码、OTP、多步鉴权）。该浏览器与云桌面、代码沙箱相互隔离。",
         "category": "agentbay",
         "icon": "🔐",
         "is_default": False,
@@ -2759,8 +2744,8 @@ AGENTBAY_TOOLS = [
     # ── Command (Shell) ───────────────────────────────────────────────────
     {
         "name": "agentbay_command_exec",
-        "display_name": "AgentBay: Shell Command",
-        "description": "[ENV: Code Sandbox] Execute a shell command in the AgentBay Code Sandbox. IMPORTANT: This sandbox is ISOLATED from the Headless Browser (browser_* tools) and Cloud Desktop (computer_* tools). Files and processes are NOT shared between environments. Returns stdout, stderr, and exit code.",
+        "display_name": "AgentBay：Shell 命令",
+        "description": "[环境：代码沙箱] 在 AgentBay 代码沙箱中执行一条 shell 命令。重要：本沙箱与无头浏览器（browser_* 工具）、云桌面（computer_* 工具）相互隔离，文件与进程在各环境间不共享。返回 stdout、stderr 和 exit code。",
         "category": "agentbay",
         "icon": "🖥️",
         "is_default": False,
@@ -2779,8 +2764,8 @@ AGENTBAY_TOOLS = [
     # ── Computer Use ──────────────────────────────────────────────────────
     {
         "name": "agentbay_computer_screenshot",
-        "display_name": "AgentBay: Desktop Screenshot",
-        "description": "[ENV: Cloud Desktop] Take a screenshot of the full Cloud Desktop (Windows/Linux). The analysis image includes a coordinate grid and the result includes the pixel coordinate system for mouse tools. For tiny controls such as close buttons, menus, checkboxes, or small icons, call this again with focus_x/focus_y/focus_width/focus_height around the target area before clicking; the focused crop is enlarged for vision and its grid labels remain absolute desktop coordinates. IMPORTANT: This desktop is an ISOLATED environment — it does NOT share filesystem, processes, or browser sessions with the Headless Browser (browser_* tools) or Code Sandbox (code_execute/command_exec). To browse the web on this desktop, first use agentbay_computer_get_installed_apps, then start a browser with the returned start_cmd. Essential for understanding the current desktop state before performing GUI operations.",
+        "display_name": "AgentBay：桌面截图",
+        "description": "[环境：云桌面] 对整个云桌面（Windows/Linux）进行截图。分析图中包含坐标网格，结果中包含鼠标工具所需的像素坐标系。对于关闭按钮、菜单、复选框或小图标等较小的控件，请先围绕目标区域用 focus_x/focus_y/focus_width/focus_height 再调用一次本工具；聚焦裁剪会放大给视觉模型，其网格标签仍是绝对桌面坐标。重要：该桌面运行在隔离环境中，与无头浏览器（browser_* 工具）、代码沙箱（code_execute/command_exec）不共享文件系统、进程或浏览器会话。若想在桌面端浏览网页，请先调用 agentbay_computer_get_installed_apps，再用返回的 start_cmd 启动浏览器。在执行任何 GUI 操作前，都应先理解当前桌面状态。",
         "category": "agentbay",
         "icon": "📸",
         "is_default": False,
@@ -2798,8 +2783,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_save_screenshot",
-        "display_name": "AgentBay: Save Desktop Screenshot",
-        "description": "[ENV: Cloud Desktop] Save the current Cloud Desktop screenshot to workspace/screenshots/. Use only when the user explicitly asks to save, share, keep, or show a screenshot. For routine visual observation, use agentbay_computer_screenshot instead because it stays internal and does not create workspace files.",
+        "display_name": "AgentBay：保存桌面截图",
+        "description": "[环境：云桌面] 将云桌面当前的截图保存到 workspace/screenshots/。仅在用户明确要求保存、分享、保留或查看截图时调用。常规的视觉观察请使用 agentbay_computer_screenshot，因为它只在内部使用，不会产生工作区文件。",
         "category": "agentbay",
         "icon": "A",
         "is_default": False,
@@ -2809,8 +2794,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_click",
-        "display_name": "AgentBay: Mouse Click",
-        "description": "[ENV: Cloud Desktop] Click the mouse at absolute desktop pixel coordinates on the Cloud Desktop (ISOLATED from Browser and Code Sandbox). Always inspect the desktop first with agentbay_computer_screenshot. Before clicking dialog buttons, text buttons, tabs, menus, checkboxes, close buttons, small controls, or any target whose center is not unambiguous from the full screenshot, call agentbay_computer_precision_screenshot around the target area and use the absolute coordinate labels in that enlarged crop. Do not repeatedly guess from the full screenshot after a miss. For login prompts, software popups, cancel/no-thanks/not-now/skip/no-login flows, prefer agentbay_computer_dismiss_dialog before coordinate clicking. Click the visual center of the target. Coordinates are from the full desktop top-left corner (0, 0), not from the right-side preview panel. For in-app popups, embedded panels, marketplace/store windows, browser/app tabs, document tabs, and software-internal close buttons, use the app UI with click, Escape, or shortcuts such as Ctrl+W; do not escalate to root-window close tools. Use agentbay_computer_list_windows/close_window only when the user explicitly wants to close or quit an entire OS-level window/application.",
+        "display_name": "AgentBay：鼠标点击",
+        "description": "[环境：云桌面] 在云桌面（与浏览器、代码沙箱相互隔离）的绝对桌面像素坐标上点击鼠标。务必先用 agentbay_computer_screenshot 观察桌面。在点击对话框按钮、文字按钮、标签页、菜单、复选框、关闭按钮、小控件，或任何在全屏截图中中心位置不明确的目标之前，请先用 agentbay_computer_precision_screenshot 围绕目标区域进行截取，并使用放大图中的绝对坐标标签。出现点击偏差后不要反复凭全屏截图猜测坐标。对于登录弹窗、软件弹窗、取消/不要/稍后/跳过/不登录等提示，优先使用 agentbay_computer_dismiss_dialog，再考虑坐标点击。请点击目标的可视中心。坐标以整个桌面左上角 (0, 0) 为基准，而非右侧预览面板。对于应用内弹窗、嵌入式面板、应用商店窗口、浏览器/应用标签页、文档标签页以及应用内部的关闭按钮，请通过应用 UI（点击、Esc 或 Ctrl+W 等快捷键）处理，不要升级到根窗口级别的关闭工具。仅当用户明确希望关闭或退出整个操作系统级窗口/应用时，才可使用 agentbay_computer_list_windows/close_window。",
         "category": "agentbay",
         "icon": "🖱️",
         "is_default": False,
@@ -2828,8 +2813,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_precision_screenshot",
-        "display_name": "AgentBay: Precision Screenshot",
-        "description": "[ENV: Cloud Desktop] Take an enlarged focused crop of the Cloud Desktop for accurate mouse targeting. Use this before clicking dialog buttons, text buttons, tabs, menus, checkboxes, close buttons, small controls, or after any near-miss. Provide an approximate absolute desktop rectangle around the target; small rectangles are automatically expanded to include surrounding context, so prefer a region around the target instead of an ultra-tight crop. The returned vision image is enlarged and its grid labels remain absolute desktop coordinates for agentbay_computer_click. The next click should use the center coordinate read from this precision crop, not a guessed coordinate from the full screenshot.",
+        "display_name": "AgentBay：精确截图",
+        "description": "[环境：云桌面] 对云桌面的一个区域进行放大聚焦截取，用于精确鼠标定位。请在点击对话框按钮、文字按钮、标签页、菜单、复选框、关闭按钮、小控件之前，或在出现点击偏差之后调用本工具。请传入围绕目标的大致绝对桌面矩形；较小的矩形会自动扩展以包含上下文，因此更推荐围绕目标取一个稍大的区域，而非裁得过紧。返回的视觉图像是放大后的版本，其网格标签仍然是 agentbay_computer_click 可用的绝对桌面坐标。下一次点击应使用从此精确截图中读到的中心坐标，而不是从全屏截图猜出的坐标。",
         "category": "agentbay",
         "icon": "A",
         "is_default": False,
@@ -2848,8 +2833,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_input_text",
-        "display_name": "AgentBay: Keyboard Input",
-        "description": "[ENV: Cloud Desktop] Type text at the current cursor position on the Cloud Desktop (ISOLATED from Browser and Code Sandbox). Click on the target input field first.",
+        "display_name": "AgentBay：键盘输入",
+        "description": "[环境：云桌面] 在云桌面（与浏览器、代码沙箱相互隔离）的当前光标位置输入文本。请先点击目标输入框。",
         "category": "agentbay",
         "icon": "⌨️",
         "is_default": False,
@@ -2865,8 +2850,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_press_keys",
-        "display_name": "AgentBay: Keyboard Shortcut",
-        "description": "[ENV: Cloud Desktop] Press keyboard keys or shortcuts on the Cloud Desktop (ISOLATED from Browser and Code Sandbox). For example ['ctrl', 'c'] for copy, ['alt', 'tab'] for window switch, ['enter'] to confirm.",
+        "display_name": "AgentBay：键盘快捷键",
+        "description": "[环境：云桌面] 在云桌面（与浏览器、代码沙箱相互隔离）上按下键盘按键或快捷键。例如 ['ctrl', 'c'] 表示复制、['alt', 'tab'] 表示切换窗口、['enter'] 表示确认。",
         "category": "agentbay",
         "icon": "⌨️",
         "is_default": False,
@@ -2883,8 +2868,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_scroll",
-        "display_name": "AgentBay: Scroll",
-        "description": "[ENV: Cloud Desktop] Scroll the screen at a specific position on the Cloud Desktop (ISOLATED from Browser and Code Sandbox).",
+        "display_name": "AgentBay：滚动",
+        "description": "[环境：云桌面] 在云桌面（与浏览器、代码沙箱相互隔离）的指定位置处滚动屏幕。",
         "category": "agentbay",
         "icon": "🔃",
         "is_default": False,
@@ -2903,8 +2888,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_move_mouse",
-        "display_name": "AgentBay: Mouse Move",
-        "description": "[ENV: Cloud Desktop] Move the mouse to coordinates on the Cloud Desktop without clicking. Useful for triggering hover effects, tooltips, or dropdown menus.",
+        "display_name": "AgentBay：鼠标移动",
+        "description": "[环境：云桌面] 在云桌面上将鼠标移动到指定坐标，但不点击。常用于触发悬停效果、工具提示或下拉菜单。",
         "category": "agentbay",
         "icon": "🖱️",
         "is_default": False,
@@ -2921,8 +2906,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_drag_mouse",
-        "display_name": "AgentBay: Mouse Drag",
-        "description": "[ENV: Cloud Desktop] Drag the mouse from one position to another on the Cloud Desktop. Useful for selecting text, moving files, resizing windows.",
+        "display_name": "AgentBay：鼠标拖拽",
+        "description": "[环境：云桌面] 在云桌面上把鼠标从一个位置拖到另一个位置。常用于选中文字、移动文件、调整窗口大小。",
         "category": "agentbay",
         "icon": "🖱️",
         "is_default": False,
@@ -2942,8 +2927,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_get_screen_size",
-        "display_name": "AgentBay: Get Screen Size",
-        "description": "[ENV: Cloud Desktop] Get the screen resolution of the Cloud Desktop. Useful for calculating click coordinates.",
+        "display_name": "AgentBay：获取屏幕分辨率",
+        "description": "[环境：云桌面] 获取云桌面的屏幕分辨率，可用于计算点击坐标。",
         "category": "agentbay",
         "icon": "📐",
         "is_default": False,
@@ -2953,8 +2938,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_start_app",
-        "display_name": "AgentBay: Start Application",
-        "description": "[ENV: Cloud Desktop] Start an application on the Cloud Desktop by its launch command. Prefer calling agentbay_computer_get_installed_apps first and pass the returned start_cmd exactly; do not guess commands such as chrome, microsoft-edge, or wps. If a direct command fails, this tool will try to match installed apps by name/start_cmd and retry with the real start_cmd. The desktop is ISOLATED from the Headless Browser and Code Sandbox environments.",
+        "display_name": "AgentBay：启动应用",
+        "description": "[环境：云桌面] 通过启动命令在云桌面上启动一个应用。请优先调用 agentbay_computer_get_installed_apps，并把返回的 start_cmd 原样传入，不要凭猜测传 chrome、microsoft-edge 或 wps 等命令。如果直接命令启动失败，本工具会按名称/start_cmd 匹配已安装的应用，再使用真实的 start_cmd 重试。该桌面与无头浏览器、代码沙箱环境相互隔离。",
         "category": "agentbay",
         "icon": "🚀",
         "is_default": False,
@@ -2971,8 +2956,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_get_installed_apps",
-        "display_name": "AgentBay: Get Installed Apps",
-        "description": "[ENV: Cloud Desktop] List installed applications and their real launch commands. Use this before agentbay_computer_start_app, then pass the returned start_cmd exactly instead of guessing app names.",
+        "display_name": "AgentBay：获取已安装应用",
+        "description": "[环境：云桌面] 列出已安装的应用及其真实的启动命令。请在调用 agentbay_computer_start_app 之前调用本工具，并把返回的 start_cmd 原样传入，避免猜测应用名称。",
         "category": "agentbay",
         "icon": "A",
         "is_default": False,
@@ -2989,8 +2974,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_get_cursor_position",
-        "display_name": "AgentBay: Get Cursor Position",
-        "description": "[ENV: Cloud Desktop] Get the current mouse cursor position on the Cloud Desktop.",
+        "display_name": "AgentBay：获取光标位置",
+        "description": "[环境：云桌面] 获取云桌面上当前鼠标光标的位置。",
         "category": "agentbay",
         "icon": "📍",
         "is_default": False,
@@ -3000,8 +2985,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_get_active_window",
-        "display_name": "AgentBay: Get Active Window",
-        "description": "[ENV: Cloud Desktop] Get information about the currently focused window on the Cloud Desktop, including window ID, title, and position.",
+        "display_name": "AgentBay：获取当前焦点窗口",
+        "description": "[环境：云桌面] 获取云桌面当前焦点窗口的信息，包括窗口 ID、标题和位置。",
         "category": "agentbay",
         "icon": "🪟",
         "is_default": False,
@@ -3011,8 +2996,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_activate_window",
-        "display_name": "AgentBay: Activate Window",
-        "description": "[ENV: Cloud Desktop] Bring a specific window to the foreground on the Cloud Desktop by its window ID. Use agentbay_computer_list_windows or get_active_window to find window IDs.",
+        "display_name": "AgentBay：激活窗口",
+        "description": "[环境：云桌面] 在云桌面上根据窗口 ID 把指定窗口置于前台。可先用 agentbay_computer_list_windows 或 get_active_window 找到窗口 ID。",
         "category": "agentbay",
         "icon": "🪟",
         "is_default": False,
@@ -3028,8 +3013,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_list_windows",
-        "display_name": "AgentBay: List Windows",
-        "description": "[ENV: Cloud Desktop] List OS-level root desktop windows with window_id, title, process, and geometry. These IDs are for whole application windows only. Use this for activation, or before closing only when the user explicitly wants to close/quit an entire desktop window or app. Do NOT use root window IDs for in-app popups, modals, embedded marketplace/store panels, browser/app tabs, document tabs, or software-internal dialogs; close those with the app UI, Escape, Ctrl+W, or agentbay_computer_dismiss_dialog.",
+        "display_name": "AgentBay：列出桌面窗口",
+        "description": "[环境：云桌面] 列出操作系统级的根桌面窗口，包含 window_id、标题、进程和位置信息。这些 ID 仅对应整个应用窗口。本工具可用于激活窗口，或仅在用户明确希望关闭/退出某个桌面窗口或应用时，作为关闭前的查询步骤。不要把根窗口 ID 用于应用内弹窗、模态框、嵌入式应用商店面板、浏览器/应用标签页、文档标签页或软件内部对话框——这些请通过应用 UI、Esc、Ctrl+W 或 agentbay_computer_dismiss_dialog 处理。",
         "category": "agentbay",
         "icon": "A",
         "is_default": False,
@@ -3044,8 +3029,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_close_window",
-        "display_name": "AgentBay: Close Window",
-        "description": "[ENV: Cloud Desktop] HIGH-RISK: close an entire OS-level root desktop window by explicit window_id returned by agentbay_computer_list_windows. This can quit the whole application and lose context. Use only when the user explicitly asks to close/quit a whole desktop window or app. Never use this for in-app popups, modals, embedded marketplace/store panels, browser/app tabs, document tabs, login prompts, or software-internal dialogs; use app UI clicks, Escape, Ctrl+W, or agentbay_computer_dismiss_dialog instead.",
+        "display_name": "AgentBay：关闭窗口",
+        "description": "[环境：云桌面] 高风险：根据 agentbay_computer_list_windows 返回的 window_id 关闭一个操作系统级的根桌面窗口。本操作会退出整个应用并丢失上下文。仅在用户明确要求关闭/退出某个桌面窗口或应用时使用。绝对不要将其用于应用内弹窗、模态框、嵌入式应用商店面板、浏览器/应用标签页、文档标签页、登录提示或软件内部对话框；这些请改用应用 UI 点击、Esc、Ctrl+W 或 agentbay_computer_dismiss_dialog。",
         "category": "agentbay",
         "icon": "A",
         "is_default": False,
@@ -3062,8 +3047,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_dismiss_dialog",
-        "display_name": "AgentBay: Dismiss Dialog",
-        "description": "[ENV: Cloud Desktop] Safely dismiss the active in-app popup/dialog by sending Escape only. It never closes root desktop windows or applications. Prefer this over coordinate clicking for modals, login prompts, no-login/not-now/skip/cancel prompts, and software-internal dialogs. For in-app tabs, embedded panels, marketplace/store windows, or document tabs, prefer app UI controls or shortcuts such as Ctrl+W. Use agentbay_computer_close_window only when the user explicitly wants to close/quit an entire OS-level window/app.",
+        "display_name": "AgentBay：关闭弹窗",
+        "description": "[环境：云桌面] 通过发送 Esc 安全地关闭当前的应用内弹窗/对话框。它不会关闭根桌面窗口或应用。对于模态框、登录提示、不登录/稍后/跳过/取消提示，以及软件内部对话框，请优先使用本工具而不是坐标点击。对于应用内标签页、嵌入式面板、应用商店窗口或文档标签页，请优先使用应用 UI 控件或 Ctrl+W 等快捷键。仅当用户明确希望关闭/退出整个操作系统级窗口/应用时，才可使用 agentbay_computer_close_window。",
         "category": "agentbay",
         "icon": "A",
         "is_default": False,
@@ -3078,8 +3063,8 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_computer_list_visible_apps",
-        "display_name": "AgentBay: List Running Apps",
-        "description": "[ENV: Cloud Desktop] List all currently visible/running applications on the Cloud Desktop with their process info and window IDs.",
+        "display_name": "AgentBay：列出运行中的应用",
+        "description": "[环境：云桌面] 列出云桌面上当前所有可见/正在运行的应用，附带其进程信息与窗口 ID。",
         "category": "agentbay",
         "icon": "📋",
         "is_default": False,
@@ -3089,13 +3074,12 @@ AGENTBAY_TOOLS = [
     },
     {
         "name": "agentbay_file_transfer",
-        "display_name": "AgentBay: File Transfer",
+        "display_name": "AgentBay：文件传输",
         "description": (
-            "Transfer a file between any two endpoints: the agent workspace, "
-            "the AgentBay browser environment, the cloud desktop, or the code sandbox. "
-            "Workspace -> env: upload a workspace file into a cloud environment. "
-            "Env -> workspace: download a file from a cloud environment into the workspace. "
-            "Env -> env: transfer between environments transparently (no workspace involvement)."
+            "在任意两个端点之间传输文件：数字员工工作区、AgentBay 浏览器环境、云桌面或代码沙箱。"
+            "工作区 → 环境：把工作区中的文件上传到云环境。"
+            "环境 → 工作区：把云环境中的文件下载到工作区。"
+            "环境 → 环境：在不同环境之间直接传输（不经过工作区）。"
         ),
         "category": "agentbay",
         "icon": "🔄",
@@ -3143,13 +3127,12 @@ BUILTIN_TOOLS = [
 OKR_BUILTIN_TOOLS = [
     {
         "name": "get_okr",
-        "display_name": "Get OKR",
+        "display_name": "获取 OKR",
         "description": (
-            "Read the full OKR board for the current period: company-level Objectives and "
-            "Key Results, plus every member's (human and agent) individual O and KRs with "
-            "current progress values. Includes objective_id for each Objective and kr_id for "
-            "each Key Result. Use this to understand company direction, update existing OKRs, "
-            "and see how others are tracking before planning your own work."
+            "读取当前周期的完整 OKR 看板：公司级别的 Objective 和 Key Result，"
+            "以及每个成员（人类和数字员工）的个人 O 与 KR 及其当前进度值。"
+            "每个 Objective 都附带 objective_id，每个 Key Result 都附带 kr_id。"
+            "使用本工具可以了解公司方向、更新已有 OKR，或在规划个人工作前先了解他人的进展。"
         ),
         "category": "okr",
         "icon": "🎯",
@@ -3172,11 +3155,10 @@ OKR_BUILTIN_TOOLS = [
     },
     {
         "name": "get_my_okr",
-        "display_name": "Get My OKR",
+        "display_name": "获取我的 OKR",
         "description": (
-            "Read your own Objectives and Key Results for the current period, including "
-            "kr_id values needed to update progress. Call this before update_kr_progress "
-            "to get the correct kr_id."
+            "读取自己在当前周期的 Objective 与 Key Result，"
+            "包含用于更新进度所需的 kr_id。在调用 update_kr_progress 之前请先调用本工具以获取正确的 kr_id。"
         ),
         "category": "okr",
         "icon": "🎯",
@@ -3190,11 +3172,11 @@ OKR_BUILTIN_TOOLS = [
     },
     {
         "name": "update_kr_progress",
-        "display_name": "Update KR Progress",
+        "display_name": "更新 KR 进度",
         "description": (
-            "Update the current progress value of one of YOUR OWN Key Results. "
-            "Call get_my_okr first to obtain the kr_id. "
-            "A progress log entry is created automatically for history tracking."
+            "更新**你自己**某条 Key Result 的当前进度值。"
+            "请先调用 get_my_okr 获取 kr_id。"
+            "会自动写入一条进度日志，以便进行历史追踪。"
         ),
         "category": "okr",
         "icon": "📈",
@@ -3225,8 +3207,8 @@ OKR_BUILTIN_TOOLS = [
 DEPLOY_BUILTIN_TOOLS = [
     {
         "name": "vercel_deploy",
-        "display_name": "Deploy to Vercel",
-        "description": "Deploy a project from workspace to Vercel. Supports two modes: 'upload' (direct file upload, no GitHub needed) or 'github' (push to GitHub repo, Vercel auto-deploys). Returns the deployment URL.",
+        "display_name": "部署到 Vercel",
+        "description": "将工作区中的项目部署到 Vercel。支持两种模式：'upload'（直接上传文件，不需要 GitHub）或 'github'（推送到 GitHub 仓库，由 Vercel 自动部署）。返回部署后的 URL。",
         "category": "deploy",
         "icon": "🚀",
         "is_default": False,
@@ -3277,8 +3259,8 @@ DEPLOY_BUILTIN_TOOLS = [
     },
     {
         "name": "vercel_list_deployments",
-        "display_name": "List Vercel Deployments",
-        "description": "List recent deployments for a Vercel project. Shows status, URL, and creation time.",
+        "display_name": "列出 Vercel 部署",
+        "description": "列出某 Vercel 项目的最近部署记录，包含状态、URL 和创建时间。",
         "category": "deploy",
         "icon": "📋",
         "is_default": False,
@@ -3294,8 +3276,8 @@ DEPLOY_BUILTIN_TOOLS = [
     },
     {
         "name": "vercel_get_deploy_logs",
-        "display_name": "Get Deploy Logs",
-        "description": "Get build logs and runtime logs for a Vercel deployment. Useful for debugging failed deployments.",
+        "display_name": "获取部署日志",
+        "description": "获取某次 Vercel 部署的构建日志和运行时日志，可用于排查部署失败问题。",
         "category": "deploy",
         "icon": "📜",
         "is_default": False,
@@ -3311,8 +3293,8 @@ DEPLOY_BUILTIN_TOOLS = [
     },
     {
         "name": "vercel_set_env",
-        "display_name": "Set Environment Variable",
-        "description": "Set an environment variable for a Vercel project. Use for database URLs, API keys, and other secrets.",
+        "display_name": "设置环境变量",
+        "description": "为 Vercel 项目设置环境变量。可用于数据库连接串、API Key 等密钥。",
         "category": "deploy",
         "icon": "🔐",
         "is_default": False,
@@ -3335,8 +3317,8 @@ DEPLOY_BUILTIN_TOOLS = [
     },
     {
         "name": "vercel_manage_domain",
-        "display_name": "Manage Domain",
-        "description": "Check domain availability/pricing, or bind a custom domain to a Vercel project.",
+        "display_name": "管理域名",
+        "description": "查询域名可用性/价格，或为 Vercel 项目绑定自定义域名。",
         "category": "deploy",
         "icon": "🌐",
         "is_default": False,
@@ -3358,8 +3340,8 @@ DEPLOY_BUILTIN_TOOLS = [
     },
     {
         "name": "neon_create_database",
-        "display_name": "Create Postgres Database",
-        "description": "Create a new Neon Postgres database. Returns the DATABASE_URL connection string. Use vercel_set_env to inject it into your Vercel project.",
+        "display_name": "创建 Postgres 数据库",
+        "description": "创建一个新的 Neon Postgres 数据库，返回 DATABASE_URL 连接字符串。可以配合 vercel_set_env 注入到 Vercel 项目中。",
         "category": "deploy",
         "icon": "🐘",
         "is_default": False,
@@ -3750,13 +3732,12 @@ async def clean_orphaned_mcp_tools():
 ATLASSIAN_ROVO_MCP_URL = "https://mcp.atlassian.com/v1/mcp"
 
 ATLASSIAN_ROVO_CONFIG_TOOL = {
-    "name": "atlassian_rovo",
-    "display_name": "Atlassian Rovo (Jira / Confluence / Compass)",
-    "description": (
-        "Connect to Atlassian Rovo MCP Server to access Jira, Confluence, and Compass. "
-        "Configure your API key to enable Jira issue management, Confluence page creation, "
-        "and Compass component queries."
-    ),
+"name": "atlassian_rovo",
+        "display_name": "Atlassian Rovo（Jira / Confluence / Compass）",
+        "description": (
+            "连接 Atlassian Rovo MCP Server 以访问 Jira、Confluence 和 Compass。"
+            "配置好 API Key 后，即可进行 Jira 工单管理、Confluence 页面创建以及 Compass 组件查询。"
+        ),
     "category": "atlassian",
     "icon": "🔷",
     "is_default": False,

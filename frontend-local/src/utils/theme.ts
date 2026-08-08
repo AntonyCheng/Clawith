@@ -83,6 +83,7 @@ export function resetAccentColor() {
 
 /** Preset accent colors */
 export const PRESET_COLORS = [
+    { name: 'Red', hex: '#E60027' },
     { name: 'Indigo', hex: '#5e6ad2' },
     { name: 'Teal', hex: '#0abab5' },
     { name: 'Blue', hex: '#3b82f6' },

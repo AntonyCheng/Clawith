@@ -149,7 +149,7 @@ export default function LlmTab({ selectedTenantId }: LlmTabProps) {
             if (res.status === 409) {
                 const data = await res.json();
                 const agents = data.detail?.agents || [];
-                const msg = `该模型正在被 ${agents.length} 个数字员工使用：\n\n${agents.join(', ')}\n\n仍要删除吗？（对应的模型配置会被清空）`;
+                const msg = `${t('enterprise.llm.modelInUse', { count: agents.length })}\n\n${agents.join(', ')}\n\n${t('enterprise.llm.modelInUseConfirm', '仍要删除吗？（对应的模型配置会被清空）')}`;
                 if (await dialog.confirm(msg, { title: t('common.dialog.deleteModel'), danger: true, confirmLabel: t('common.confirmActions.forceDelete') })) {
                     const r2 = await fetch(`/api/enterprise/llm-models/${id}?force=true`, {
                         method: 'DELETE',
@@ -239,7 +239,7 @@ export default function LlmTab({ selectedTenantId }: LlmTabProps) {
             {showAddModel && !editingModelId && (
                 <div className="card" style={{ marginBottom: '16px' }}>
                     <h3 style={{ marginBottom: '16px' }}>{t('enterprise.llm.addModel')}</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="llm-model-grid">
                         <div className="form-group">
                             <label className="form-label">{t('enterprise.llm.provider')}</label>
                             <select className="form-input" value={modelForm.provider} onChange={e => {
@@ -315,9 +315,9 @@ export default function LlmTab({ selectedTenantId }: LlmTabProps) {
                 {models.map((m) => (
                     <div key={m.id}>
                         {editingModelId === m.id ? (
-                            <div className="card" style={{ border: '1px solid var(--accent-primary)' }}>
-                                <h3 style={{ marginBottom: '16px' }}>Edit Model</h3>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="card">
+                                <h3 style={{ marginBottom: '16px' }}>{t('enterprise.llm.editModel')}</h3>
+                                <div className="llm-model-grid">
                                     <div className="form-group">
                                         <label className="form-label">{t('enterprise.llm.provider')}</label>
                                         <select className="form-input" value={modelForm.provider} onChange={e => {
@@ -346,7 +346,7 @@ export default function LlmTab({ selectedTenantId }: LlmTabProps) {
                                     </div>
                                     <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                         <label className="form-label">{t('enterprise.llm.apiKey')}</label>
-                                        <input className="form-input" type="password" placeholder="•••••••• (Leave blank to keep unchanged)" value={modelForm.api_key} onChange={e => setModelForm({ ...modelForm, api_key: e.target.value })} />
+                                        <input className="form-input" type="password" placeholder={t('enterprise.llm.optionalPasswordHint')} value={modelForm.api_key} onChange={e => setModelForm({ ...modelForm, api_key: e.target.value })} />
                                     </div>
                                     <div className="form-group" style={{ gridColumn: 'span 2' }}>
                                         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
@@ -436,7 +436,7 @@ export default function LlmTab({ selectedTenantId }: LlmTabProps) {
                                             boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
                                         }} />
                                     </button>
-                                    {m.supports_vision && <span className="badge" style={{ background: 'rgba(99,102,241,0.15)', color: 'rgb(99,102,241)', fontSize: '10px' }}>Vision</span>}
+                                    {m.supports_vision && <span className="badge" style={{ background: 'rgba(99,102,241,0.15)', color: 'rgb(99,102,241)', fontSize: '10px' }}>{t('enterprise.llm.vision')}</span>}
                                     {tenantForDefault?.default_model_id === m.id ? (
                                         <span className="badge" style={{ background: 'rgba(34,197,94,0.15)', color: 'rgb(34,197,94)', fontSize: '10px' }}>{t('enterprise.llm.defaultBadge', '默认')}</span>
                                     ) : m.enabled ? (

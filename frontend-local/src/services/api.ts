@@ -7,9 +7,19 @@ const API_BASE = '/api';
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('token');
     const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+    // Don't set Content-Type for FormData — browser will auto-add multipart boundary
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+    if (options.headers) {
+        Object.assign(headers, options.headers as Record<string, string>);
+        // Allow explicit override of Content-Type
+        if (options.body instanceof FormData && (options.headers as Record<string, string>)['Content-Type'] === undefined) {
+            delete headers['Content-Type'];
+        }
+    }
 
     const res = await fetch(`${API_BASE}${url}`, { ...options, headers });
 
@@ -107,7 +117,7 @@ export function uploadFileWithProgress(
     file: File,
     onProgress?: (percent: number) => void,
     extraFields?: Record<string, string>,
-    timeoutMs: number = 120_000,
+    timeoutMs: number = 300_000,
 ): { promise: Promise<any>; abort: () => void } {
     const xhr = new XMLHttpRequest();
     const promise = new Promise<any>((resolve, reject) => {
@@ -173,6 +183,18 @@ export const authApi = {
 
     updateMe: (data: Partial<User>) =>
         request<User>('/auth/me', { method: 'PATCH', body: JSON.stringify(data) }),
+
+    uploadAvatar: (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return request<{ avatar_url: string }>('/users/me/avatar', {
+            method: 'POST',
+            body: formData as any,
+        });
+    },
+
+    deleteAvatar: () =>
+        request<{ status: string }>('/users/me/avatar', { method: 'DELETE' }),
 
     verifyEmail: (token: string) =>
         request<{ ok: boolean; message: string; access_token: string; user: User; needs_company_setup: boolean }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
@@ -278,6 +300,18 @@ export const agentApi = {
 
     gatewayMessages: (id: string) =>
         request<any[]>(`/agents/${id}/gateway-messages`),
+
+    uploadAvatar: (agentId: string, file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return request<{ avatar_url: string }>(`/agents/${agentId}/avatar`, {
+            method: "POST",
+            body: formData as any,
+        });
+    },
+
+    deleteAvatar: (agentId: string) =>
+        request<{ status: string }>(`/agents/${agentId}/avatar`, { method: "DELETE" }),
 };
 
 // ─── Tasks ────────────────────────────────────────────
@@ -452,6 +486,23 @@ export const enterpriseApi = {
 export const activityApi = {
     list: (agentId: string, limit = 50) =>
         request<any[]>(`/agents/${agentId}/activity?limit=${limit}`),
+};
+
+// ─── Chat History (per-agent) ───────
+export const chatHistoryApi = {
+    conversations: (agentId: string) =>
+        request<any[]>(`/agents/${agentId}/chat-history/conversations`),
+
+    messages: (agentId: string, convId: string, limit = 500) =>
+        request<any[]>(`/agents/${agentId}/chat-history/${convId}?limit=${limit}`),
+};
+
+// ─── Dashboard (server-side aggregation) ───────────────
+export const dashboardApi = {
+    overview: () => request<any>('/dashboard/overview'),
+    cost: () => request<any>('/dashboard/cost'),
+    value: () => request<any>('/dashboard/value'),
+    tokenTrend: (days = 30) => request<any>(`/dashboard/token-trend?days=${days}`),
 };
 
 // ─── Messages ─────────────────────────────────────────

@@ -48,11 +48,15 @@
     "topContributors": "Top Contributors",
     "trendingTags": "Trending Topics",
     "tips": "Tips",
-    "justNow": "just now"
+    "justNow": "just now",
+    "minutesAgo": "{{count}} minutes ago",
+    "hoursAgo": "{{count}} hours ago",
+    "daysAgo": "{{count}} days ago"
   },
   "nav": {
     "dashboard": "Dashboard",
     "myAgents": "My Digital Employees",
+    "myAgentsEmpty": "Create or hire a digital employee",
     "myCreated": "Created by me",
     "companyShared": "Company shared",
     "newAgent": "New Digital Employee",
@@ -97,6 +101,10 @@
     "usernamePlaceholder": "Enter username",
     "passwordPlaceholder": "Enter password",
     "emailPlaceholder": "you@example.com",
+    "fieldRequired": "Please fill out this field.",
+    "emailRequired": "Please enter your email.",
+    "passwordRequired": "Please enter your password.",
+    "emailInvalid": "Please enter a valid email address.",
     "forgotPassword": "Forgot password?",
     "forgotPasswordTitle": "Forgot password",
     "forgotPasswordSubtitle": "Enter your account email and we will send a reset link if the account exists.",
@@ -127,6 +135,7 @@
     "confirmNewPasswordPlaceholder": "Repeat your new password",
     "updatePassword": "Update password",
     "emailPlaceholderReset": "name@company.com",
+    "oauthLoadFailed": "Failed to load social login providers.",
     "companyDisabled": "Your company has been disabled. Please contact the platform administrator.",
     "invalidCredentials": "Invalid username or password.",
     "accountDisabled": "Your account has been disabled.",
@@ -160,6 +169,11 @@
     "language": "Language"
   },
   "dashboard": {
+    "tabs": {
+      "employees": "Employee Overview",
+      "cost": "Cost Overview",
+      "value": "Value Contribution"
+    },
     "greeting": {
       "lateNight": "Late night",
       "morning": "Good morning",
@@ -200,7 +214,100 @@
     "globalActivity": "Global Activity",
     "recentCount": "Last {{count}}",
     "noAgents": "No digital employees yet, create your first one",
-    "createFirst": "Create first digital employee"
+    "createFirst": "Create first digital employee",
+    "employeeOverview": {
+      "loadError": "Failed to load employee overview. Please try again later.",
+      "todayActivities": "Today's Activities",
+      "totalHours": "Total Task Hours",
+      "matrixTitle": "Digital Employee Task Matrix",
+      "sub": {
+        "totalActivities": "{{value}} total",
+        "avgPerPerson": "Avg {{value}} / person"
+      },
+      "leaderboard": {
+        "mostPopularTitle": "Most Popular Top 5",
+        "busiestTitle": "Busiest Top 5",
+        "idlestTitle": "Idlest Top 5",
+        "mostPopularTooltip": "Ranking by activity count: sorted from most to least frequently used.",
+        "busiestTooltip": "Ranking by busyness = activities × token usage, from highest to lowest. 'Task Hours' on the right is for reference only and may not strictly decrease.",
+        "idlestTooltip": "Ranking by busyness from lowest to highest. 'Task Hours' on the right is for reference only."
+      }
+    },
+    "costOverview": {
+      "loadError": "Failed to load cost overview. Please try again later.",
+      "modelsUsed": "Models Used",
+      "todayTokens": "Today's Tokens",
+      "avgDailyTokens": "Avg Daily Tokens",
+      "avgMonthlyTokens": "Monthly Tokens",
+      "avgDailyCost": "Avg Daily Cost",
+      "modelBreakdownTitle": "Model Cost Distribution",
+      "timeBucketsTitle": "Time Dimensions",
+      "noModels": "No model data yet",
+      "sub": {
+        "coversModels": "Covering {{count}} models",
+        "thisMonth": "This month {{value}}",
+        "tokenCount": "Tokens {{value}}",
+        "agentsCount": "{{count}} agents"
+      }
+    },
+    "valueContribution": {
+      "loadError": "Failed to load value contribution. Please try again later.",
+      "totalHoursSaved": "Total Hours Saved",
+      "totalSavings": "Total Savings",
+      "totalTokenCost": "Total Token Cost",
+      "totalProfit": "Total Profit",
+      "tableTitle": "Per-Agent Value Contribution (sorted by profit, descending)",
+      "noAgents": "No agent data yet",
+      "sub": {
+        "savingsEstimate": "Est. at 1,000 CNY / person-day",
+        "tokenCostEstimate": "Est. at 5 CNY / million tokens"
+      },
+      "profitState": {
+        "profit": "Profit",
+        "loss": "Loss"
+      },
+      "col": {
+        "agent": "Agent",
+        "savedHours": "Hours Saved",
+        "savedCost": "Cost Saved",
+        "tokenCost": "Token Cost",
+        "profit": "Profit"
+      }
+    },
+    "tokenTrend": {
+      "title": "Token Time-Series Trend",
+      "loadError": "Failed to load trend data. Please try again later.",
+      "empty": "No token usage in the last {{days}} days",
+      "ariaLabel": "Cost trend over the last {{days}} days",
+      "peak": "Daily Peak",
+      "dataPoints": "Data Points",
+      "tooltip": {
+        "cost": "Cost"
+      },
+      "legend": {
+        "dailyCost": "Daily Cost"
+      },
+      "sub": {
+        "recentDays": "Last {{days}} days"
+      }
+    },
+    "leaderboard": {
+      "empty": "No data yet"
+    },
+    "matrix": {
+      "empty": "No agent data yet",
+      "col": {
+        "agent": "Agent",
+        "valueScore": "Value Score",
+        "dailySaturation": "Today's Saturation"
+      }
+    },
+    "common": {
+      "totalTokens": "Total Tokens",
+      "activityCount": "Activities",
+      "taskHours": "Task Hours",
+      "personDays": "≈ {{value}} person-days"
+    }
   },
   "agent": {
     "status": {
@@ -385,7 +492,10 @@
       "importedSuccess": "Imported \"{{name}}\" ({{count}} files)",
       "importFailed": "Import failed",
       "importing": "Importing...",
-      "importBtn": "Import"
+      "importBtn": "Import",
+      "importFromUrl": "Import from URL",
+      "browseClawHubBtn": "Browse ClawHub",
+      "importFromPresetsBtn": "Import from Presets"
     },
     "toolMgmt": {
       "title": "Tool Management",
@@ -401,6 +511,8 @@
       "dragOrClick": "Drag files here or click to upload",
       "noFiles": "No files",
       "delete": "Delete",
+      "deleteConfirm": "Delete \"{{name}}\"?",
+      "confirmDelete": "Are you sure you want to delete {{name}}?",
       "save": "Save",
       "edit": "Edit",
       "cancel": "Cancel",
@@ -484,6 +596,15 @@
       "save": "Save",
       "saving": "Saving...",
       "saved": "Saved",
+      "avatar": {
+        "title": "Avatar",
+        "upload": "Upload Avatar",
+        "reupload": "Re-upload",
+        "remove": "Remove",
+        "sizeLimitError": "Image must not exceed 2MB",
+        "uploadFailed": "Upload failed, please try again",
+        "supportedFormats": "Supports PNG, JPG, up to 2MB"
+      },
       "autonomy": {
         "title": "Autonomy Policy",
         "description": "Configure the autonomy level for each agent action",
@@ -661,7 +782,9 @@
       "reloadPage": "Reload Page",
       "selectAgent": "— Select Agent —",
       "failedToCreateSession": "Failed to create session",
-      "failed": "Failed"
+      "failed": "Failed",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
     },
     "toolCategories": {
       "file": "File Operations",
@@ -682,7 +805,8 @@
     "upload": {
       "success": "Upload successful",
       "failed": "Upload failed",
-      "uploading": "Uploading..."
+      "uploading": "Uploading...",
+      "dropToAttach": "Drop files to attach (max 10)"
     },
     "skillNames": {
       "web-research": "Web Research",
@@ -1079,7 +1203,15 @@
       "vision": "Vision",
       "temperature": "Temperature",
       "temperaturePlaceholder": "e.g. 0.7 or 1.0 (Leave empty for default)",
-      "temperatureDesc": "Leave empty to use the provider default. o1/o3 reasoning models usually require 1.0"
+      "temperatureDesc": "Leave empty to use the provider default. o1/o3 reasoning models usually require 1.0",
+      "optionalPasswordHint": "•••••••• (Leave blank to keep unchanged)",
+      "defaultBadge": "Default",
+      "setAsDefault": "Set as Default",
+      "testConnectionShort": "Test connection",
+      "testSuccessShort": "Connection successful",
+      "testFailedShort": "Connection test failed",
+      "testErrorShort": "Connection test error",
+      "modelInUse": "This model is in use by {{count}} agents:"
     },
     "tools": {
       "title": "Global Tool Management",
@@ -1284,7 +1416,51 @@
         "agentbay_computer_dismiss_dialog": "[ENV: Cloud Desktop] Safely dismiss the active in-app popup/dialog with Escape only.",
         "agentbay_computer_list_visible_apps": "[ENV: Cloud Desktop] List running applications in the cloud desktop.",
         "atlassian_rovo": "Connect to Atlassian Rovo MCP Server to access Jira, Confluence, and Compass."
-      }
+      },
+      "tools": "Tools",
+      "allTools": "All Tools",
+      "browserAutomation": "Browser and cloud computer automation",
+      "fileManagement": "Read, write, convert, and manage workspace files",
+      "communication": "Messages and cross-channel collaboration",
+      "webSearch": "Web and knowledge search tools",
+      "codeExecution": "Code execution and development utilities",
+      "triggers": "Triggers, reminders, and awareness workflows",
+      "email": "Email reading and sending tools",
+      "feishu": "Feishu / Lark messaging and collaboration",
+      "okr": "Objectives, key results, and progress reporting",
+      "social": "Social publishing and community workflows",
+      "discovery": "Tool and capability discovery",
+      "custom": "Company-added or MCP tools",
+      "general": "General purpose tools",
+      "categoryDesc": "Tools in this category",
+      "apply": "Apply",
+      "reset": "Reset",
+      "remove": "Remove",
+      "removeTool": "Remove Tool",
+      "editServer": "Edit Server",
+      "serverUrl": "Server URL",
+      "apiKeyOptional": "API Key",
+      "optional": "(optional)",
+      "urlOrJsonHint": "Leave blank if the key is already embedded in the URL",
+      "howAuthWorks": "How authentication works",
+      "authEmbeddedUrl": "If your MCP server embeds the key in the URL (e.g. Tavily uses ?api_key=xxx), the key is sent automatically.",
+      "authBearer": "For servers that use Bearer token auth, enter the key here. It is sent as Authorization: Bearer <key> on every request.",
+      "authPriority": "If both are provided, the API Key field takes priority. All keys are stored encrypted.",
+      "import": "Import",
+      "importing": "Importing...",
+      "importPartial": "Imported {{success}}/{{total}} tools",
+      "importPartialFail": "Some tools failed to import",
+      "filterAll": "All",
+      "filterEnabled": "Enabled",
+      "filterDisabled": "Disabled",
+      "filterConfigured": "Configured",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all",
+      "unknownAgent": "Unknown Agent",
+      "builtInShort": "Built-in",
+      "mcpShort": "MCP",
+      "saved": "Saved",
+      "count": "{{count}} tools"
     },
     "org": {
       "feishuSync": "Feishu Directory Sync",
@@ -1334,7 +1510,41 @@
           "step4": "For organization sync, click Authorize below using a Google Workspace admin account that has Directory read permission.",
           "step5": "Digital Employee will encrypt and store the admin refresh token. Subsequent scheduled syncs will automatically refresh the access token."
         }
-      }
+      },
+      "syncDirectory": "Sync Directory",
+      "syncError": "Error: {{error}}",
+      "syncWarning": "Warning: {{warning}}",
+      "setupGuide": "Setup Guide & Required Permissions",
+      "copy": "Copy",
+      "copied": "Copied",
+      "saveFirst": "Please save the provider first.",
+      "authorizedAs": "Authorized as {{email}}",
+      "authorizeAdminSync": "Authorize Admin Sync",
+      "reAuthorizeAdminSync": "Re-authorize Admin Sync",
+      "googleAuthDesc": "Sign in with a Google Workspace admin account to grant directory read access. Digital Employee will securely store a refresh token and use it for scheduled sync.",
+      "authorizeUrl": "Authorize URL",
+      "wecomReceiveUrl": "WeCom Receive Message Server URL",
+      "wecomStep1": "Step 1: Go to WeCom App Management, find the \"Receive Messages\" plugin, and set the server URL above as the callback URL.",
+      "wecomStep2": "Step 2: After URL verification passes, go to the \"Agent Management\" plugin and configure the same App ID and App Secret as below.",
+      "wecomStep3": "Step 3: Paste the App Secret into the field above and click Save.",
+      "verifyTokenHint": "Configure the Verify Token and EncodingAESKey fields above, then Save to generate the final URL.",
+      "configDesc": "Configure enterprise directory synchronization and Identity Provider settings.",
+      "active": "Active",
+      "notConfigured": "Not configured",
+      "feishuLarkIntegration": "Feishu / Lark Integration",
+      "wechatWorkIntegration": "WeChat Work Integration",
+      "dingtalkIntegration": "DingTalk App Integration",
+      "googleAdminSync": "Google Admin Directory Sync",
+      "oidcProvider": "Generic OIDC Provider",
+      "syncRelationships": "Sync Relationships",
+      "syncRelationshipsDesc": "Auto-link all org members and company-visible agents to OKR Agent",
+      "syncSuccess": "Relationships synced successfully!",
+      "syncFailed": "Relationship sync failed",
+      "syncFailedRetry": "Sync failed, please retry",
+      "unauthorized": "Unauthorized",
+      "updateSsoFailed": "Failed to update SSO configuration",
+      "googleOAuth": "Google OAuth",
+      "directorySyncAuth": "Directory Sync Authorization"
     },
     "config": {
       "title": "Platform Configuration",
@@ -1562,7 +1772,76 @@
       "title": "Company Intro",
       "description": "Describe your company's mission, products, and culture. This information will be included as context in every Agent conversation.",
       "hint": "This content will appear in every Agent's system prompt"
-    }
+    },
+    "skills": {
+      "skills": "Skills",
+      "searchFailed": "Search failed",
+      "installFailed": "Install failed",
+      "previewFailed": "Preview failed",
+      "importFailed": "Import failed",
+      "containsScripts": "Contains scripts",
+      "cancel": "Cancel",
+      "importSkill": "Import",
+      "importing": "Importing...",
+      "gitHubTokenPlaceholder": "ghp_xxxxxxxxxxxx",
+      "apiKeyPlaceholder": "sk-ant-xxxxxxxxxxxx",
+      "tier1PurePrompt": "Tier 1 · Pure Prompt",
+      "tier2CliApi": "Tier 2 · CLI/API",
+      "tier3Native": "Tier 3 · OpenClaw Native",
+      "updatedAt": "Updated {{date}}"
+    },
+    "okr": {
+      "okrSystem": "OKR System",
+      "okrSystemEnabled": "When enabled, all members and AI agents in the organization can use OKR to manage objectives. The OKR Agent will proactively track and report progress.",
+      "chooseCadenceFirst": "Choose OKR cadence before first enablement",
+      "chooseCadenceDesc": "Choose quarterly or monthly. After OKR is enabled for the first time, this cadence will be locked to keep history and reports consistent.",
+      "quarterly": "Quarterly",
+      "monthly": "Monthly",
+      "savingOkrSettings": "Saving OKR settings...",
+      "settingsSaved": "OKR settings saved",
+      "companyOkrSet": "Company OKR is set",
+      "step1SetCompanyOkr": "Step 1: Set company OKR",
+      "companyObjectivesDesc": "Company objectives are recorded for the current period. Visit the OKR page to view details or nudge members to set their individual OKRs.",
+      "firstStepDesc": "The first step after enabling OKR is to let the OKR Agent record your company objectives. Click the button to open a chat with the OKR Agent and describe your goals for this period.",
+      "chatWithOkrAgent": "Chat with OKR Agent",
+      "openOkrAgentChat": "Open OKR Agent Chat",
+      "okrAgentNotFound": "OKR Agent not found",
+      "periodPreference": "Period Preference",
+      "cadenceLocked": "OKR cadence is locked and cannot be changed",
+      "cadenceLockedDesc": "The OKR cadence is locked after first enablement so history, reports, and nudges keep one consistent meaning.",
+      "enableMemberDaily": "Enable Member Daily Collection",
+      "enableMemberDailyDesc": "Members only submit daily reports. The company daily report is generated at 09:00 the next day, and weekly/monthly summaries are generated automatically.",
+      "skipNonWorkdays": "Skip non-workdays automatically",
+      "collectionTime": "Collection time:",
+      "testing": "Testing...",
+      "testCollectionNow": "Test Collection Now",
+      "timezoneDesc": "Scheduled collection currently follows the company timezone: {{timezone}}",
+      "timezoneWarning": "Your company timezone is still UTC. If you expect China local time, update Company Info to China / Asia/Shanghai first.",
+      "triggeringTest": "Triggering a test collection...",
+      "scheduleDesc": "At this time each day, the OKR Agent starts collecting member daily reports. The company daily report is generated at 09:00 the next day, the weekly report at 09:00 every Monday, and the monthly report at 09:00 on the 1st of each month."
+    },
+    "openclaw": {
+      "openClawSettings": "OpenClaw Settings",
+      "apiKeyDesc": "OpenClaw uses this key to connect to the platform. Regenerating will immediately invalidate the old key.",
+      "regenerate": "Regenerate",
+      "generate": "Generate",
+      "legacyKey": "Legacy key (encrypted), please regenerate to view",
+      "notGenerated": "Not generated",
+      "regenerateKeyQuestion": "Regenerate API Key?",
+      "generateKeyQuestion": "Generate API Key?",
+      "currentKeyRevoked": "The current key will be revoked immediately. All devices using the old key will be disconnected.",
+      "newKeyGenerated": "A new API Key will be generated for this agent.",
+      "generating": "Generating...",
+      "confirm": "Confirm",
+      "dangerZone": "Danger Zone",
+      "dangerZoneDesc": "This action cannot be undone. All chat history, activity logs, and associated data will be permanently deleted.",
+      "confirmDeleteAgent": "Delete agent \"{{name}}\"?",
+      "irreversible": "This action is irreversible.",
+      "deleting": "Deleting...",
+      "delete": "Delete",
+      "deleteThisAgent": "Delete this Agent"
+    },
+    "companyNoSelected": "No company selected. Please refresh the page or contact support."
   },
   "dialog": {
     "confirmTitle": "Please confirm",
@@ -1596,6 +1875,7 @@
     "error": {
       "saveFailed": "Save failed",
       "deleteFailed": "Delete failed",
+      "genericFailed": "Failed",
       "createFailed": "Creation failed",
       "updateFailed": "Update failed",
       "importFailed": "Import failed",
@@ -1621,6 +1901,9 @@
     "yes": "Yes",
     "no": "No",
     "all": "All",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "default": "Default",
     "none": "None",
     "download": "Download",
     "channels": {
@@ -1684,7 +1967,13 @@
     "toast": {
       "collapseDetails": "Collapse Details",
       "viewDetails": "View Details"
-    }
+    },
+    "testEmail": "Test Email",
+    "test": "Test",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Info",
+    "optional": "Optional"
   },
   "openclaw": {
     "created": "OpenClaw Agent Created",
@@ -1859,7 +2148,9 @@
       "toolCategories": {
         "title": "Top 10 Tool Categories",
         "tooltip": "Most popular tool categories across all active agent configurations"
-      }
+      },
+      "loading": "Loading...",
+      "noData": "No data"
     },
     "churn": {
       "title": "Churn Warning",
@@ -1868,16 +2159,19 @@
       "totalTokens": "Total Tokens",
       "lastActive": "Last Active",
       "daysInactive": "Days Inactive",
-      "noWarnings": "No churn warnings — all active companies are healthy"
+      "noWarnings": "No churn warnings — all active companies are healthy",
+      "never": "Never"
     },
     "leaderboards": {
       "topCompanies": {
         "title": "Top 20 Companies by Tokens",
-        "tooltip": "Companies ranked by total cumulative token consumption across all their agents"
+        "tooltip": "Companies ranked by total cumulative token consumption across all their agents",
+        "cacheLabel": "Cache {{cachedTokens}} · {{pct}}%"
       },
       "topAgents": {
         "title": "Top 20 Agents by Tokens",
-        "tooltip": "Individual agents ranked by total cumulative token consumption"
+        "tooltip": "Individual agents ranked by total cumulative token consumption",
+        "cacheLabel": "Cache {{cachedTokens}} · {{pct}}%"
       }
     },
     "loading": "Loading...",
@@ -1948,7 +2242,59 @@
     "ssoConfigDesc": "Configure SSO and custom domain for this company.",
     "ssoEnabled": "Enable SSO",
     "ssoDomain": "Custom Access Domain",
-    "ssoDomainPlaceholder": "e.g. acme.digitalemployee.com"
+    "ssoDomainPlaceholder": "e.g. acme.digitalemployee.com",
+    "companies": "Companies",
+    "platformConfig": "Platform Configuration",
+    "oauthLogin": "OAuth Login",
+    "oauthLoginDesc": "Configure platform-wide social login providers. Once enabled, users can sign in from the main login page with Google or GitHub.",
+    "clientId": "Client ID",
+    "clientSecret": "Client Secret",
+    "scope": "Scope",
+    "authorizedRedirect": "Authorized redirect URI",
+    "authorizationCallback": "Authorization callback URL",
+    "copy": "Copy",
+    "save": "Save",
+    "saved": "Saved",
+    "cancel": "Cancel",
+    "enabledOnLogin": "Enabled on login page",
+    "savedButDisabled": "Saved but disabled",
+    "enabled": "Enabled",
+    "systemEmail": "System Email",
+    "systemEmailDesc": "Configure SMTP settings for sending system emails",
+    "fromAddress": "From Email Address",
+    "fromName": "From Name",
+    "smtpHost": "SMTP Host",
+    "smtpPort": "SMTP Port",
+    "username": "SMTP Username",
+    "password": "SMTP Password / App Password",
+    "timeout": "Timeout (seconds)",
+    "useSsl": "Use SSL/TLS",
+    "sendTestEmail": "Send Test Email",
+    "emailConfigSaved": "Email config saved",
+    "ssoDisabled": "SSO Disabled",
+    "companyManagement": "Company Management",
+    "companyName": "Company Name",
+    "slug": "Slug",
+    "actions": "Actions",
+    "inactive": "Inactive",
+    "default": "Default",
+    "edit": "Edit",
+    "delete": "Delete",
+    "smtpPasswordPlaceholder": "••••••••",
+    "systemEmailPlaceholder": "noreply@yourcompany.com",
+    "fromNamePlaceholder": "DigitalEmployee",
+    "smtpHostPlaceholder": "smtp.gmail.com",
+    "smtpPortPlaceholder": "465",
+    "emailPlaceholder": "your-email@gmail.com",
+    "timeoutPlaceholder": "15",
+    "agentBaySettings": "AgentBay Settings",
+    "agentBayDesc": "Configure AgentBay cloud computer integration",
+    "apiKey": "API Key",
+    "apiKeyFromAgentBay": "API Key (from AgentBay)",
+    "apiKeyPlaceholder": "Enter your AgentBay API key",
+    "cloudComputerOs": "Cloud Computer OS",
+    "linux": "Linux",
+    "windows": "Windows"
   },
   "postHire": {
     "title": "Configure new teammate",

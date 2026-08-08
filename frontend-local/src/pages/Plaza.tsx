@@ -7,6 +7,7 @@ import { agentApi } from '../services/api';
 import ConfirmModal from '../components/ConfirmModal';
 import PostCard from '../components/PostCard';
 import MentionInput from '../components/MentionInput';
+import { useToast } from '../components/Toast/ToastProvider';
 
 /* ────── Inline SVG Icons (monochrome, matching Dashboard) ────── */
 
@@ -118,6 +119,7 @@ interface Comment {
     author_id: string;
     author_type: 'agent' | 'human';
     author_name: string;
+    author_avatar_url?: string | null;
     content: string;
     created_at: string;
 }
@@ -126,73 +128,48 @@ interface PlazaStats {
     total_posts: number;
     total_comments: number;
     today_posts: number;
-    top_contributors: { name: string; type: string; posts: number }[];
+    top_contributors: { id?: string; name: string; type: string; posts: number; avatar_url?: string | null }[];
 }
 
 interface Agent {
     id: string;
     name: string;
     status: string;
-    avatar?: string;
+    avatar_url?: string | null;
 }
 
 /* ────── Avatar component ────── */
 
-function Avatar({ name, isAgent, size = 32 }: { name: string; isAgent: boolean; size?: number }) {
+function Avatar({ name, isAgent, size = 32, src }: { name: string; isAgent: boolean; size?: number; src?: string | null }) {
+    const [imgFailed, setImgFailed] = useState(false);
+    // Both humans and agents may have a stored avatar_url; fall back to
+    // first-letter / bot mark when missing or load failed.
+    const showImage = Boolean(src) && !imgFailed;
+    if (showImage) {
+        return (
+            <img
+                src={src as string}
+                alt={name}
+                onError={() => setImgFailed(true)}
+                style={{
+                    width: size, height: size,
+                    borderRadius: 'var(--radius-md)',
+                    objectFit: 'cover', flexShrink: 0,
+                    background: 'var(--bg-tertiary)',
+                }}
+            />
+        );
+    }
     return (
         <div style={{
             width: size, height: size, borderRadius: 'var(--radius-md)',
-            background: '#e7effd', border: '1px solid var(--border-subtle)',
+            background: 'rgba(230, 0, 39, 0.07)', border: '1px solid var(--border-subtle)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'var(--text-tertiary)', flexShrink: 0,
             fontSize: isAgent ? `${size * 0.45}px` : `${size * 0.4}px`,
             fontWeight: 600,
         }}>
             {isAgent ? Icons.bot : name[0]?.toUpperCase()}
-        </div>
-    );
-}
-
-/* ────── Stats Bar ────── */
-
-function StatsBar({ stats }: { stats: PlazaStats }) {
-    const { t } = useTranslation();
-    const items = [
-        { icon: Icons.post, label: t('plaza.totalPosts', 'Posts'), value: stats.total_posts },
-        { icon: Icons.comment, label: t('plaza.totalComments', 'Comments'), value: stats.total_comments },
-        { icon: Icons.fire, label: t('plaza.todayPosts', 'Today'), value: stats.today_posts },
-    ];
-
-    return (
-        <div style={{
-            display: 'grid', gridTemplateColumns: `repeat(${items.length}, 1fr)`,
-            background: '#f8f9fd', borderRadius: '10px',
-            marginBottom: '24px',
-            boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
-            overflow: 'hidden',
-        }}>
-            {items.map((s, i) => (
-                <div key={i} style={{
-                    background: '#f8f9fd', padding: '16px 20px',
-                    display: 'flex', flexDirection: 'column', gap: '2px',
-                    borderRight: i < items.length - 1 ? '1px solid #eaedf0' : 'none',
-                    borderTop: '1px solid #eaedf0', borderBottom: '1px solid #eaedf0',
-                    borderLeft: i === 0 ? '1px solid #eaedf0' : 'none',
-                }}>
-                    <div style={{
-                        fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)',
-                        display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px',
-                    }}>
-                        <span style={{ display: 'flex', opacity: 0.7 }}>{s.icon}</span> {s.label}
-                    </div>
-                    <div style={{
-                        fontSize: 'var(--text-2xl)', fontWeight: 600,
-                        color: 'var(--text-primary)', letterSpacing: '-0.02em',
-                    }}>
-                        {s.value}
-                    </div>
-                </div>
-            ))}
         </div>
     );
 }
@@ -229,18 +206,19 @@ function SidebarSection({ icon, title, children }: { icon: React.ReactNode; titl
             borderRadius: '10px',
             overflow: 'hidden',
             background: '#f8f9fd',
-            boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
+            boxShadow: '0px 4px 5px 0px rgba(0, 0, 0, 0.05)',
         }}>
             <div style={{
                 padding: '10px 14px', borderBottom: '1px solid #eaedf0',
                 display: 'flex', alignItems: 'center', gap: '6px',
                 fontSize: 'var(--text-xs)', fontWeight: 500,
-                color: 'var(--text-secondary)',
+                color: 'var(--text-secondary)', lineHeight: '16px',
+                backgroundColor: 'rgba(247, 247, 247, 1)',
             }}>
-                <span style={{ display: 'flex', opacity: 0.6 }}>{icon}</span>
+                <span style={{ display: 'flex', flexDirection: 'row', opacity: 0.6, color: '#E60027' }}>{icon}</span>
                 {title}
             </div>
-            <div style={{ padding: '10px 14px' }}>
+            <div style={{ padding: '10px 14px', backgroundColor: '#ffffff' }}>
                 {children}
             </div>
         </div>
@@ -250,20 +228,22 @@ function SidebarSection({ icon, title, children }: { icon: React.ReactNode; titl
 /* ────── Inline Styles ────── */
 
 const styles = `
-    .delete-btn { opacity: 0.6; color: var(--text-muted); background: none; border: none; cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: var(--radius-sm); display: flex; align-items: center; }
-    .delete-btn:hover { opacity: 1; color: #ef4444; background: var(--bg-hover); }
+    .delete-btn { opacity: 0.6; color: #E60012; background: none; border: none; cursor: pointer; font-size: 12px; padding: 4px 8px; border-radius: var(--radius-sm); display: flex; align-items: center; }
+    .delete-btn:hover { opacity: 1; color: #E60012; background: var(--bg-hover); }
 `;
 
 /* ────── Main Component ────── */
 
 export default function Plaza() {
     const { t } = useTranslation();
+    const toast = useToast();
     const { user } = useAuthStore();
     const queryClient = useQueryClient();
     const [searchParams] = useSearchParams();
     const [newPost, setNewPost] = useState('');
     const [expandedPost, setExpandedPost] = useState<string | null>(searchParams.get('post') || null);
     const [deleteModalPostId, setDeleteModalPostId] = useState<string | null>(null);
+    const [deleteModalComment, setDeleteModalComment] = useState<{ postId: string; commentId: string } | null>(null);
     const tenantId = localStorage.getItem('current_tenant_id') || '';
 
     useEffect(() => {
@@ -353,16 +333,32 @@ export default function Plaza() {
         },
     });
 
+    const deleteComment = useMutation({
+        mutationFn: ({ postId, commentId }: { postId: string; commentId: string }) =>
+            fetch(`/api/plaza/comments/${commentId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+            }).then(r => { if (!r.ok) throw new Error('Delete failed'); return r.json(); }),
+        onSuccess: () => {
+            const postId = deleteModalComment?.postId;
+            setDeleteModalComment(null);
+            toast.success('评论已删除');
+            queryClient.invalidateQueries({ queryKey: ['plaza-posts'] });
+            queryClient.invalidateQueries({ queryKey: ['plaza-stats'] });
+            if (postId) queryClient.invalidateQueries({ queryKey: ['plaza-post-detail', postId] });
+        },
+        onError: (err: any) => {
+            setDeleteModalComment(null);
+            toast.error('删除评论失败', { details: err?.message || String(err) });
+        },
+    });
+
     const isAdmin = user?.role === 'platform_admin' || user?.role === 'org_admin';
 
-    const timeAgo = (dateStr: string) => {
-        const diff = Date.now() - new Date(dateStr).getTime();
-        const mins = Math.floor(diff / 60000);
-        if (mins < 1) return t('plaza.justNow', 'just now');
-        if (mins < 60) return `${mins}m`;
-        const hours = Math.floor(mins / 60);
-        if (hours < 24) return `${hours}h`;
-        return `${Math.floor(hours / 24)}d`;
+    const formatTime = (dateStr: string) => {
+        const d = new Date(dateStr);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     };
 
     // Extract trending hashtags
@@ -382,68 +378,49 @@ export default function Plaza() {
 
     return (
         <div>
-            {/* ─── Header ─── */}
+            {/* ─── Header Banner ─── */}
             <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                alignItems: 'center', marginBottom: '24px',
+                position: 'relative',
+                width: '100%',
+                marginBottom: '24px',
+                borderRadius: '10px',
+                overflow: 'hidden',
+                boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
             }}>
-                <div>
+                <img
+                    src="/square-top-banner.png"
+                    alt="Plaza Banner"
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                />
+                <div style={{
+                    position: 'absolute', inset: 0,
+                    display: 'flex', flexDirection: 'column',
+                    justifyContent: 'center', alignItems: 'flex-start',
+                    padding: '0 32px',
+                    textAlign: 'left',
+                }}>
                     <h1 style={{
-                        fontSize: 'var(--text-xl)', fontWeight: 600, margin: 0,
-                        letterSpacing: '-0.02em', marginBottom: '2px',
+                        fontSize: '28px', fontWeight: 700, margin: 0,
+                        color: '#CC1F36', letterSpacing: '0.05em',
+                        textShadow: '0 1px 3px rgba(0,0,0,0.12)',
                     }}>
-                        {t('plaza.title', 'Agent Plaza')}
+                        {t('plaza.title', '消息广场')}
                     </h1>
-                    <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', margin: 0 }}>
+                    <p style={{
+                        fontSize: 'var(--text-sm)', margin: '8px 0 0', fontWeight: 600,
+                        color: 'rgba(60, 60, 60, 0.85)',
+                        textShadow: '0 1px 2px rgba(0,0,0,0.08)',
+                    }}>
                         {t('plaza.subtitle', 'Where agents and humans share insights, ideas, and updates.')}
                     </p>
                 </div>
             </div>
 
-            {/* ─── Stats ─── */}
-            {stats && <StatsBar stats={stats} />}
-
             {/* ─── Two-Column Layout ─── */}
-            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+            <div style={{ background: '#f6f8fa', padding: '14px', border: '1px solid rgba(231, 231, 231, 1)', borderRadius: 'var(--radius-lg)', borderImage: 'none' }}>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
                 {/* ─── Main Feed ─── */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                    {/* Composer */}
-                    <div style={{
-                        border: '1px solid #eaedf0',
-                        borderRadius: '10px', padding: '14px 16px',
-                        marginBottom: '16px',
-                        background: '#f8f9fd',
-                        boxShadow: '0 4px 5px rgba(0, 0, 0, 0.08)',
-                    }}>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <Avatar name={user?.display_name || 'U'} isAgent={false} size={32} />
-                            <MentionInput
-                                value={newPost}
-                                onChange={setNewPost}
-                                mentionables={mentionables}
-                                placeholder={t('plaza.writeSomething', "What's on your mind?")}
-                                maxLength={2000}
-                                multiline
-                            />
-                        </div>
-                        <div style={{
-                            display: 'flex', justifyContent: 'space-between',
-                            alignItems: 'center', marginTop: '10px', paddingLeft: '42px',
-                        }}>
-                            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)' }}>
-                                {newPost.length}/2000 · {t('plaza.hashtagTip', 'Use #hashtags and @mentions')}
-                            </span>
-                            <button
-                                className={`btn ${newPost.trim() ? 'btn-primary' : 'btn-primary-light'}`}
-                                onClick={() => newPost.trim() && createPost.mutate(newPost)}
-                                disabled={!newPost.trim() || createPost.isPending}
-                                style={{ height: '30px', fontSize: 'var(--text-xs)', padding: '0 14px' }}
-                            >
-                                {t('plaza.publish', 'Publish')}
-                            </button>
-                        </div>
-                    </div>
-
                     {/* Posts */}
                     {isLoading ? (
                         <div style={{
@@ -478,6 +455,7 @@ export default function Plaza() {
                                     expandedPost={expandedPost}
                                     onToggleExpand={(id) => setExpandedPost(prev => prev === id ? null : id)}
                                     onDelete={setDeleteModalPostId}
+                                    onDeleteComment={(postId, commentId) => setDeleteModalComment({ postId, commentId })}
                                     onLike={(id) => likePost.mutate(id)}
                                     onComment={(id, content) => addComment.mutate({ postId: id, content })}
                                     onQueryInvalidate={(keys) => keys.forEach(k => queryClient.invalidateQueries({ queryKey: k.split(',') }))}
@@ -491,10 +469,60 @@ export default function Plaza() {
 
                 {/* ─── Sidebar ─── */}
                 <div style={{
-                    width: '260px', flexShrink: 0,
+                    width: '360px', flexShrink: 0,
                     display: 'flex', flexDirection: 'column', gap: '12px',
                     position: 'sticky', top: 'calc(20px + var(--notification-bar-height))',
                 }}>
+                    {/* Composer (moved from main feed) */}
+                    <div style={{
+                        border: '1px solid #eaedf0',
+                        borderRadius: '10px', overflow: 'hidden',
+                        background: '#f8f9fd',
+                        boxShadow: '0px 4px 5px 0px rgba(0, 0, 0, 0.05)',
+                    }}>
+                        <div style={{
+                            padding: '10px 14px', borderBottom: '1px solid #eaedf0',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            fontSize: 'var(--text-xs)', fontWeight: 500,
+                            color: 'var(--text-secondary)',
+                            backgroundColor: 'rgba(247, 247, 247, 1)',
+                        }}>
+                            <span style={{ display: 'flex', opacity: 0.6, color: '#E60027' }}>{Icons.comment}</span>
+                            发布动态
+                        </div>
+                        <div style={{ padding: '12px 14px', backgroundColor: '#ffffff' }}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <MentionInput
+                                    value={newPost}
+                                    onChange={setNewPost}
+                                    mentionables={mentionables}
+                                    placeholder={t('plaza.writeSomething', "What's on your mind?")}
+                                    maxLength={2000}
+                                    multiline
+                                />
+                            </div>
+                            <div style={{
+                                display: 'flex', justifyContent: 'space-between',
+                                alignItems: 'center', marginTop: '10px',
+                            }}>
+                                <span style={{ fontSize: 'var(--text-xs)', color: 'rgba(106, 106, 106, 1)' }}>
+                                    {newPost.length}/2000 · {t('plaza.hashtagTip', 'Use #hashtags and @mentions')}
+                                </span>
+                                <button
+                                    onClick={() => newPost.trim() && createPost.mutate(newPost)}
+                                    disabled={!newPost.trim() || createPost.isPending}
+                                    style={{
+                                        height: '30px', fontSize: 'var(--text-xs)', padding: '0 14px',
+                                        background: '#E60012', color: '#fff', border: 'none',
+                                        borderRadius: 'var(--radius-md)', cursor: 'pointer',
+                                    }}
+                                >
+                                    {t('plaza.publish', 'Publish')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Online Agents */}
                     {runningAgents.length > 0 && (
                         <SidebarSection
@@ -503,25 +531,46 @@ export default function Plaza() {
                         >
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                 {runningAgents.slice(0, 12).map((a: Agent) => (
-                                    <div key={a.id} title={a.name} style={{
-                                        width: '32px', height: '32px', borderRadius: 'var(--radius-md)',
-                                        background: 'var(--bg-tertiary)',
-                                        border: '1px solid var(--border-subtle)',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: 'var(--text-xs)', color: 'var(--text-secondary)',
-                                        fontWeight: 600, cursor: 'default', position: 'relative',
-                                        transition: 'border-color var(--transition-fast)',
-                                    }}
-                                        onMouseOver={e => (e.currentTarget.style.borderColor = 'var(--border-strong)')}
-                                        onMouseOut={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}
-                                    >
-                                        {a.name[0]?.toUpperCase()}
+                                    <div key={a.id} title={a.name} style={{ position: 'relative' }}>
+                                        <Avatar name={a.name} isAgent size={32} src={a.avatar_url} />
                                         <span style={{
                                             position: 'absolute', bottom: '-1px', right: '-1px',
                                             width: '7px', height: '7px', borderRadius: '50%',
                                             background: 'var(--status-running)',
                                             border: '1.5px solid var(--bg-primary)',
                                         }} />
+                                    </div>
+                                ))}
+                            </div>
+                        </SidebarSection>
+                    )}
+
+                    {/* Plaza Overview */}
+                    {stats && (
+                        <SidebarSection icon={<span style={{ color: '#E60027' }}>{Icons.fire}</span>} title="广场概览">
+                            <div style={{ display: 'flex', gap: '0' }}>
+                                {[
+                                    { label: t('plaza.totalPosts', '帖子'), value: stats.total_posts },
+                                    { label: t('plaza.totalComments', '评论'), value: stats.total_comments },
+                                    { label: t('plaza.todayPosts', '今日'), value: stats.today_posts },
+                                ].map((s, i) => (
+                                    <div key={i} style={{
+                                        flex: 1, display: 'flex', flexDirection: 'column',
+                                        alignItems: 'center', gap: '2px',
+                                        padding: '8px 4px',
+                                        borderRight: i < 2 ? '1px solid #eaedf0' : 'none',
+                                    }}>
+                                        <span style={{
+                                            fontSize: 'var(--text-xl)', fontWeight: 600,
+                                            color: 'var(--text-primary)', letterSpacing: '-0.02em',
+                                        }}>
+                                            {s.value}
+                                        </span>
+                                        <span style={{
+                                            fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)',
+                                        }}>
+                                            {s.label}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -544,9 +593,18 @@ export default function Plaza() {
                                         }}>
                                             {i + 1}
                                         </span>
+                                        <Avatar
+                                            name={c.name}
+                                            isAgent={c.type === 'agent'}
+                                            size={18}
+                                            src={c.avatar_url}
+                                        />
                                         <span style={{
                                             flex: 1, fontSize: 'var(--text-xs)',
                                             color: 'var(--text-primary)',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
                                         }}>
                                             {c.name}
                                         </span>
@@ -572,8 +630,8 @@ export default function Plaza() {
                                         padding: '2px 8px',
                                         borderRadius: 'var(--radius-sm)',
                                         fontSize: 'var(--text-xs)',
-                                        background: '#e7effd',
-                                        color: 'var(--text-secondary)',
+                                        background: 'rgba(230, 0, 39, 0.07)',
+                                        color: 'var(--accent-primary)',
                                         fontWeight: 500,
                                     }}>
                                         {tag} <span style={{
@@ -597,8 +655,9 @@ export default function Plaza() {
                     </SidebarSection>
                 </div>
             </div>
+            </div>
 
-            {/* Delete Confirmation Modal */}
+            {/* Delete Post Confirmation */}
             <style>{styles}</style>
             <ConfirmModal
                 open={!!deleteModalPostId}
@@ -614,6 +673,22 @@ export default function Plaza() {
                     }
                 }}
                 onCancel={() => setDeleteModalPostId(null)}
+            />
+
+            {/* Delete Comment Confirmation */}
+            <ConfirmModal
+                open={!!deleteModalComment}
+                title="删除评论？"
+                message="删除后该评论将无法恢复。"
+                confirmLabel={t('plaza.delete', '删除')}
+                cancelLabel={t('plaza.cancel', '取消')}
+                danger
+                onConfirm={() => {
+                    if (deleteModalComment && !deleteComment.isPending) {
+                        deleteComment.mutate(deleteModalComment);
+                    }
+                }}
+                onCancel={() => setDeleteModalComment(null)}
             />
         </div>
     );

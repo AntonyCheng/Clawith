@@ -33,8 +33,12 @@ FINISH_TOOL_DEFINITION: dict[str, Any] = {
 
 FINISH_TOOL_SEED: dict[str, Any] = {
     "name": FINISH_TOOL_NAME,
-    "display_name": "Finish",
-    "description": FINISH_TOOL_DEFINITION["function"]["description"],
+    "display_name": "完成响应",
+    "description": (
+        "结束当前轮次，并把最终面向用户的回复发出。"
+        "当你准备停止时，必须调用本工具。把用户应该看到的完整回复放在 content 中，"
+        "不要在同一次响应中再调用其他工具。"
+    ),
     "category": "system",
     "icon": "check",
     "is_default": True,

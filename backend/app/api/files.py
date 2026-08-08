@@ -867,23 +867,32 @@ async def upload_file_to_workspace(
     await storage.write_bytes(file_key, content, content_type=guess_content_type(filename))
 
     # Auto-extract text from non-text files
-    extracted_path = None
     from app.services.text_extractor import needs_extraction, save_extracted_text
+    extraction: dict | None = None
     if needs_extraction(filename):
         save_path = await ensure_local_path(file_key)
-        txt_file = save_extracted_text(save_path, content, filename)
-        if txt_file:
-            extracted_path = f"{normalized_path}/{txt_file.name}"
+        result = save_extracted_text(save_path, content, filename)
+        extraction = result.to_dict()
+        if result.md_path is not None:
+            extracted_path = f"{normalized_path}/{result.md_path.name}"
             extracted_key = _agent_storage_key(agent_id, extracted_path)
-            await storage.write_bytes(extracted_key, txt_file.read_bytes(), content_type="text/plain; charset=utf-8")
+            await storage.write_bytes(
+                extracted_key,
+                result.md_path.read_bytes(),
+                content_type="text/plain; charset=utf-8",
+            )
 
+    # Keep `extracted_text_path` for backwards compatibility; add structured
+    # `extraction` so the UI can render actionable hints (e.g. scanned PDF).
+    legacy_extracted_path = extraction.get("md_path") if extraction else None
     return {
         "status": "ok",
         "path": f"{normalized_path}/{filename}",
         "url": f"/api/agents/{agent_id}/files/download?path={normalized_path}/{filename}",
         "filename": filename,
         "size": len(content),
-        "extracted_text_path": extracted_path,
+        "extracted_text_path": legacy_extracted_path,
+        "extraction": extraction,
     }
 
 
@@ -960,25 +969,28 @@ async def upload_enterprise_kb_file(
     await storage.write_bytes(storage_key, content, content_type=guess_content_type(filename))
 
     # Auto-extract text from non-text files
-    extracted_path = None
     from app.services.text_extractor import needs_extraction, save_extracted_text
+    extraction: dict | None = None
     if needs_extraction(filename):
         save_path = await ensure_local_path(storage_key)
-        txt_file = save_extracted_text(save_path, content, filename)
-        if txt_file:
-            extracted_path = f"{sub_path}/{txt_file.name}" if sub_path else txt_file.name
+        result = save_extracted_text(save_path, content, filename)
+        extraction = result.to_dict()
+        if result.md_path is not None:
+            extracted_path = f"{sub_path}/{result.md_path.name}" if sub_path else result.md_path.name
             await storage.write_bytes(
                 _enterprise_storage_key(str(current_user.tenant_id), extracted_path),
-                txt_file.read_bytes(),
+                result.md_path.read_bytes(),
                 content_type="text/plain; charset=utf-8",
             )
+    legacy_extracted_path = extraction.get("md_path") if extraction else None
     return {
         "status": "ok",
         "path": rel_path,
         "url": f"/api/enterprise/knowledge-base/download?path={rel_path}",
         "filename": filename,
         "size": len(content),
-        "extracted_text_path": extracted_path,
+        "extracted_text_path": legacy_extracted_path,
+        "extraction": extraction,
     }
 
 

@@ -4,7 +4,7 @@ function Avatar({ name, isAgent, size = 32 }: { name: string; isAgent: boolean; 
     return (
         <div style={{
             width: size, height: size, borderRadius: 'var(--radius-md)',
-            background: '#e7effd', border: '1px solid var(--border-subtle)',
+            background: 'rgba(230, 0, 39, 0.07)', border: '1px solid var(--border-subtle)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: 'var(--text-tertiary)', flexShrink: 0,
             fontSize: isAgent ? `${size * 0.45}px` : `${size * 0.4}px`,
@@ -40,12 +40,32 @@ export default function MentionInput({
     const [mentionFilter, setMentionFilter] = useState('');
     const [mentionStart, setMentionStart] = useState(-1);
     const [selectedIdx, setSelectedIdx] = useState(0);
+    const [dropdownPos, setDropdownPos] = useState<{ left: number; top: number; openUp: boolean } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
 
     const filtered = mentionables.filter(m =>
         m.name.toLowerCase().includes(mentionFilter.toLowerCase())
     ).slice(0, 50);
+
+    const DROPDOWN_WIDTH = 200;
+    const DROPDOWN_MAX_HEIGHT = 240;
+    const GAP = 4;
+
+    const updateDropdownPos = useCallback(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const openUp = spaceBelow < DROPDOWN_MAX_HEIGHT + GAP && spaceAbove > spaceBelow;
+        let left = rect.left;
+        if (left + DROPDOWN_WIDTH > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - 8 - DROPDOWN_WIDTH);
+        }
+        const top = openUp ? rect.top - GAP : rect.bottom + GAP;
+        setDropdownPos({ left, top, openUp });
+    }, []);
 
     const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>) => {
         const val = e.target.value;
@@ -63,11 +83,12 @@ export default function MentionInput({
                 setMentionFilter(query);
                 setShowDropdown(true);
                 setSelectedIdx(0);
+                updateDropdownPos();
                 return;
             }
         }
         setShowDropdown(false);
-    }, [onChange]);
+    }, [onChange, updateDropdownPos]);
 
     const insertMention = useCallback((name: string) => {
         const before = value.substring(0, mentionStart);
@@ -124,6 +145,17 @@ export default function MentionInput({
         return () => document.removeEventListener('mousedown', handleClick);
     }, []);
 
+    useEffect(() => {
+        if (!showDropdown) return;
+        const handler = () => updateDropdownPos();
+        window.addEventListener('scroll', handler, true);
+        window.addEventListener('resize', handler);
+        return () => {
+            window.removeEventListener('scroll', handler, true);
+            window.removeEventListener('resize', handler);
+        };
+    }, [showDropdown, updateDropdownPos]);
+
     const InputTag = multiline ? 'textarea' : 'input';
 
     return (
@@ -141,9 +173,9 @@ export default function MentionInput({
                     resize: multiline ? 'none' : undefined,
                     padding: multiline ? '8px 12px' : '6px 10px',
                     fontSize: 'var(--text-sm)', lineHeight: 1.5,
-                    background: '#f6f9fd',
+                    background: 'rgba(246, 248, 250, 1)',
                     color: 'var(--text-primary)',
-                    border: '1px solid var(--border-default)',
+                    border: '1px solid rgba(231, 231, 231, 1)',
                     borderRadius: 'var(--radius-md)',
                     fontFamily: 'var(--font-family)',
                     transition: 'border-color var(--transition-fast)',
@@ -155,15 +187,19 @@ export default function MentionInput({
                     if (multiline) (e.currentTarget as HTMLTextAreaElement).rows = 3;
                 }}
                 onBlur={e => {
-                    e.currentTarget.style.borderColor = 'var(--border-default)';
+                    e.currentTarget.style.borderColor = 'rgba(231, 231, 231, 1)';
                     e.currentTarget.style.boxShadow = 'none';
                     if (multiline && !value) (e.currentTarget as HTMLTextAreaElement).rows = 2;
                 }}
             />
-            {showDropdown && filtered.length > 0 && (
+            {showDropdown && filtered.length > 0 && dropdownPos && (
                 <div style={{
-                    position: 'absolute', left: 0, top: '100%', zIndex: 100,
-                    marginTop: '4px', width: '200px', maxHeight: '240px',
+                    position: 'fixed',
+                    left: `${dropdownPos.left}px`,
+                    top: `${dropdownPos.top}px`,
+                    transform: dropdownPos.openUp ? 'translateY(-100%)' : undefined,
+                    zIndex: 1000,
+                    width: `${DROPDOWN_WIDTH}px`, maxHeight: `${DROPDOWN_MAX_HEIGHT}px`,
                     background: 'var(--bg-primary)', border: '1px solid var(--border-default)',
                     borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-lg)',
                     overflowY: 'auto', overflowX: 'hidden',
