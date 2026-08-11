@@ -814,7 +814,7 @@ async def test_repeated_invalid_tool_json_is_bounded_by_protocol_code(monkeypatc
             }
         ],
     )
-    fake_client = FakeStreamClient([invalid, invalid])
+    fake_client = FakeStreamClient([invalid] * 11)
     monkeypatch.setattr(caller, "_get_agent_config", lambda _agent_id: _async_return((50, None)))
     monkeypatch.setattr(caller, "_get_user_name", lambda _user_id: _async_return("Ray"))
     monkeypatch.setattr(
@@ -844,12 +844,12 @@ async def test_repeated_invalid_tool_json_is_bounded_by_protocol_code(monkeypatc
     )
 
     assert result.startswith("[Error] invalid_tool_call_protocol_violation:")
-    assert len(fake_client.messages_seen) == 2
+    assert len(fake_client.messages_seen) == 11
     assert fake_client.closed is True
 
 
 @pytest.mark.asyncio
-async def test_invalid_write_file_json_gets_three_bounded_repairs(monkeypatch):
+async def test_invalid_write_file_json_gets_ten_bounded_repairs(monkeypatch):
     from app.services.llm import caller
     from app.services.llm.client import LLMResponse
 
@@ -866,7 +866,7 @@ async def test_invalid_write_file_json_gets_three_bounded_repairs(monkeypatch):
             }
         ],
     )
-    fake_client = FakeStreamClient([invalid, invalid, invalid, invalid])
+    fake_client = FakeStreamClient([invalid] * 11)
     monkeypatch.setattr(caller, "_get_agent_config", lambda _agent_id: _async_return((50, None)))
     monkeypatch.setattr(caller, "_get_user_name", lambda _user_id: _async_return("Ray"))
     monkeypatch.setattr(
@@ -900,7 +900,7 @@ async def test_invalid_write_file_json_gets_three_bounded_repairs(monkeypatch):
         "本次文件生成未完成：write_file 工具参数无效或被截断，连续重试后仍无法执行。"
         "请回复「重新生成」，我会基于当前对话重新尝试。"
     )
-    assert len(fake_client.messages_seen) == 4
+    assert len(fake_client.messages_seen) == 11
     assert fake_client.closed is True
 
 
