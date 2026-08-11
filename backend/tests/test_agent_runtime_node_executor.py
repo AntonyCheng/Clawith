@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import uuid
 from collections import deque
 from typing import cast
-import uuid
 
+import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
-import pytest
 
 from app.config import Settings
 from app.services.agent_runtime.checkpointer import runtime_thread_config
@@ -125,6 +125,35 @@ class ToolService:
         del state, context
         self.calls.append(tool_calls)
         return self.result
+
+
+class RepairFailingToolService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[JsonObject, ...]] = []
+
+    async def execute_pending(
+        self,
+        state: RuntimeGraphState,
+        context: RuntimeContext,
+        tool_calls: tuple[JsonObject, ...],
+    ) -> ToolStepResult:
+        del state, context
+        self.calls.append(tool_calls)
+        call = tool_calls[0]
+        return ToolStepResult(
+            messages=(
+                {
+                    "role": "tool",
+                    "tool_call_id": str(call["id"]),
+                    "name": "read_file",
+                    "content": "$.path is required.",
+                    "execution_status": "failed",
+                    "error_code": "tool_arguments_invalid",
+                    "model_action": "repair_arguments",
+                    "side_effect_state": "none",
+                },
+            )
+        )
 
 
 class PerCallRetryingToolService:
@@ -665,6 +694,47 @@ async def test_tool_batch_is_executed_before_the_next_model_step() -> None:
 
 
 @pytest.mark.asyncio
+async def test_model_node_checkpoints_tool_context_with_pending_calls_atomically() -> None:
+    run_id = uuid.uuid4()
+    tool_call: JsonObject = {
+        "id": "call-context-1",
+        "name": "lookup",
+        "arguments": {"query": "answer"},
+    }
+    step_context: JsonObject = {
+        "version": 1,
+        "assistant_message_id": "assistant-context-1",
+        "model_step": 1,
+        "workset_version": "sha256:test",
+        "accepted_calls": [],
+    }
+    executor = _executor(
+        ModelService(
+            ModelStepResult(
+                intent="tool_calls",
+                assistant_message={
+                    "id": "assistant-context-1",
+                    "role": "assistant",
+                    "tool_calls": [tool_call],
+                },
+                tool_calls=(tool_call,),
+                step_tool_context=step_context,
+            )
+        )
+    )
+    state = _state(run_id)
+
+    update = await executor.execute(
+        "model",
+        state,
+        _context(run_id, executor, "command-context"),
+    )
+
+    assert update["lifecycle"]["pending_tool_calls"] == [tool_call]
+    assert update["lifecycle"]["step_tool_context"] == step_context
+
+
+@pytest.mark.asyncio
 async def test_each_tool_call_gets_an_independent_langgraph_retry_budget(
     monkeypatch,
 ) -> None:
@@ -711,6 +781,74 @@ async def test_each_tool_call_gets_an_independent_langgraph_retry_budget(
         "call-1",
         "call-2",
     ]
+
+
+@pytest.mark.asyncio
+async def test_tenth_same_tool_failure_pauses_before_next_model_call() -> None:
+    run_id = uuid.uuid4()
+    proposals = tuple(
+        ModelStepResult(
+            intent="tool_calls",
+            assistant_message={
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": f"call-{index}",
+                        "name": "read_file",
+                        "arguments": {},
+                    }
+                ],
+            },
+            tool_calls=(
+                {
+                    "id": f"call-{index}",
+                    "name": "read_file",
+                    "arguments": {},
+                },
+            ),
+        )
+        for index in range(1, 12)
+    )
+    model = ModelService(*proposals)
+    tools = RepairFailingToolService()
+    executor = DeterministicRuntimeNodeExecutor(
+        cancel_source=CancelSource(),
+        model_service=model,
+        tool_service=tools,
+        finalizer=Finalizer(),
+    )
+
+    result = await _invoke(run_id, executor)
+
+    lifecycle = result["lifecycle"]
+    assert lifecycle["status"] == "waiting_user"
+    assert lifecycle["reason"] == (
+        "tool_repair_same_fingerprint_limit_reached"
+    )
+    assert lifecycle["model_step_count"] == 10
+    repair_episode = lifecycle["tool_repair_episodes"]["by_tool"]["read_file"]
+    assert repair_episode["total_failures"] == 10
+    assert repair_episode["same_fingerprint_failures"] == 10
+    assert model.calls == 10
+    assert len(tools.calls) == 10
+
+    resumed = await executor.execute(
+        "wait",
+        cast(RuntimeGraphState, result),
+        _context(run_id, executor, "command-user-correction"),
+        resume_value={
+            "resume_type": "user_input",
+            "payload": {"content": "Use README.md as the path."},
+        },
+    )
+    assert resumed["lifecycle"]["tool_repair_episodes"] == {
+        "version": 1,
+        "by_tool": {},
+    }
+    assert resumed["lifecycle"]["tool_repair_reset"]["reason"] == (
+        "explicit_user_correction"
+    )
 
 
 @pytest.mark.asyncio
@@ -1393,7 +1531,7 @@ async def test_verification_repairs_are_bounded() -> None:
     )
     verifier = Verifier(
         VerificationResult(outcome="repair", reason="add evidence"),
-        VerificationResult(outcome="repair", reason="still incomplete"),
+        VerificationResult(outcome="repair", reason="add evidence"),
     )
     executor = _executor(
         model,
@@ -1414,3 +1552,46 @@ async def test_verification_repairs_are_bounded() -> None:
     assert messages[-1]["role"] == "user"
     assert messages[-1]["content"] == "add evidence"
     assert verifier.calls == ["first", "second"]
+
+
+@pytest.mark.asyncio
+async def test_new_verifier_issue_starts_a_fresh_episode() -> None:
+    run_id = uuid.uuid4()
+    model = ModelService(
+        ModelStepResult(intent="finish", finish_content="first"),
+        ModelStepResult(intent="finish", finish_content="second"),
+        ModelStepResult(intent="finish", finish_content="third"),
+    )
+    verifier = Verifier(
+        VerificationResult(
+            outcome="repair",
+            reason="add evidence",
+            details={"code": "missing_evidence"},
+        ),
+        VerificationResult(
+            outcome="repair",
+            reason="fix citation",
+            details={"code": "bad_citation"},
+        ),
+        VerificationResult(
+            outcome="repair",
+            reason="fix citation",
+            details={"code": "bad_citation"},
+        ),
+    )
+    executor = _executor(
+        model,
+        verifier=verifier,
+        max_verification_repairs=1,
+    )
+
+    result = await _invoke(run_id, executor, model_turn_limit=3)
+
+    lifecycle = result["lifecycle"]
+    assert lifecycle["status"] == "failed"
+    assert lifecycle["reason"] == "verification_repair_limit_reached"
+    assert lifecycle["verification_attempt_count"] == 2
+    assert lifecycle["verification_repair_episode"]["issue_code"] == (
+        "bad_citation"
+    )
+    assert model.calls == 3
