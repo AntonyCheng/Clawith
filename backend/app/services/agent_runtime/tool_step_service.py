@@ -219,6 +219,7 @@ class ToolExecutor(Protocol):
         runtime_execution_id: str | None = None,
         runtime_lease_owner: str | None = None,
         runtime_tenant_id: str | None = None,
+        execution_binding: Mapping[str, object] | None = None,
     ) -> ToolExecutionOutcome | str: ...
 
 
@@ -1559,9 +1560,13 @@ class RuntimeToolStepService:
                 "runtime_tenant_id": context.tenant_id,
             }
         try:
+            if accepted.entry.binding.kind == "mcp":
+                executor_arguments["execution_binding"] = (
+                    accepted.entry.binding.to_json()
+                )
             operation_task = asyncio.create_task(
                 self._tool_executor(
-                    accepted.entry.tool_name,
+                    accepted.entry.binding.handler_key,
                     arguments,
                     agent.id,
                     (

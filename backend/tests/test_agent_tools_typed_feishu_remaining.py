@@ -341,7 +341,7 @@ async def test_f4_read_visibility_requires_local_feishu_readiness(
     monkeypatch.setattr(agent_tools, "_agent_has_feishu", not_ready)
     monkeypatch.setattr(
         agent_tools,
-        "_get_runtime_dynamic_mcp_tool_names",
+        "_get_runtime_dynamic_mcp_bindings",
         no_dynamic,
     )
     monkeypatch.setattr(
@@ -378,7 +378,7 @@ async def test_f4_read_visibility_contains_only_ready_assigned_tools(
     monkeypatch.setattr(agent_tools, "_agent_has_feishu", ready)
     monkeypatch.setattr(
         agent_tools,
-        "_get_runtime_dynamic_mcp_tool_names",
+        "_get_runtime_dynamic_mcp_bindings",
         no_dynamic,
     )
     monkeypatch.setattr(
@@ -416,7 +416,7 @@ async def test_approval_create_is_visible_when_assigned_and_feishu_is_ready(
     monkeypatch.setattr(agent_tools, "_agent_has_feishu", ready)
     monkeypatch.setattr(
         agent_tools,
-        "_get_runtime_dynamic_mcp_tool_names",
+        "_get_runtime_dynamic_mcp_bindings",
         no_dynamic,
     )
 
