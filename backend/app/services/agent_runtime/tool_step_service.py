@@ -1748,6 +1748,7 @@ class RuntimeToolStepService:
         outcome: ToolExecutionOutcome,
         messages: Sequence[JsonObject],
         pending_tool_calls: Sequence[JsonObject],
+        step_tool_context: JsonObject | None = None,
     ) -> ToolStepResult:
         """End an unresumable Group Run without creating a user interrupt."""
         normalized, _ = normalize_tool_outcome(
@@ -1777,6 +1778,7 @@ class RuntimeToolStepService:
                 ),
             ),
             pending_tool_calls=tuple(pending_tool_calls),
+            step_tool_context=step_tool_context,
             error={"code": error_code, "message": error_message},
         )
 
@@ -2276,6 +2278,7 @@ class RuntimeToolStepService:
                                 messages=tuple(messages),
                                 waiting_request=waiting_request,
                                 pending_tool_calls=tool_calls[index + 1 :],
+                                step_tool_context=step_context_update,
                             )
                     continue
                 if reservation.blocked:
@@ -2389,6 +2392,7 @@ class RuntimeToolStepService:
                                     outcome=outcome,
                                     messages=messages,
                                     pending_tool_calls=tool_calls[index + 1 :],
+                                    step_tool_context=step_context_update,
                                 )
                             messages.append(
                                 _result_message(
@@ -2432,6 +2436,7 @@ class RuntimeToolStepService:
                                 outcome=outcome,
                                 messages=messages,
                                 pending_tool_calls=tool_calls[index + 1 :],
+                                step_tool_context=step_context_update,
                             )
                         messages.append(
                             _result_message(
@@ -2454,6 +2459,7 @@ class RuntimeToolStepService:
                             outcome=execution_outcome(reservation.execution),
                             messages=messages,
                             pending_tool_calls=tool_calls[index + 1 :],
+                            step_tool_context=step_context_update,
                         )
                     return ToolStepResult(
                         messages=tuple(messages),
@@ -2464,6 +2470,7 @@ class RuntimeToolStepService:
                             error_code=reservation.error_code,
                         ),
                         pending_tool_calls=tool_calls[index:],
+                        step_tool_context=step_context_update,
                     )
 
                 if autonomy_outcome is not None:
@@ -2555,6 +2562,7 @@ class RuntimeToolStepService:
                                     outcome=outcome,
                                     messages=messages,
                                     pending_tool_calls=tool_calls[index + 1 :],
+                                    step_tool_context=step_context_update,
                                 )
                             return ToolStepResult(
                                 messages=tuple(messages),
@@ -2565,6 +2573,7 @@ class RuntimeToolStepService:
                                     error_code="tool_outcome_unknown",
                                 ),
                                 pending_tool_calls=tool_calls[index:],
+                                step_tool_context=step_context_update,
                             )
                     else:
                         if a2a_result is not None:
@@ -2580,6 +2589,7 @@ class RuntimeToolStepService:
                                     outcome=a2a_result.outcome,
                                     messages=messages,
                                     pending_tool_calls=tool_calls[index + 1 :],
+                                    step_tool_context=step_context_update,
                                 )
                             messages.append(
                                 _result_message(
@@ -2594,6 +2604,7 @@ class RuntimeToolStepService:
                                     messages=tuple(messages),
                                     waiting_request=a2a_result.waiting_request,
                                     pending_tool_calls=tool_calls[index + 1 :],
+                                    step_tool_context=step_context_update,
                                 )
                             continue
 
@@ -2711,6 +2722,7 @@ class RuntimeToolStepService:
                                 outcome=outcome,
                                 messages=messages,
                                 pending_tool_calls=tool_calls[index + 1 :],
+                                step_tool_context=step_context_update,
                             )
                         return ToolStepResult(
                             messages=tuple(messages),
@@ -2721,6 +2733,7 @@ class RuntimeToolStepService:
                                 error_code="tool_outcome_unknown",
                             ),
                             pending_tool_calls=tool_calls[index:],
+                            step_tool_context=step_context_update,
                         )
                 else:
                     if isinstance(raw_result, ToolExecutionOutcome):
@@ -2798,6 +2811,7 @@ class RuntimeToolStepService:
                             outcome=outcome,
                             messages=messages,
                             pending_tool_calls=tool_calls[index + 1 :],
+                            step_tool_context=step_context_update,
                         )
                     return ToolStepResult(
                         messages=tuple(messages),
@@ -2808,6 +2822,7 @@ class RuntimeToolStepService:
                             error_code=outcome.error_code or "tool_outcome_unknown",
                         ),
                         pending_tool_calls=tool_calls[index:],
+                        step_tool_context=step_context_update,
                     )
                 messages.append(
                     _result_message(
@@ -2832,13 +2847,15 @@ class RuntimeToolStepService:
         except ToolExecutionError as exc:
             return ToolStepResult(
                 error={"code": exc.code, "message": str(exc)},
+                step_tool_context=step_context_update,
             )
         except Exception as exc:
             return ToolStepResult(
                 error={
                     "code": "tool_execution_failed",
                     "message": f"Runtime tool step failed: {type(exc).__name__}",
-                }
+                },
+                step_tool_context=step_context_update,
             )
 
 
