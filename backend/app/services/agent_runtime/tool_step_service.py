@@ -114,7 +114,6 @@ from app.services.agent_tools import (
     get_runtime_agent_tools_for_llm,
     validate_feishu_approval_create_arguments,
 )
-from app.services.autonomy_service import autonomy_service
 from app.services.builtin_tool_definitions import (
     BUILTIN_TOOL_NAMES,
     builtin_cross_space_action,

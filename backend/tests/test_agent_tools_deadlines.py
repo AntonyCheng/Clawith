@@ -18,7 +18,7 @@ from app.services.agent_runtime.tool_contracts import (
 
 
 def test_deadline_precedence_is_explicit_then_default_capped_by_policy() -> None:
-    assert resolve_tool_deadline_seconds("network_read") == 30
+    assert resolve_tool_deadline_seconds("network_read") == 60
     assert resolve_tool_deadline_seconds("network_read", 12) == 12
     assert resolve_tool_deadline_seconds("network_read", 120) == 60
     assert deadline_policy_for_tool("read_emails").name == "network_read"
