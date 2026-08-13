@@ -65,6 +65,7 @@ import {
     failClosedSessionActiveRun,
     mergeTerminalAssistantMessage,
     runtimeCompletionNeedsMessageRefresh,
+    runtimeTerminalPacketNeedsMessageRefresh,
     sessionActiveRunFromResponse,
     sessionRuntimeStateResponseIsValid,
     type SessionActiveRun,
@@ -3593,7 +3594,8 @@ export default function AgentDetailPage() {
                     return [...prev, { role: 'assistant', content: d.content, _streaming: true } as any];
                 });
             } else if (d.type === 'done') {
-                if (['completed', 'failed', 'cancelled'].includes(String(d.runtime_status))) {
+                const shouldRefreshCanonicalMessages = runtimeTerminalPacketNeedsMessageRefresh(d.runtime_status);
+                if (shouldRefreshCanonicalMessages) {
                     const existingRun = sessionActiveRunRef.current[key];
                     if (existingRun && d.run_id && existingRun.runId === String(d.run_id)) {
                         applySessionActiveRun(agentId, sessionId, {
@@ -3642,6 +3644,13 @@ export default function AgentDetailPage() {
                     fetchAllSessions();
                 }
                 queryClient.invalidateQueries({ queryKey: ['agents'] });
+                // The terminal packet carries only the final assistant message. Tool calls are
+                // projected into ChatMessage rows during delivery settlement, so always reload
+                // the canonical page after a terminal packet even though the local run was
+                // already marked terminal above.
+                if (shouldRefreshCanonicalMessages) {
+                    void refreshSessionMessages(agentId, sessionId);
+                }
             } else if (d.type === 'error' || d.type === 'quota_exceeded') {
                 const runtimeError = normalizeRuntimeError(d);
                 if (runtimeErrorDisablesReconnect(runtimeError)) {
