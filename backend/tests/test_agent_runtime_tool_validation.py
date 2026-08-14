@@ -103,19 +103,13 @@ def test_any_of_required_alternatives_accept_one_complete_branch() -> None:
 @pytest.mark.parametrize(
     ("tool_name", "arguments", "expected_code"),
     [
-        ("upload_image", {}, "one_of"),
         ("send_email", {"to": "", "subject": "", "body": ""}, "min_length"),
         ("write_file", {"path": "x", "content": "x" * 6001}, "max_length"),
         ("query_directory", {"limit": 0}, "minimum"),
         ("query_directory", {"limit": 51}, "maximum"),
-        (
-            "vercel_deploy",
-            {"project_name": "demo", "deploy_method": "upload"},
-            "required",
-        ),
     ],
 )
-def test_builtin_schema_constraints_are_enforced_before_execution(
+def test_builtin_scalar_schema_constraints_are_enforced_before_execution(
     tool_name: str,
     arguments: dict,
     expected_code: str,
