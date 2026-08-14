@@ -1188,14 +1188,29 @@ class DeterministicRuntimeNodeExecutor:
                 }
             )
         elif verification.outcome == "repair":
-            lifecycle.pop("finish_delivery_intent", None)
-            attempts, verification_episode = _verification_repair_attempt(
-                state["lifecycle"],
-                verification,
-            )
+            if verification.details.get("code") == "task_completion_repair_required":
+                attempts = _counter(
+                    state["lifecycle"],
+                    "verification_attempt_count",
+                ) + 1
+                verification_episode = {
+                    "fingerprint": "task_completion_repair_required",
+                    "attempts": attempts,
+                    "issue_code": "task_completion_repair_required",
+                }
+            else:
+                attempts, verification_episode = _verification_repair_attempt(
+                    state["lifecycle"],
+                    verification,
+                )
             lifecycle["verification_attempt_count"] = attempts
             lifecycle["verification_repair_episode"] = verification_episode
-            if attempts > self._max_verification_repairs:
+            if (
+                attempts > self._max_verification_repairs
+                and verification.details.get("code")
+                != "task_completion_repair_required"
+            ):
+                lifecycle.pop("finish_delivery_intent", None)
                 lifecycle.pop("pending_group_at", None)
                 lifecycle.update(
                     {
@@ -1208,7 +1223,59 @@ class DeterministicRuntimeNodeExecutor:
                         ),
                     }
                 )
+            elif attempts > self._max_verification_repairs:
+                exhausted_details = {
+                    **dict(verification.details),
+                    "code": "completion_gate_exhausted",
+                    "repair_attempts": self._max_verification_repairs,
+                    "rejected_candidates": attempts,
+                    "last_outcome": verification.outcome,
+                    "last_reason": verification.reason,
+                }
+                exhausted = VerificationResult(
+                    outcome="pass",
+                    details=cast(JsonObject, exhausted_details),
+                )
+                finalized = await self._finalizer.finalize(
+                    state,
+                    context,
+                    candidate,
+                    exhausted,
+                )
+                delivery_request = (
+                    dict(finalized.delivery_request)
+                    if finalized.delivery_request is not None
+                    else None
+                )
+                if raw_finish_delivery_intent is not None:
+                    delivery_request = delivery_request or {}
+                    delivery_request["content"] = candidate
+                    delivery_request["group_handoff"] = dict(
+                        raw_finish_delivery_intent
+                    )
+                lifecycle.pop("finish_delivery_intent", None)
+                lifecycle.pop("pending_group_at", None)
+                lifecycle["verification_result"] = {
+                    "outcome": "exhausted",
+                    "reason": verification.reason,
+                    "details": cast(JsonObject, exhausted_details),
+                }
+                lifecycle.update(
+                    {
+                        "status": "completed",
+                        "next_route": "terminal",
+                        "reason": "completion_gate_exhausted",
+                        "result_summary": dict(finalized.result_summary),
+                        "session_context_delta": (
+                            dict(finalized.session_context_delta)
+                            if finalized.session_context_delta is not None
+                            else None
+                        ),
+                        "delivery_request": delivery_request,
+                    }
+                )
             else:
+                lifecycle.pop("finish_delivery_intent", None)
                 lifecycle.update(
                     {
                         "status": "running",
