@@ -1051,24 +1051,16 @@ class DeterministicRuntimeNodeExecutor:
             lifecycle.pop("step_tool_context", None)
             lifecycle.update(
                 {
-                    "status": "waiting_user",
-                    "next_route": "wait",
+                    "status": "failed",
+                    "next_route": "terminal",
                     "reason": repair_pause_reason,
                     "pending_tool_calls": [],
-                    "waiting_request": {
-                        "waiting_type": "user",
-                        "correlation_id": _runtime_message_id(
-                            context,
-                            f"tool-repair:{repair_pause_reason}:{repair_pause_tool}",
-                        ),
-                        "reason": repair_pause_reason,
-                        "question": (
-                            f"Tool {repair_pause_tool or 'unknown'} reached its "
-                            "repair safety limit. Provide corrected requirements "
-                            "or arguments to continue."
-                        ),
-                    },
-                    "error": None,
+                    "waiting_request": None,
+                    "error": _error(
+                        repair_pause_reason,
+                        f"Tool {repair_pause_tool or 'unknown'} reached its "
+                        "repair safety limit.",
+                    ),
                 }
             )
         else:
