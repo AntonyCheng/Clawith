@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import replace
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -14,6 +17,7 @@ from app.services.agent_runtime.checkpoint_side_effects import (
     RuntimeCheckpointSideEffectError,
     RuntimeCheckpointSideEffects,
     delivery_from_checkpoint,
+    project_direct_tool_history,
 )
 from app.services.agent_runtime.command_worker import (
     CheckpointObservation,
@@ -30,6 +34,25 @@ class _ScalarResult:
 
     def scalar_one_or_none(self) -> object:
         return self.value
+
+
+class _ScalarsResult:
+    def __init__(self, values: list[object]) -> None:
+        self.values = values
+
+    def scalars(self) -> _ScalarsResult:
+        return self
+
+    def all(self) -> list[object]:
+        return self.values
+
+
+class _RowsResult:
+    def __init__(self, values: list[tuple[object, object]]) -> None:
+        self.values = values
+
+    def all(self) -> list[tuple[object, object]]:
+        return self.values
 
 
 class _Transaction:
@@ -340,6 +363,87 @@ async def test_checkpoint_projects_replayable_tool_activity_with_redacted_argume
         "Correct $.path and call the Tool again."
     )
     assert activities[1]["args"]["api_key"] == "[REDACTED]"
+
+
+@pytest.mark.asyncio
+async def test_direct_tool_history_uses_all_durable_events_after_checkpoint_compaction() -> None:
+    run, _, _ = _records(lifecycle={"final_answer": "done"})
+    session_id = uuid.uuid4()
+    run = replace(run, session_id=session_id)
+    origin_user_id = uuid.uuid4()
+    earlier = datetime(2026, 8, 14, 10, 0, tzinfo=UTC)
+    later = datetime(2026, 8, 14, 11, 0, tzinfo=UTC)
+    events = [
+        SimpleNamespace(
+            run_id=run.run_id,
+            created_at=earlier,
+            payload={
+                "status": "done",
+                "activity_type": "tool_call",
+                "call_id": "call-before-compaction",
+                "call_instance_id": "call-before-compaction",
+                "name": "read_file",
+                "args": {"path": "old.txt"},
+                "result": "old",
+                "execution_status": "succeeded",
+                "reasoning_content": "Read the earlier file",
+            },
+        ),
+        SimpleNamespace(
+            run_id=run.run_id,
+            created_at=later,
+            payload={
+                "status": "done",
+                "activity_type": "tool_call",
+                "call_id": "call-after-compaction",
+                "call_instance_id": "call-after-compaction",
+                "name": "write_file",
+                "args": {"path": "new.txt"},
+                "result": "saved",
+                "execution_status": "succeeded",
+                "reasoning_content": "Write the later file",
+            },
+        ),
+    ]
+
+    class _HistorySession:
+        def __init__(self) -> None:
+            self.statements = []
+            self.results = [
+                _ScalarsResult([]),
+                _RowsResult([(event, origin_user_id) for event in events]),
+            ]
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            if self.results:
+                return self.results.pop(0)
+            return _ScalarResult(None)
+
+    db = _HistorySession()
+    await project_direct_tool_history(
+        db,  # type: ignore[arg-type]
+        tenant_id=run.tenant_id,
+        agent_id=uuid.UUID(run.agent_id),
+        session_id=session_id,
+        run_id=run.run_id,
+    )
+
+    inserts = [
+        statement.compile(dialect=postgresql.dialect()).params
+        for statement in db.statements
+        if "INSERT INTO chat_messages" in str(statement)
+    ]
+    event_where = str(db.statements[1]).split("WHERE", 1)[1]
+    assert "agent_runs.agent_id" in event_where
+    assert "agent_run_events.agent_id =" not in event_where
+    assert [payload["created_at"] for payload in inserts] == [earlier, later]
+    assert [payload["tenant_id"] for payload in inserts] == [run.tenant_id] * 2
+    assert [payload["conversation_id"] for payload in inserts] == [str(session_id)] * 2
+    assert [
+        json.loads(payload["content"])["tool_call_id"]
+        for payload in inserts
+    ] == ["call-before-compaction", "call-after-compaction"]
 
 
 @pytest.mark.asyncio

@@ -33,6 +33,9 @@ from app.services.agent_runtime.run_state_reader import (
     RunStateReadError,
     open_run_state_reader as _open_run_state_reader,
 )
+from app.services.agent_runtime.checkpoint_side_effects import (
+    project_direct_tool_history,
+)
 from app.services.agent_runtime.tool_execution import (
     ToolExecutionError,
     is_user_reconcilable_unknown_execution,
@@ -810,6 +813,14 @@ async def get_session_messages(
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     _authorize_session_owner(current_user, agent, session)
+
+    if session.session_type == "direct":
+        await project_direct_tool_history(
+            db,
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            session_id=session_id,
+        )
 
     query = (
         select(ChatMessage)
