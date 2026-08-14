@@ -1,6 +1,7 @@
 """Contracts for Session-scoped sandbox policy and Redis execution leases."""
 
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
@@ -155,6 +156,164 @@ async def test_execution_lease_is_tenant_scoped_and_owner_only(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_same_group_session_uses_distinct_agent_leases(monkeypatch) -> None:
+    redis = FakeRedis()
+
+    async def fake_get_redis():
+        return redis
+
+    monkeypatch.setattr(execution_lease, "get_redis", fake_get_redis)
+    tenant_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    first_scope = SandboxExecutionScope(tenant_id, uuid.uuid4(), session_id)
+    second_scope = SandboxExecutionScope(tenant_id, uuid.uuid4(), session_id)
+    store = SandboxExecutionLeaseStore()
+
+    first = await store.acquire(first_scope)
+    second = await store.acquire(second_scope)
+
+    assert first is not None
+    assert second is not None
+    assert first.key != second.key
+    await first.release()
+    await second.release()
+
+
+def test_same_group_session_artifacts_remain_agent_scoped() -> None:
+    session_id = uuid.uuid4()
+    path = f"workspace/output/{session_id}/result.txt"
+    first_agent = uuid.uuid4()
+    second_agent = uuid.uuid4()
+
+    first_ref = agent_tools._workspace_artifact_ref(first_agent, path)
+    second_ref = agent_tools._workspace_artifact_ref(second_agent, path)
+
+    assert first_ref == f"workspace://{first_agent}/{path}"
+    assert second_ref == f"workspace://{second_agent}/{path}"
+    assert first_ref != second_ref
+
+
+@pytest.mark.asyncio
+async def test_authorized_native_group_scope_executes_with_isolated_output(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    tenant_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    output_path = f"workspace/output/{session_id}/result.txt"
+    calls = []
+
+    class _Lease:
+        ownership_lost = False
+
+        async def start_heartbeat(self):
+            return None
+
+        async def ensure_publication_window(self, _seconds):
+            return True
+
+        async def release(self):
+            return None
+
+    async def tool_config(*_args):
+        return {"workspace_mode": "isolated_output"}
+
+    async def authorize(**kwargs):
+        calls.append(("authorize", kwargs))
+        return object()
+
+    async def acquire(_self, scope, **_kwargs):
+        calls.append(("lease", scope))
+        return _Lease()
+
+    async def prepare(*_args, **kwargs):
+        calls.append(("materialize", kwargs))
+        return SimpleNamespace(root=tmp_path, cleanup=lambda: None)
+
+    async def execute(_agent_id, _root, _arguments, **kwargs):
+        calls.append(("execute", kwargs))
+        return ToolExecutionOutcome("succeeded", "ok", None)
+
+    async def flush(*_args, **_kwargs):
+        return {
+            "updated": [output_path],
+            "deleted": [],
+            "conflicted": [],
+            "skipped": [],
+        }
+
+    monkeypatch.setattr(agent_tools, "_get_tool_config", tool_config)
+    monkeypatch.setattr(
+        agent_tools.chat_session_dao,
+        "get_active_for_sandbox_agent",
+        authorize,
+    )
+    monkeypatch.setattr(SandboxExecutionLeaseStore, "acquire", acquire)
+    monkeypatch.setattr(agent_tools, "_prepare_temp_workspace", prepare)
+    monkeypatch.setattr(agent_tools, "_execute_code_outcome", execute)
+    monkeypatch.setattr(agent_tools, "flush_temp_workspace", flush)
+    monkeypatch.setattr(
+        "app.config.get_sandbox_config",
+        lambda: SandboxConfig(workspace_mode="merge"),
+    )
+
+    outcome = await agent_tools._execute_code_with_workspace_outcome(
+        agent_id=agent_id,
+        tenant_id=str(tenant_id),
+        session_id=str(session_id),
+        arguments={"language": "python", "code": "print(1)"},
+        tool_name="execute_code",
+    )
+
+    assert outcome.status == "succeeded"
+    assert outcome.artifact_refs == (f"workspace://{agent_id}/{output_path}",)
+    assert [call[0] for call in calls] == ["authorize", "lease", "materialize", "execute"]
+    assert calls[0][1] == {
+        "tenant_id": tenant_id,
+        "agent_id": agent_id,
+        "session_id": session_id,
+    }
+    assert calls[1][1] == SandboxExecutionScope(tenant_id, agent_id, session_id)
+    assert calls[2][1]["publish_paths"] == [f"workspace/output/{session_id}"]
+    assert calls[3][1]["session_id"] == str(session_id)
+    assert calls[3][1]["publish_paths"] == [f"workspace/output/{session_id}"]
+
+
+@pytest.mark.asyncio
+async def test_scope_resolver_uses_sandbox_session_authorization(monkeypatch) -> None:
+    tenant_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    calls = []
+
+    async def authorize(**kwargs):
+        calls.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(
+        agent_tools.chat_session_dao,
+        "get_active_for_sandbox_agent",
+        authorize,
+    )
+
+    scope = await agent_tools._resolve_sandbox_execution_scope(
+        tenant_id=str(tenant_id),
+        agent_id=agent_id,
+        session_id=str(session_id),
+    )
+
+    assert scope == SandboxExecutionScope(tenant_id, agent_id, session_id)
+    assert calls == [
+        {
+            "tenant_id": tenant_id,
+            "agent_id": agent_id,
+            "session_id": session_id,
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_local_session_busy_fails_before_code(monkeypatch) -> None:
     tenant_id = uuid.uuid4()
     agent_id = uuid.uuid4()
@@ -201,6 +360,8 @@ async def test_local_session_busy_fails_before_code(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_invalid_session_scope_fails_before_lease(monkeypatch) -> None:
     acquired = False
+    materialized = False
+    executed = False
 
     async def tool_config(*_args):
         return {"workspace_mode": "isolated_output"}
@@ -212,9 +373,19 @@ async def test_invalid_session_scope_fails_before_lease(monkeypatch) -> None:
         nonlocal acquired
         acquired = True
 
+    async def forbidden_materialize(*_args, **_kwargs):
+        nonlocal materialized
+        materialized = True
+
+    async def forbidden_execute(*_args, **_kwargs):
+        nonlocal executed
+        executed = True
+
     monkeypatch.setattr(agent_tools, "_get_tool_config", tool_config)
     monkeypatch.setattr(agent_tools, "_resolve_sandbox_execution_scope", invalid_scope)
     monkeypatch.setattr(SandboxExecutionLeaseStore, "acquire", forbidden_acquire)
+    monkeypatch.setattr(agent_tools, "_prepare_temp_workspace", forbidden_materialize)
+    monkeypatch.setattr(agent_tools, "_execute_code_outcome", forbidden_execute)
     monkeypatch.setattr("app.config.get_sandbox_config", lambda: SandboxConfig())
 
     outcome = await agent_tools._execute_code_with_workspace_outcome(
@@ -227,3 +398,5 @@ async def test_invalid_session_scope_fails_before_lease(monkeypatch) -> None:
 
     assert outcome.error_code == "sandbox_execution_scope_invalid"
     assert acquired is False
+    assert materialized is False
+    assert executed is False

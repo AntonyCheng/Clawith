@@ -1975,7 +1975,7 @@ async def _resolve_sandbox_execution_scope(
         raise ValueError("Session sandbox execution requires a tenant")
     tenant_uuid = parse_canonical_uuid(tenant_id, label="tenant_id")
     session_uuid = parse_canonical_uuid(session_id, label="session_id")
-    chat_session = await chat_session_dao.get_active_for_agent(
+    chat_session = await chat_session_dao.get_active_for_sandbox_agent(
         tenant_id=tenant_uuid,
         agent_id=agent_id,
         session_id=session_uuid,
