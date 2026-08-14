@@ -784,7 +784,7 @@ async def test_each_tool_call_gets_an_independent_langgraph_retry_budget(
 
 
 @pytest.mark.asyncio
-async def test_tenth_same_tool_failure_pauses_before_next_model_call() -> None:
+async def test_tenth_same_tool_failure_fails_run_before_next_model_call() -> None:
     run_id = uuid.uuid4()
     proposals = tuple(
         ModelStepResult(
@@ -822,33 +822,23 @@ async def test_tenth_same_tool_failure_pauses_before_next_model_call() -> None:
     result = await _invoke(run_id, executor)
 
     lifecycle = result["lifecycle"]
-    assert lifecycle["status"] == "waiting_user"
+    assert lifecycle["status"] == "failed"
+    assert lifecycle["next_route"] == "terminal"
     assert lifecycle["reason"] == (
         "tool_repair_same_fingerprint_limit_reached"
     )
+    assert lifecycle["error"] == {
+        "code": "tool_repair_same_fingerprint_limit_reached",
+        "message": "Tool read_file reached its repair safety limit.",
+    }
+    assert lifecycle["pending_tool_calls"] == []
+    assert lifecycle.get("waiting_request") is None
     assert lifecycle["model_step_count"] == 10
     repair_episode = lifecycle["tool_repair_episodes"]["by_tool"]["read_file"]
     assert repair_episode["total_failures"] == 10
     assert repair_episode["same_fingerprint_failures"] == 10
     assert model.calls == 10
     assert len(tools.calls) == 10
-
-    resumed = await executor.execute(
-        "wait",
-        cast(RuntimeGraphState, result),
-        _context(run_id, executor, "command-user-correction"),
-        resume_value={
-            "resume_type": "user_input",
-            "payload": {"content": "Use README.md as the path."},
-        },
-    )
-    assert resumed["lifecycle"]["tool_repair_episodes"] == {
-        "version": 1,
-        "by_tool": {},
-    }
-    assert resumed["lifecycle"]["tool_repair_reset"]["reason"] == (
-        "explicit_user_correction"
-    )
 
 
 @pytest.mark.asyncio
