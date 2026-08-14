@@ -13,6 +13,7 @@ import pytest
 
 from app.models.agent_tool_execution import AgentToolExecution
 from app.services import agent_tools
+from app.models.llm import LLMModel
 from app.services.agent_runtime.state import (
     RunInputSnapshots,
     RuntimeContext,
@@ -29,8 +30,13 @@ from app.services.agent_runtime.tool_result_store import (
     ToolResultStore,
     ToolResultStoreError,
 )
-from app.services.agent_runtime.verification import ToolLedgerRuntimeVerifier
+from app.services.agent_runtime.verification import (
+    TaskCompletionGate,
+    ToolLedgerRuntimeVerifier,
+)
+from app.services.llm.single_step import LLMCompletionStep
 from app.services.storage_runtime.base import StorageBackend
+from app.services.token_tracker import TokenUsage
 
 
 class _MemoryStorage(StorageBackend):
@@ -954,6 +960,109 @@ async def test_verifier_uses_invocation_context_without_checkpoint_registry() ->
 
     assert passed.outcome == "pass"
     assert passed.details["code"] == "deterministic_checks_passed"
+
+
+@pytest.mark.asyncio
+async def test_completion_gate_invalid_output_fails_open() -> None:
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    model_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    model = LLMModel(
+        id=model_id,
+        tenant_id=tenant_id,
+        provider="openai",
+        model="judge-model",
+        api_key_encrypted="unused",
+        label="Judge",
+        enabled=True,
+    )
+
+    async def invalid_completion(*args, **kwargs):
+        del args, kwargs
+        return LLMCompletionStep(
+            content="not json",
+            tool_calls=(),
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(),
+        )
+
+    gate = TaskCompletionGate(
+        session_factory=_factory(_ScalarResult(model)),
+        completion=invalid_completion,
+    )
+    context = RuntimeContext(
+        tenant_id=str(tenant_id),
+        run_id=str(run_id),
+        command_id="command-gate",
+        executor=object(),  # type: ignore[arg-type]
+        goal="Produce the requested report",
+        model_id=str(model_id),
+        agent_id=str(agent_id),
+    )
+
+    result = await gate.verify(_state(tenant_id, run_id), context, "report result")
+
+    assert result.outcome == "pass"
+    assert result.details == {
+        "code": "completion_gate_error",
+        "gate_error_code": "invalid_completion_gate_output",
+    }
+
+
+@pytest.mark.asyncio
+async def test_completion_gate_explicit_repair_is_actionable() -> None:
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    model_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    model = LLMModel(
+        id=model_id,
+        tenant_id=tenant_id,
+        provider="openai",
+        model="judge-model",
+        api_key_encrypted="unused",
+        label="Judge",
+        enabled=True,
+    )
+
+    async def repair_completion(*args, **kwargs):
+        del args, kwargs
+        return LLMCompletionStep(
+            content=json.dumps(
+                {
+                    "verdict": "repair",
+                    "missing_requirements": ["The report file was not read back"],
+                    "next_actions": ["Read the report and verify its contents"],
+                    "evidence": ["write_file succeeded"],
+                }
+            ),
+            tool_calls=(),
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(),
+        )
+
+    gate = TaskCompletionGate(
+        session_factory=_factory(_ScalarResult(model)),
+        completion=repair_completion,
+    )
+    context = RuntimeContext(
+        tenant_id=str(tenant_id),
+        run_id=str(run_id),
+        command_id="command-gate",
+        executor=object(),  # type: ignore[arg-type]
+        goal="Produce and verify the requested report",
+        model_id=str(model_id),
+        agent_id=str(agent_id),
+    )
+
+    result = await gate.verify(_state(tenant_id, run_id), context, "report done")
+
+    assert result.outcome == "repair"
+    assert result.details["code"] == "task_completion_repair_required"
+    assert "Read the report" in (result.reason or "")
 
 
 async def _true_reference(

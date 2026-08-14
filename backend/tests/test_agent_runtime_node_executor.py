@@ -1646,6 +1646,53 @@ async def test_verification_repairs_are_bounded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_task_completion_gate_exhaustion_delivers_latest_candidate() -> None:
+    run_id = uuid.uuid4()
+    model = ModelService(
+        ModelStepResult(intent="finish", finish_content="first draft"),
+        ModelStepResult(intent="finish", finish_content="latest useful result"),
+    )
+    verifier = Verifier(
+        VerificationResult(
+            outcome="repair",
+            reason="missing one requirement",
+            details={
+                "code": "task_completion_repair_required",
+                "missing_requirements": ["include the source"],
+                "artifact_refs": [],
+                "evidence_refs": [],
+            },
+        ),
+        VerificationResult(
+            outcome="repair",
+            reason="source still missing",
+            details={
+                "code": "task_completion_repair_required",
+                "missing_requirements": ["include the source"],
+                "artifact_refs": [],
+                "evidence_refs": [],
+            },
+        ),
+    )
+    executor = _executor(
+        model,
+        verifier=verifier,
+        max_verification_repairs=1,
+    )
+
+    result = await _invoke(run_id, executor)
+
+    lifecycle = result["lifecycle"]
+    assert lifecycle["status"] == "completed"
+    assert lifecycle["reason"] == "completion_gate_exhausted"
+    assert lifecycle["final_answer"] == "latest useful result"
+    assert lifecycle["verification_result"]["outcome"] == "exhausted"
+    assert lifecycle["verification_result"]["details"]["repair_attempts"] == 1
+    assert lifecycle["verification_result"]["details"]["rejected_candidates"] == 2
+    assert lifecycle["result_summary"]["summary"] == "latest useful result"
+
+
+@pytest.mark.asyncio
 async def test_new_verifier_issue_starts_a_fresh_episode() -> None:
     run_id = uuid.uuid4()
     model = ModelService(
