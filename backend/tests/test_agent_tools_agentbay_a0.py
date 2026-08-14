@@ -179,7 +179,8 @@ async def test_agentbay_readiness_uses_only_local_key_and_os_configuration(
     assert _runtime_names(resolved) == AGENTBAY_TOOL_NAMES
     assert config_calls
     assert {tool_name for _, tool_name in config_calls} == {
-        "agentbay_browser_navigate"
+        "agentbay_browser_navigate",
+        "execute_code",
     }
 
 

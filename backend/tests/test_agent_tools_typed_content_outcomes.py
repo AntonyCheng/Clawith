@@ -339,7 +339,12 @@ async def test_execute_code_uses_exit_code_and_never_reexecutes_unknown(
     import app.config as config_module
     from app.services.sandbox import registry
 
-    config = SimpleNamespace(max_timeout=60, allow_network=False)
+    config = SimpleNamespace(
+        max_timeout=60,
+        allow_network=False,
+        workspace_mode="merge",
+        publication_owner="workspace_cas",
+    )
     monkeypatch.setattr(config_module, "get_sandbox_config", lambda: config)
 
     async def no_agent_config(*args, **kwargs):
@@ -360,7 +365,7 @@ async def test_execute_code_uses_exit_code_and_never_reexecutes_unknown(
         def _format_result(self, result):
             return f"exit={result.exit_code}"
 
-    backend = Backend(SimpleNamespace(success=True, exit_code=0))
+    backend = Backend(SimpleNamespace(success=True, exit_code=0, error=None))
     monkeypatch.setattr(registry, "get_sandbox_backend", lambda _config: backend)
     success = await agent_tools._execute_code_outcome(
         uuid.uuid4(),
@@ -369,7 +374,7 @@ async def test_execute_code_uses_exit_code_and_never_reexecutes_unknown(
     )
     assert success.status == "succeeded"
 
-    backend.result = SimpleNamespace(success=False, exit_code=7)
+    backend.result = SimpleNamespace(success=False, exit_code=7, error=None)
     failed = await agent_tools._execute_code_outcome(
         uuid.uuid4(),
         tmp_path,
