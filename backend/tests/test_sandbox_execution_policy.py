@@ -105,13 +105,13 @@ async def test_runtime_tools_apply_isolated_output_prompt(monkeypatch) -> None:
         return {"workspace_mode": "isolated_output"}
 
     async def no_dynamic_mcp(_agent_id):
-        return set()
+        return {}
 
     monkeypatch.setattr(agent_tools, "get_agent_tools_for_llm", agent_tools_for_llm)
     monkeypatch.setattr(agent_tools, "_get_tool_config", tool_config)
     monkeypatch.setattr(
         agent_tools,
-        "_get_runtime_dynamic_mcp_tool_names",
+        "_get_runtime_dynamic_mcp_bindings",
         no_dynamic_mcp,
     )
 
