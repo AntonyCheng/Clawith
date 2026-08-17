@@ -1198,20 +1198,22 @@ async def get_group_session_unread_count(
     old_message_id = _watermark_message_id(state, session_id)
     position_filter = None
     if old_message_id is not None:
-        old_message = await _session_message(
-            db,
-            session_id=session_id,
-            message_id=old_message_id,
-            error_code="group_read_state_invalid",
+        result = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.id == old_message_id,
+                ChatMessage.conversation_id == str(session_id),
+            )
         )
-        old_created_at, _ = _message_position(
-            old_message,
-            error_code="group_read_state_invalid",
-        )
-        position_filter = or_(
-            ChatMessage.created_at > old_created_at,
-            (ChatMessage.created_at == old_created_at) & (ChatMessage.id > old_message_id),
-        )
+        old_message = result.scalar_one_or_none()
+        if old_message is not None:
+            old_created_at, _ = _message_position(
+                old_message,
+                error_code="group_read_state_invalid",
+            )
+            position_filter = or_(
+                ChatMessage.created_at > old_created_at,
+                (ChatMessage.created_at == old_created_at) & (ChatMessage.id > old_message_id),
+            )
 
     filters = [
         ChatMessage.conversation_id == str(session_id),
