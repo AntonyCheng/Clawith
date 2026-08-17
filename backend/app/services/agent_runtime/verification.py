@@ -39,7 +39,14 @@ _HTTP_EVIDENCE_TOOL_NAMES = frozenset(
 )
 _TASK_COMPLETION_SYSTEM_PROMPT = """You are the independent completion gate for one Clawith Run.
 
-Decide whether the original task is fully completed from the supplied evidence.
+Decide whether the current task is fully completed from the supplied evidence.
+Later authenticated human resume messages are authoritative amendments to the
+original goal. When they conflict, the latest human decision wins. In
+particular, a Workspace source-preservation decision removes any requirement to
+publish the rejected Agent candidate on those conflicted paths. Never prescribe
+replaying the reconciled Tool or overwriting the preserved Workspace version.
+The structured `runtime_reconciliation_action=keep_workspace` field is
+authoritative evidence of that decision.
 The candidate answer is a claim, not evidence. Tool success is evidence only for
 what that Tool Result objectively proves. Do not require work that the original
 task did not request, and do not accept partial progress, plans, or unsupported
@@ -79,7 +86,16 @@ def _completion_evidence(state: RuntimeGraphState) -> dict[str, object]:
     for message in reversed(messages):
         compact = {
             key: message[key]
-            for key in ("role", "name", "content", "tool_calls", "tool_call_id")
+            for key in (
+                "role",
+                "name",
+                "content",
+                "tool_calls",
+                "tool_call_id",
+                "runtime_input",
+                "runtime_confirmation_text",
+                "runtime_reconciliation_action",
+            )
             if key in message
         }
         size = len(_bounded_json(compact, max_chars=remaining))
@@ -91,6 +107,20 @@ def _completion_evidence(state: RuntimeGraphState) -> dict[str, object]:
     evidence: dict[str, object] = {
         "initial_input": state["snapshots"].initial_input,
         "trajectory": retained,
+        "authoritative_task_amendments": [
+            {
+                key: message[key]
+                for key in (
+                    "content",
+                    "runtime_confirmation_text",
+                    "runtime_reconciliation_action",
+                )
+                if key in message
+            }
+            for message in messages
+            if message.get("role") == "user"
+            and message.get("runtime_input") == "resume"
+        ],
     }
     if state.get("thread_summary") is not None:
         evidence["thread_summary"] = state["thread_summary"]

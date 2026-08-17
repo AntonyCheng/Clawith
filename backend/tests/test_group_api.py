@@ -931,6 +931,15 @@ async def test_current_human_member_settles_group_workspace_candidate_idempotent
             assert command.run_id == run.id
             assert command.actor_user_id == user.id
             assert command.payload["correlation_id"] == "tool-reconcile:run"
+            assert command.payload["resume_type"] == "tool_reconciliation"
+            content = command.payload["payload"]["content"]
+            if outcome == "applied":
+                assert "Agent file result" in content
+            else:
+                assert "overrides conflicting original" in content
+            assert command.payload["payload"]["workspace_resolution_action"] == (
+                expected_action
+            )
             return SimpleNamespace()
 
     monkeypatch.setattr(groups_api, "_current_participant", fake_participant)

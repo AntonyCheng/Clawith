@@ -1473,12 +1473,13 @@ async def reconcile_group_tool_execution(
                 "correlation_id": correlation_id,
                 "payload": {
                     "content": (
-                        "Use the Agent result."
+                        "The user chose the Agent file result. Continue the current task without replaying the original Tool."
                         if body.outcome == "applied"
-                        else "Preserve the current Workspace source files."
+                        else "The user chose to preserve the current Workspace source files. This decision overrides conflicting original file-content requirements. Continue without replaying the original Tool."
                     ),
                     "confirmation_text": note,
                     "tool_execution_id": str(execution_id),
+                    "workspace_resolution_action": expected_action,
                 },
             },
             actor_user_id=current_user.id,

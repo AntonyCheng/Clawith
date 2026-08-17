@@ -818,10 +818,12 @@ async def reconcile_direct_tool_execution(
                     "correlation_id": body.correlation_id.strip(),
                     "payload": {
                         "content": (
-                            "已使用 Agent 的文件结果。"
+                            "用户已选择使用 Agent 的文件结果，请继续当前任务，且不要重新执行原工具。"
                             if body.outcome == "applied"
-                            else "已保留工作区中的源文件。"
-                        )
+                            else "用户已选择保留工作区中的源文件；该选择优先于原任务中冲突的文件内容要求。请继续当前任务，且不要重新执行原工具。"
+                        ),
+                        "confirmation_text": note,
+                        "workspace_resolution_action": expected_action,
                     },
                 },
                 actor_user_id=current_user.id,

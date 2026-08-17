@@ -1141,7 +1141,11 @@ async def test_workspace_reconciliation_resume_returns_to_pending_tools() -> Non
         _context(run_id, executor, "command-reconcile"),
         resume_value={
             "resume_type": "tool_reconciliation",
-            "payload": {"content": "已保留工作区中的源文件。"},
+            "payload": {
+                "content": "已保留工作区中的源文件。",
+                "confirmation_text": "keep_workspace",
+                "workspace_resolution_action": "keep_workspace",
+            },
         },
     )
 
@@ -1153,6 +1157,15 @@ async def test_workspace_reconciliation_resume_returns_to_pending_tools() -> Non
         "correlation_id": "tool-confirm-1",
         "tool_call_id": "call-write-1",
     }
+    assert update["lifecycle"]["deferred_resume_messages"][0]["content"] == (
+        "已保留工作区中的源文件。"
+    )
+    assert update["lifecycle"]["deferred_resume_messages"][0][
+        "runtime_confirmation_text"
+    ] == "keep_workspace"
+    assert update["lifecycle"]["deferred_resume_messages"][0][
+        "runtime_reconciliation_action"
+    ] == "keep_workspace"
 
 
 @pytest.mark.asyncio
