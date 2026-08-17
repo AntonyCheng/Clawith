@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -3922,6 +3922,16 @@ export default function AgentDetailPage() {
     // Read-only history scroll-to-bottom
     const historyContainerRef = useRef<HTMLDivElement>(null);
     const historySentinelRef = useRef<HTMLDivElement>(null);
+    const pendingHistoryScrollAnchorRef = useRef<{
+        element: HTMLDivElement;
+        scrollHeight: number;
+        scrollTop: number;
+    } | null>(null);
+    const pendingChatScrollAnchorRef = useRef<{
+        element: HTMLDivElement;
+        scrollHeight: number;
+        scrollTop: number;
+    } | null>(null);
     const [showHistoryScrollBtn, setShowHistoryScrollBtn] = useState(false);
     const scheduleComposerFocus = useCallback(() => {
         let attempts = 0;
@@ -4015,21 +4025,19 @@ export default function AgentDetailPage() {
                     runtimeError: normalizeRuntimeError({ error: m.runtime_error }),
                 }),
             }));
-            // Save current scroll position
             const el = historyContainerRef.current;
-            const oldScrollHeight = el?.scrollHeight ?? 0;
+            if (el) {
+                pendingHistoryScrollAnchorRef.current = {
+                    element: el,
+                    scrollHeight: el.scrollHeight,
+                    scrollTop: el.scrollTop,
+                };
+            }
             setHistoryMsgs(prev => [...preParsed, ...prev]);
             // Update the oldest cursor (first message in the new batch, since messages are in chronological order).
             // Round-trip the compound `<created_at>|<id>` cursor so equal-timestamp batches don't stall pagination.
             setHistoryOldestTimestamp(msgs[0].cursor ?? msgs[0].created_at);
             setHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
-            // Restore scroll position after new messages are prepended
-            requestAnimationFrame(() => {
-                if (el) {
-                    const newScrollHeight = el.scrollHeight;
-                    el.scrollTop = newScrollHeight - oldScrollHeight;
-                }
-            });
         } catch (err: any) {
             console.error('Failed to load more history messages:', err);
         } finally {
@@ -4065,27 +4073,43 @@ export default function AgentDetailPage() {
                     runtimeError: normalizeRuntimeError({ error: m.runtime_error }),
                 }),
             }));
-            // Save current scroll position
             const el = chatContainerRef.current;
-            const oldScrollHeight = el?.scrollHeight ?? 0;
+            if (el) {
+                pendingChatScrollAnchorRef.current = {
+                    element: el,
+                    scrollHeight: el.scrollHeight,
+                    scrollTop: el.scrollTop,
+                };
+            }
             setChatMessages(prev => [...preParsed, ...prev]);
             // Update the oldest cursor (first message in the new batch, since messages are in chronological order).
             // Round-trip the compound `<created_at>|<id>` cursor so equal-timestamp batches don't stall pagination.
             setChatOldestTimestamp(msgs[0].cursor ?? msgs[0].created_at);
             setChatHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
-            // Restore scroll position after new messages are prepended
-            requestAnimationFrame(() => {
-                if (el) {
-                    const newScrollHeight = el.scrollHeight;
-                    el.scrollTop = newScrollHeight - oldScrollHeight;
-                }
-            });
         } catch (err: any) {
             console.error('Failed to load more chat history messages:', err);
         } finally {
             setChatHistoryLoadingMore(false);
         }
     }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp]);
+
+    useLayoutEffect(() => {
+        const anchor = pendingHistoryScrollAnchorRef.current;
+        if (!anchor) return;
+        pendingHistoryScrollAnchorRef.current = null;
+        const { element } = anchor;
+        if (element !== historyContainerRef.current) return;
+        element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+    }, [historyMsgs.length]);
+
+    useLayoutEffect(() => {
+        const anchor = pendingChatScrollAnchorRef.current;
+        if (!anchor) return;
+        pendingChatScrollAnchorRef.current = null;
+        const { element } = anchor;
+        if (element !== chatContainerRef.current) return;
+        element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+    }, [chatMessages.length]);
 
     useEffect(() => {
         const container = isWritableSession(activeSession) ? chatContainerRef.current : historyContainerRef.current;
