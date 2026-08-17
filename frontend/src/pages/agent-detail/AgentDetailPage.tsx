@@ -3932,6 +3932,8 @@ export default function AgentDetailPage() {
         scrollHeight: number;
         scrollTop: number;
     } | null>(null);
+    const chatHistoryPrependingRef = useRef(false);
+    const chatHistoryPrependReleaseRef = useRef<number | null>(null);
     const [showHistoryScrollBtn, setShowHistoryScrollBtn] = useState(false);
     const scheduleComposerFocus = useCallback(() => {
         let attempts = 0;
@@ -3962,6 +3964,7 @@ export default function AgentDetailPage() {
         setShowScrollBtn(true);
     }, [cancelLiveAutoFollow]);
     const scheduleLiveScrollToBottom = useCallback(() => {
+        if (chatHistoryPrependingRef.current) return;
         if (userPinnedAwayFromBottomRef.current) return;
         cancelLiveAutoFollow();
         const jobId = liveScrollJobRef.current;
@@ -4075,6 +4078,8 @@ export default function AgentDetailPage() {
             }));
             const el = chatContainerRef.current;
             if (el) {
+                chatHistoryPrependingRef.current = true;
+                cancelLiveAutoFollow();
                 pendingChatScrollAnchorRef.current = {
                     element: el,
                     scrollHeight: el.scrollHeight,
@@ -4091,7 +4096,7 @@ export default function AgentDetailPage() {
         } finally {
             setChatHistoryLoadingMore(false);
         }
-    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp]);
+    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp, cancelLiveAutoFollow]);
 
     useLayoutEffect(() => {
         const anchor = pendingHistoryScrollAnchorRef.current;
@@ -4107,9 +4112,24 @@ export default function AgentDetailPage() {
         if (!anchor) return;
         pendingChatScrollAnchorRef.current = null;
         const { element } = anchor;
-        if (element !== chatContainerRef.current) return;
-        element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+        if (element === chatContainerRef.current) {
+            element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+        }
+        if (chatHistoryPrependReleaseRef.current != null) {
+            window.cancelAnimationFrame(chatHistoryPrependReleaseRef.current);
+        }
+        chatHistoryPrependReleaseRef.current = window.requestAnimationFrame(() => {
+            chatHistoryPrependingRef.current = false;
+            chatHistoryPrependReleaseRef.current = null;
+        });
     }, [chatMessages.length]);
+
+    useEffect(() => () => {
+        if (chatHistoryPrependReleaseRef.current != null) {
+            window.cancelAnimationFrame(chatHistoryPrependReleaseRef.current);
+        }
+        chatHistoryPrependingRef.current = false;
+    }, []);
 
     useEffect(() => {
         const container = isWritableSession(activeSession) ? chatContainerRef.current : historyContainerRef.current;

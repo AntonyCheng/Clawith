@@ -29,5 +29,8 @@ test('direct chat keeps document scrolling separate from history pagination', ()
   assert.match(agentDetail, /useLayoutEffect/);
   assert.match(agentDetail, /anchor\.scrollTop \+ \(element\.scrollHeight - anchor\.scrollHeight\)/);
   assert.doesNotMatch(agentDetail, /newScrollHeight - oldScrollHeight/);
+  assert.match(agentDetail, /chatHistoryPrependingRef\.current = true;\s*cancelLiveAutoFollow\(\);/);
+  assert.match(agentDetail, /if \(chatHistoryPrependingRef\.current\) return;/);
+  assert.match(agentDetail, /chatHistoryPrependingRef\.current = false;/);
   assert.match(styles, /\.agent-chat-message-scroll\s*\{[^}]*overflow-anchor:\s*none;/s);
 });
