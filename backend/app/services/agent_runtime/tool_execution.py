@@ -192,6 +192,7 @@ _RESULT_METADATA_KEYS = frozenset(
         "async_poll_correlation_id",
         "async_poll_call_id",
         "async_poll_scheduled",
+        "async_poll_failure_count",
         "external_reconciliation",
         "reconciled_by_user_id",
         "reconciled_at",

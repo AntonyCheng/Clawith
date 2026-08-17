@@ -124,6 +124,7 @@ from app.services.builtin_tool_definitions import (
     is_reserved_custom_tool_name,
 )
 from app.services.agent_runtime.tool_execution import (
+    SAFE_READ_MAX_ATTEMPTS,
     ToolExecutionOutcome,
     sanitize_tool_arguments,
 )
@@ -26216,11 +26217,13 @@ def _vercel_async_deployment_metadata(
     deployment_id: str,
     deployment_state: str,
     pending: bool,
+    poll_failure_count: int = 0,
 ) -> dict:
     return {
         **dict(metadata),
         "deployment_id": deployment_id,
         "deployment_state": deployment_state,
+        "async_poll_failure_count": poll_failure_count,
         "runtime_async_pending": pending,
         "async_operation": {
             "version": 1,
@@ -26232,6 +26235,7 @@ def _vercel_async_deployment_metadata(
                 "arguments": {
                     "operation": "poll",
                     "deployment_id": deployment_id,
+                    "poll_failure_count": poll_failure_count,
                 },
                 "interval_ms": 2000,
             },
@@ -26245,6 +26249,7 @@ def _vercel_deployment_state_outcome(
     deployment_url: str | None,
     deployment_state: str,
     metadata: Mapping[str, object],
+    poll_failure_count: int = 0,
 ) -> ToolExecutionOutcome:
     from urllib.parse import quote
 
@@ -26256,6 +26261,7 @@ def _vercel_deployment_state_outcome(
             deployment_id=deployment_id,
             deployment_state=normalized_state,
             pending=pending,
+            poll_failure_count=poll_failure_count,
         )
         if pending or metadata.get("operation") == "deployment_status"
         else dict(metadata)
@@ -26264,6 +26270,18 @@ def _vercel_deployment_state_outcome(
         f"vercel-deployment://{quote(deployment_id, safe='')}",
     )
     artifact_refs = (deployment_url,) if deployment_url is not None else ()
+    if pending and poll_failure_count >= SAFE_READ_MAX_ATTEMPTS:
+        return _typed_unknown(
+            "Vercel deployment status could not be confirmed after "
+            f"{poll_failure_count} consecutive poll failures.",
+            "vercel_deployment_poll_retry_exhausted",
+            result_ref=deployment_id,
+            metadata={
+                **result_metadata,
+                "runtime_async_pending": False,
+                "runtime_retry_exhausted": True,
+            },
+        )
     if pending:
         return _typed_pending(
             f"Vercel deployment {deployment_id} is still {normalized_state}.",
@@ -26360,12 +26378,22 @@ async def _vercel_deploy_outcome(
             if isinstance(deployment_id_value, str)
             else ""
         )
+        poll_failure_count_value = arguments.get("poll_failure_count", 0)
+        poll_failure_count = (
+            poll_failure_count_value
+            if isinstance(poll_failure_count_value, int)
+            and not isinstance(poll_failure_count_value, bool)
+            and 0 <= poll_failure_count_value < SAFE_READ_MAX_ATTEMPTS
+            else None
+        )
         if (
             not deployment_id
             or len(deployment_id.encode("utf-8")) > 512
+            or poll_failure_count is None
         ):
             return _typed_failure(
-                "vercel_deploy internal poll requires deployment_id.",
+                "vercel_deploy internal poll requires deployment_id and a valid "
+                "poll_failure_count.",
                 "invalid_tool_arguments",
             )
         try:
@@ -26406,6 +26434,7 @@ async def _vercel_deploy_outcome(
                     "provider": "vercel",
                     "operation": "deployment_status",
                 },
+                poll_failure_count=poll_failure_count + 1,
             )
         deployment_state, deployment_url = observation
         return _vercel_deployment_state_outcome(
@@ -26416,6 +26445,7 @@ async def _vercel_deploy_outcome(
                 "provider": "vercel",
                 "operation": "deployment_status",
             },
+            poll_failure_count=0,
         )
     if operation != "launch":
         return _typed_failure(

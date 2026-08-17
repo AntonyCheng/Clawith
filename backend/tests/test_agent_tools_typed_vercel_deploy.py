@@ -285,6 +285,7 @@ def assert_async_deployment_operation(
             "arguments": {
                 "operation": "poll",
                 "deployment_id": DEPLOYMENT_ID,
+                "poll_failure_count": 0,
             },
             "interval_ms": 2000,
         },
@@ -880,6 +881,77 @@ async def test_internal_poll_does_not_accept_a_mismatched_deployment(
     )
     assert provider.count("POST") == 0
     assert provider.count("PATCH") == 0
+    provider.assert_done()
+
+
+@pytest.mark.asyncio
+async def test_internal_poll_exhausts_ten_consecutive_status_read_failures(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    provider = ScriptedVercel(
+        ExpectedCall(
+            "GET",
+            f"/v13/deployments/{DEPLOYMENT_ID}",
+            httpx.ReadTimeout("poll timed out"),
+        )
+    )
+    install_vercel(
+        monkeypatch,
+        provider,
+        workspace_root=tmp_path / "missing-workspace",
+    )
+
+    result = await execute(
+        {
+            "operation": "poll",
+            "deployment_id": DEPLOYMENT_ID,
+            "poll_failure_count": 9,
+        }
+    )
+
+    outcome = assert_outcome(result, "unknown")
+    assert outcome.error_code == "vercel_deployment_poll_retry_exhausted"
+    assert outcome.metadata["async_poll_failure_count"] == 10
+    assert outcome.metadata["runtime_retry_exhausted"] is True
+    assert outcome.metadata["runtime_async_pending"] is False
+    assert provider.count("POST") == 0
+    provider.assert_done()
+
+
+@pytest.mark.asyncio
+async def test_successful_pending_observation_resets_poll_failure_count(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    provider = ScriptedVercel(
+        ExpectedCall(
+            "GET",
+            f"/v13/deployments/{DEPLOYMENT_ID}",
+            FakeResponse(200, deployment_receipt("BUILDING")),
+        )
+    )
+    install_vercel(
+        monkeypatch,
+        provider,
+        workspace_root=tmp_path / "missing-workspace",
+    )
+
+    result = await execute(
+        {
+            "operation": "poll",
+            "deployment_id": DEPLOYMENT_ID,
+            "poll_failure_count": 9,
+        }
+    )
+
+    outcome = assert_outcome(result, "pending")
+    assert outcome.metadata["async_poll_failure_count"] == 0
+    assert outcome.metadata["async_operation"]["poll"]["arguments"] == {
+        "operation": "poll",
+        "deployment_id": DEPLOYMENT_ID,
+        "poll_failure_count": 0,
+    }
     provider.assert_done()
 
 

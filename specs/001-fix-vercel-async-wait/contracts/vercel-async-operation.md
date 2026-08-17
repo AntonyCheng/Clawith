@@ -20,7 +20,8 @@
         "tool": "vercel_deploy",
         "arguments": {
           "operation": "poll",
-          "deployment_id": "dpl_xxx"
+          "deployment_id": "dpl_xxx",
+          "poll_failure_count": 0
         },
         "interval_ms": 2000
       }
@@ -45,4 +46,7 @@ The terminal result MUST retain the same operation key and set `runtime_async_pe
 - A poll MUST NOT call any project-create, file-upload, repository-link, or deployment-create endpoint.
 - A poll MUST NOT use project deployment-list results for settlement.
 - A non-terminal state or transient status-read timeout MUST NOT produce `succeeded`.
+- Consecutive transient status-read failures MUST retry at most 10 times. A
+  successful provider observation resets the counter. Exhaustion MUST produce
+  `unknown`/reconciliation because the deployment's terminal state is unproven.
 - The contract MUST NOT require a Model-generated wait or polling Tool call.

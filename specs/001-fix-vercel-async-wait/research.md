@@ -32,15 +32,18 @@ prove which deployment belongs to the original Tool operation.
 ## Decision 3: Keep polling internal and fixed-interval
 
 **Decision**: The Runtime-generated poll invokes an internal `vercel_deploy` mode with the existing
-two-second interval. The public Model-facing deployment request remains unchanged.
+two-second interval. Known provider-pending states may continue polling, while consecutive status-read
+failures are capped at the Runtime safe-read limit of 10 and reset after a successful observation. The
+public Model-facing deployment request remains unchanged.
 
 **Rationale**: This is the smallest compatible change and prevents Model turns between polls.
 
 **Alternatives considered**:
 
 - Publicly expose a new status Tool or operation discriminator: rejected as unnecessary API expansion.
-- Add adaptive backoff, deadlines, or cancellation: deferred because the approved scope is production
-  stopgap, not Runtime redesign.
+- Add adaptive backoff or an overall provider-pending deadline: deferred because the approved scope is
+  production stopgap, not Runtime redesign. Exhausted status-read failures enter reconciliation rather
+  than declaring the external deployment failed without provider proof.
 
 ## Decision 4: Preserve provider truth at terminal settlement
 
