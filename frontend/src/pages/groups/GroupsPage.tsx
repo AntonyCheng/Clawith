@@ -578,6 +578,7 @@ export default function GroupsPage() {
         run: GroupRunStateWithReconciliation,
         pending: GroupPendingToolReconciliation,
         outcome: 'applied' | 'not_applied',
+        allAccept = false,
     ) => {
         if (!groupId || !sessionId || !run.correlation_id || reconcilingExecutionId) return;
         setReconcilingExecutionId(pending.execution_id);
@@ -591,6 +592,7 @@ export default function GroupsPage() {
                         outcome,
                         correlation_id: run.correlation_id,
                         note: outcome === 'applied' ? 'apply_candidate' : 'keep_workspace',
+                        all_accept: allAccept,
                     }),
                 },
             );
@@ -940,6 +942,19 @@ export default function GroupsPage() {
                                         )}
                                     >
                                         使用 Agent 的结果
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        disabled={reconcilingExecutionId !== null}
+                                        onClick={() => void reconcileWorkspaceCandidate(
+                                            run,
+                                            pending,
+                                            'applied',
+                                            true,
+                                        )}
+                                    >
+                                        本次任务全部使用 Agent 的结果
                                     </button>
                                 </div>
                             </div>

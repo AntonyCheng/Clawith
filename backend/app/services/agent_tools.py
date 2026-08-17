@@ -1983,6 +1983,20 @@ async def _recover_workspace_candidate(
 ) -> tuple[bool, dict[str, object]]:
     """Apply only unchanged-base items; never overwrite a third version."""
     verification = await service.verify_current(scope, candidate_ref)
+    auto_accept = False
+    if verification.status == "needs_resolution":
+        async with async_session() as db:
+            run = await db.scalar(
+                select(AgentRun).where(
+                    AgentRun.tenant_id == uuid.UUID(scope.tenant_id),
+                    AgentRun.id == uuid.UUID(scope.run_id),
+                )
+            )
+            target = run.delivery_target if run is not None else None
+            auto_accept = (
+                isinstance(target, dict)
+                and target.get("workspace_conflict_policy") == "use_agent_result"
+            )
     if verification.status in {"not_saved", "mixed"} and not (
         verification.counts["conflict"] or verification.counts["unverified"]
     ):
@@ -1991,6 +2005,14 @@ async def _recover_workspace_candidate(
             candidate_ref,
             authorized=True,
             require_base_match=True,
+        )
+        if application.status in {"applied", "already_applied"}:
+            verification = await service.verify_current(scope, candidate_ref)
+    elif auto_accept:
+        application = await service.apply_candidate(
+            scope,
+            candidate_ref,
+            authorized=True,
         )
         if application.status in {"applied", "already_applied"}:
             verification = await service.verify_current(scope, candidate_ref)

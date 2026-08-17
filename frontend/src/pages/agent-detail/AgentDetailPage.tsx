@@ -3819,6 +3819,7 @@ export default function AgentDetailPage() {
     const handleToolReconciliation = async (
         reconciliation: ToolReconciliation,
         outcome: 'applied' | 'not_applied',
+        allAccept = false,
     ) => {
         if (!id || !activeSession?.id || !selectedSessionActiveRun?.correlationId) return;
         const correlationId = selectedSessionActiveRun.correlationId;
@@ -3851,6 +3852,7 @@ export default function AgentDetailPage() {
                         note: applied
                             ? 'User confirmed in Direct Chat that the operation took effect.'
                             : 'User confirmed in Direct Chat that the operation did not take effect.',
+                        all_accept: allAccept,
                     }),
                 },
             );
@@ -7259,6 +7261,20 @@ export default function AgentDetailPage() {
                                                                             ? t('agent.chat.useAgentResult', '使用 Agent 的结果')
                                                                             : t('agent.chat.reconcileApplied', '确认已生效，继续')}
                                                                     </button>
+                                                                    {reconciliation.workspaceResolution && (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-primary"
+                                                                            disabled={reconcilingExecutionId !== null}
+                                                                            onClick={() => void handleToolReconciliation(
+                                                                                reconciliation,
+                                                                                'applied',
+                                                                                true,
+                                                                            )}
+                                                                        >
+                                                                            {t('agent.chat.useAgentResultForRun', '本次任务全部使用 Agent 的结果')}
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         ))}

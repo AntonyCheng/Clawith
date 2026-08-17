@@ -185,6 +185,7 @@ class ReconcileToolExecutionIn(BaseModel):
     outcome: Literal["applied", "not_applied"]
     correlation_id: str
     note: str
+    all_accept: bool = False
 
 
 class ReconcileToolExecutionOut(BaseModel):
@@ -750,6 +751,10 @@ async def reconcile_direct_tool_execution(
                 status_code=409,
                 detail=f"workspace_candidate_{application.status}",
             )
+    if workspace_resolution and body.outcome == "applied" and body.all_accept:
+        target = dict(run.delivery_target or {})
+        target["workspace_conflict_policy"] = "use_agent_result"
+        run.delivery_target = target
     try:
         execution = await reconcile_unknown_tool_execution(
             db,
@@ -785,6 +790,7 @@ async def reconcile_direct_tool_execution(
                 "confirmed_outcome": body.outcome,
                 "status": execution.status,
                 "note": note[:2_000],
+                "all_accept": body.all_accept,
             },
         )
     )
