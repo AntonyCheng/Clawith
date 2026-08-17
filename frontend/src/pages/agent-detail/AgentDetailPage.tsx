@@ -1240,10 +1240,11 @@ function AnalysisCard({
     const stopped = hasRunningTool && chatActive === false;
     const isRunning = !stopped && (hasRunningTool || (!hasTools && isGroupRunning));
     const runningTool = [...toolItems].reverse().find(tc => tc.status === 'running') ?? null;
+    const resolvedToolCount = Math.max(totalToolCount ?? 0, toolItems.length);
     const headerTitle = isRunning && runningTool
         ? getToolMeta(runningTool).title
         : totalToolCount != null
-            ? t('agent.chat.toolCallsTotal', { count: totalToolCount })
+            ? t('agent.chat.toolCallsTotal', { count: resolvedToolCount })
             : describeAnalysis(items, t);
 
     return (

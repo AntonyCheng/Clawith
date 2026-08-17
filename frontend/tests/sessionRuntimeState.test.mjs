@@ -296,6 +296,17 @@ test('workspace reconciliation keeps decisions in the composer and passive statu
   assert.doesNotMatch(agentDetailSource, /analysis-tool-reconciliation__actions/);
 });
 
+test('loaded Tool rows cannot be hidden behind a stale zero session count', () => {
+  assert.match(
+    agentDetailSource,
+    /Math\.max\(totalToolCount \?\? 0, toolItems\.length\)/,
+  );
+  assert.match(
+    agentDetailSource,
+    /toolCallsTotal', \{ count: resolvedToolCount \}/,
+  );
+});
+
 test('onboarding only treats an authoritative runtime-state payload as loaded', () => {
   assert.equal(sessionRuntimeStateResponseIsValid({ active_run: null }, null), true);
   assert.equal(sessionRuntimeStateResponseIsValid({}, null), false);
