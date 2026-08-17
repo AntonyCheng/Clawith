@@ -6448,7 +6448,6 @@ export default function AgentDetailPage() {
                                 gap: 0,
                                 flex: 1,
                                 minHeight: 0,
-                                height: 'calc(100vh - 100px)',
                                 margin: '0 8px 8px',
                                 border: '1px solid rgba(0, 0, 0, 0.06)',
                                 borderRadius: '12px',
@@ -6721,7 +6720,7 @@ export default function AgentDetailPage() {
                                                     <>Read-only · {activeSession.username || 'User'}</>
                                                 )}
                                             </div>
-                                            <div ref={historyContainerRef} onScroll={handleHistoryScroll} style={{ flex: 1, overflowY: 'auto', padding: '48px 16px 12px' }}>
+                                            <div ref={historyContainerRef} onScroll={handleHistoryScroll} className="agent-chat-message-scroll" style={{ padding: '48px 16px 12px' }}>
                                                 {historyLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
                                                         Loading more messages...
@@ -6840,7 +6839,8 @@ export default function AgentDetailPage() {
                                                 onWheelCapture={handleChatWheelCapture}
                                                 onTouchStartCapture={handleChatTouchStartCapture}
                                                 onTouchMoveCapture={handleChatTouchMoveCapture}
-                                                style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}
+                                                className="agent-chat-message-scroll"
+                                                style={{ padding: '12px 16px' }}
                                             >
                                                 {chatHistoryLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-tertiary)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>

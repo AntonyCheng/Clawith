@@ -3711,6 +3711,13 @@ select:focus {
   flex-direction: column;
 }
 
+.agent-chat-message-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
 .agent-detail-header {
   flex-shrink: 0;
 }
