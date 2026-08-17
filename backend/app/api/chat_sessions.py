@@ -33,6 +33,8 @@ from app.services.agent_runtime.run_state_reader import (
     RunStateReadError,
     open_run_state_reader as _open_run_state_reader,
 )
+from app.services.agent_runtime.adapter import RuntimeCommandIntake
+from app.services.agent_runtime.contracts import ResumeRunCommand
 from app.services.agent_runtime.checkpoint_side_effects import (
     project_direct_tool_history,
 )
@@ -794,6 +796,26 @@ async def reconcile_direct_tool_execution(
             },
         )
     )
+    if workspace_resolution:
+        await RuntimeCommandIntake(db).resume_run(
+            ResumeRunCommand(
+                tenant_id=tenant_id,
+                run_id=run_id,
+                idempotency_key=f"resume:workspace-reconcile:{execution_id}:{expected_action}",
+                payload={
+                    "resume_type": "tool_reconciliation",
+                    "correlation_id": body.correlation_id.strip(),
+                    "payload": {
+                        "content": (
+                            "已使用 Agent 的文件结果。"
+                            if body.outcome == "applied"
+                            else "已保留工作区中的源文件。"
+                        )
+                    },
+                },
+                actor_user_id=current_user.id,
+            )
+        )
     await db.commit()
     if workspace_resolution:
         try:

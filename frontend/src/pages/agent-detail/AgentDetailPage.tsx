@@ -3861,6 +3861,11 @@ export default function AgentDetailPage() {
                 throw new Error(body?.detail || `HTTP ${response.status}`);
             }
 
+            if (reconciliation.workspaceResolution) {
+                await fetchSessionRuntimeState(id, sessionId);
+                return;
+            }
+
             const userMsg = reconciliation.workspaceResolution
                 ? applied
                     ? t('agent.chat.useAgentResultMessage', '使用 Agent 的文件结果继续，不要重新执行原工具。')

@@ -1458,7 +1458,7 @@ async def reconcile_group_tool_execution(
                 f"resume:group-tool-reconcile:{execution_id}:{expected_action}"
             ),
             payload={
-                "resume_type": "user_input",
+                "resume_type": "tool_reconciliation",
                 "correlation_id": correlation_id,
                 "payload": {
                     "content": (
