@@ -53,6 +53,7 @@ import {
 } from '@tabler/icons-react';
 import { useDropZone } from '../../hooks/useDropZone';
 import { useOlderHistoryGesture, usePrependScrollAnchor } from '../../hooks/useHistoryPaginationScroll';
+import { loadDirectHistoryTurn } from '../../services/directHistoryPagination';
 import ApprovalsTab from './tabs/ApprovalsTab';
 import { AGENT_DETAIL_TABS } from './agentDetailTabs';
 import MindTab from './tabs/MindTab';
@@ -4005,18 +4006,27 @@ export default function AgentDetailPage() {
         setHistoryLoadingMore(true);
         try {
             const tkn = localStorage.getItem('token');
-            const res = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(historyOldestTimestamp)}`, {
-                headers: { Authorization: `Bearer ${tkn}` },
+            const page = await loadDirectHistoryTurn({
+                before: historyOldestTimestamp,
+                pageSize: HISTORY_PAGE_SIZE,
+                completeToolTurn: historyMsgs[0]?.role === 'tool_call',
+                fetchPage: async (before) => {
+                    const response = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(before)}`, {
+                        headers: { Authorization: `Bearer ${tkn}` },
+                    });
+                    if (!response.ok) throw new Error(`History request failed with ${response.status}`);
+                    return response.json();
+                },
             });
-            if (!res.ok) return;
-            const msgs = await res.json();
-            // Validate session is still active after async fetch
-            if (activeSession?.id !== sess.id) return;
-            if (msgs.length === 0) {
+            if (
+                currentAgentIdRef.current !== targetAgentId
+                || activeSessionIdRef.current !== String(sess.id)
+            ) return;
+            if (page.rows.length === 0) {
                 setHistoryHasMore(false);
                 return;
             }
-            const preParsed = msgs.map((m: any) => parseChatMsg({
+            const preParsed = page.rows.map((m: any) => parseChatMsg({
                 role: m.role, content: m.content || '',
                 ...(m.toolName && { toolName: m.toolName, toolCallId: m.toolCallId, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
                 ...(m.thinking && { thinking: m.thinking }),
@@ -4028,16 +4038,14 @@ export default function AgentDetailPage() {
             }));
             historyPrependAnchor.captureAnchor();
             setHistoryMsgs(prev => [...preParsed, ...prev]);
-            // Update the oldest cursor (first message in the new batch, since messages are in chronological order).
-            // Round-trip the compound `<created_at>|<id>` cursor so equal-timestamp batches don't stall pagination.
-            setHistoryOldestTimestamp(msgs[0].cursor ?? msgs[0].created_at);
-            setHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
+            setHistoryOldestTimestamp(page.oldestCursor);
+            setHistoryHasMore(page.hasMore);
         } catch (err: any) {
             console.error('Failed to load more history messages:', err);
         } finally {
             setHistoryLoadingMore(false);
         }
-    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp, historyPrependAnchor.captureAnchor]);
+    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp, historyMsgs, historyPrependAnchor.captureAnchor]);
 
     const loadMoreChatHistoryMessages = useCallback(async () => {
         if (chatHistoryLoadingMore || !chatHistoryHasMore || !activeSession || !id || !chatOldestTimestamp) return;
@@ -4046,18 +4054,27 @@ export default function AgentDetailPage() {
         setChatHistoryLoadingMore(true);
         try {
             const tkn = localStorage.getItem('token');
-            const res = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(chatOldestTimestamp)}`, {
-                headers: { Authorization: `Bearer ${tkn}` },
+            const page = await loadDirectHistoryTurn({
+                before: chatOldestTimestamp,
+                pageSize: HISTORY_PAGE_SIZE,
+                completeToolTurn: chatMessages[0]?.role === 'tool_call',
+                fetchPage: async (before) => {
+                    const response = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(before)}`, {
+                        headers: { Authorization: `Bearer ${tkn}` },
+                    });
+                    if (!response.ok) throw new Error(`History request failed with ${response.status}`);
+                    return response.json();
+                },
             });
-            if (!res.ok) return;
-            const msgs = await res.json();
-            // Validate session is still active after async fetch
-            if (activeSession?.id !== sess.id) return;
-            if (msgs.length === 0) {
+            if (
+                currentAgentIdRef.current !== targetAgentId
+                || activeSessionIdRef.current !== String(sess.id)
+            ) return;
+            if (page.rows.length === 0) {
                 setChatHistoryHasMore(false);
                 return;
             }
-            const preParsed = msgs.map((m: any) => parseChatMsg({
+            const preParsed = page.rows.map((m: any) => parseChatMsg({
                 role: m.role, content: m.content || '',
                 ...(m.toolName && { toolName: m.toolName, toolCallId: m.toolCallId, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
                 ...(m.thinking && { thinking: m.thinking }),
@@ -4070,16 +4087,14 @@ export default function AgentDetailPage() {
             cancelLiveAutoFollow();
             chatPrependAnchor.captureAnchor();
             setChatMessages(prev => [...preParsed, ...prev]);
-            // Update the oldest cursor (first message in the new batch, since messages are in chronological order).
-            // Round-trip the compound `<created_at>|<id>` cursor so equal-timestamp batches don't stall pagination.
-            setChatOldestTimestamp(msgs[0].cursor ?? msgs[0].created_at);
-            setChatHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
+            setChatOldestTimestamp(page.oldestCursor);
+            setChatHistoryHasMore(page.hasMore);
         } catch (err: any) {
             console.error('Failed to load more chat history messages:', err);
         } finally {
             setChatHistoryLoadingMore(false);
         }
-    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp, cancelLiveAutoFollow, chatPrependAnchor.captureAnchor]);
+    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp, chatMessages, cancelLiveAutoFollow, chatPrependAnchor.captureAnchor]);
 
     const historyLoadGesture = useOlderHistoryGesture({
         containerRef: historyContainerRef,

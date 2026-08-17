@@ -27,6 +27,10 @@ test('direct chat keeps document scrolling separate from history pagination', ()
   assert.doesNotMatch(agentDetail, /agent-chat-history-sentinel/);
   assert.equal((agentDetail.match(/useOlderHistoryGesture\(/g) ?? []).length, 2);
   assert.equal((agentDetail.match(/usePrependScrollAnchor\(/g) ?? []).length, 2);
+  assert.equal((agentDetail.match(/loadDirectHistoryTurn(?:<any>)?\(/g) ?? []).length, 2);
+  assert.equal((agentDetail.match(/completeToolTurn: (?:historyMsgs|chatMessages)\[0\]\?\.role === 'tool_call'/g) ?? []).length, 2);
+  assert.match(agentDetail, /currentAgentIdRef\.current !== targetAgentId/);
+  assert.match(agentDetail, /activeSessionIdRef\.current !== String\(sess\.id\)/);
   assert.match(historyScroll, /event\.deltaY >= 0/);
   assert.match(historyScroll, /currentY - startY <= 6/);
   assert.match(historyScroll, /\['ArrowUp', 'PageUp', 'Home'\]/);
