@@ -157,6 +157,33 @@ def _refs(metadata: object, field: str) -> tuple[str, ...] | None:
     return tuple(str(item).strip() for item in value)
 
 
+def _vercel_ready_receipt(
+    execution: AgentToolExecution,
+    references: Sequence[str],
+) -> dict[str, object] | None:
+    """Return the exact provider receipt that authorizes reference warnings."""
+    metadata = getattr(execution, "result_metadata", None)
+    deployment_id = metadata.get("deployment_id") if isinstance(metadata, Mapping) else None
+    if (
+        execution.status != "succeeded"
+        or execution.tool_name != "vercel_deploy"
+        or not isinstance(metadata, Mapping)
+        or metadata.get("provider") != "vercel"
+        or metadata.get("deployment_state") != "READY"
+        or not isinstance(deployment_id, str)
+        or not deployment_id
+        or getattr(execution, "result_ref", None) != deployment_id
+        or not references
+    ):
+        return None
+    return {
+        "provider": "vercel",
+        "deployment_id": deployment_id,
+        "deployment_state": "READY",
+        "tool_call_id": execution.tool_call_id,
+    }
+
+
 def _async_pending_operation(execution: AgentToolExecution) -> dict | None:
     metadata = getattr(execution, "result_metadata", None)
     if (
@@ -840,6 +867,7 @@ class ToolLedgerRuntimeVerifier:
 
         artifact_refs: list[str] = []
         evidence_refs: list[str] = []
+        receipt_backed_references: dict[str, dict[str, object]] = {}
         for execution in executions:
             if execution.status != "succeeded":
                 continue
@@ -857,6 +885,13 @@ class ToolLedgerRuntimeVerifier:
                 )
             artifact_refs.extend(execution_artifacts)
             evidence_refs.extend(execution_evidence)
+            receipt = _vercel_ready_receipt(
+                execution,
+                (*execution_artifacts, *execution_evidence),
+            )
+            if receipt is not None:
+                for reference in (*execution_artifacts, *execution_evidence):
+                    receipt_backed_references.setdefault(reference, receipt)
             if execution.result_ref and execution.result_ref.startswith("tool-result://"):
                 if self._result_store is None:
                     return VerificationResult(
@@ -885,6 +920,7 @@ class ToolLedgerRuntimeVerifier:
 
         artifact_refs = list(dict.fromkeys(artifact_refs))
         evidence_refs = list(dict.fromkeys(evidence_refs))
+        reference_warnings: list[dict[str, object]] = []
         for reference in (*artifact_refs, *evidence_refs):
             if reference.startswith("tool-result://"):
                 if self._result_store is None:
@@ -906,6 +942,16 @@ class ToolLedgerRuntimeVerifier:
                         details={"code": exc.code, "reference": reference},
                     )
             elif self._reference_exists is None:
+                receipt = receipt_backed_references.get(reference)
+                if receipt is not None:
+                    reference_warnings.append(
+                        {
+                            "code": "provider_reference_unverified",
+                            "reference": reference,
+                            **receipt,
+                        }
+                    )
+                    continue
                 return VerificationResult(
                     outcome="repair",
                     reason="an artifact/evidence reference has no trusted reader",
@@ -922,6 +968,17 @@ class ToolLedgerRuntimeVerifier:
                         run_id,
                     )
                 except Exception as exc:
+                    receipt = receipt_backed_references.get(reference)
+                    if receipt is not None:
+                        reference_warnings.append(
+                            {
+                                "code": "provider_reference_read_failed",
+                                "reference": reference,
+                                "error_class": type(exc).__name__,
+                                **receipt,
+                            }
+                        )
+                        continue
                     return VerificationResult(
                         outcome="repair",
                         reason="an artifact/evidence reference could not be read",
@@ -932,6 +989,16 @@ class ToolLedgerRuntimeVerifier:
                         },
                     )
                 if not readable:
+                    receipt = receipt_backed_references.get(reference)
+                    if receipt is not None:
+                        reference_warnings.append(
+                            {
+                                "code": "provider_reference_unreadable",
+                                "reference": reference,
+                                **receipt,
+                            }
+                        )
+                        continue
                     return VerificationResult(
                         outcome="repair",
                         reason="an artifact/evidence reference is not readable",
@@ -947,6 +1014,7 @@ class ToolLedgerRuntimeVerifier:
                 "code": "deterministic_checks_passed",
                 "artifact_refs": artifact_refs,
                 "evidence_refs": evidence_refs,
+                "reference_warnings": reference_warnings,
             },
         )
 
