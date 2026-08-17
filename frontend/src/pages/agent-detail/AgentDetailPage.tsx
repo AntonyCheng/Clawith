@@ -2996,6 +2996,7 @@ export default function AgentDetailPage() {
 
     const chatEndRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
+    const chatHistorySentinelRef = useRef<HTMLDivElement>(null);
     const chatInputRef = useRef<HTMLTextAreaElement>(null);
     const chatInputAreaRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -3915,6 +3916,7 @@ export default function AgentDetailPage() {
     const [chatScrollBtnBottom, setChatScrollBtnBottom] = useState(96);
     // Read-only history scroll-to-bottom
     const historyContainerRef = useRef<HTMLDivElement>(null);
+    const historySentinelRef = useRef<HTMLDivElement>(null);
     const [showHistoryScrollBtn, setShowHistoryScrollBtn] = useState(false);
     const scheduleComposerFocus = useCallback(() => {
         let attempts = 0;
@@ -4079,6 +4081,33 @@ export default function AgentDetailPage() {
             setChatHistoryLoadingMore(false);
         }
     }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp]);
+
+    useEffect(() => {
+        const container = isWritableSession(activeSession) ? chatContainerRef.current : historyContainerRef.current;
+        const sentinel = isWritableSession(activeSession) ? chatHistorySentinelRef.current : historySentinelRef.current;
+        if (!container || !sentinel || typeof IntersectionObserver === 'undefined') return;
+
+        const observer = new IntersectionObserver(([entry]) => {
+            if (!entry.isIntersecting) return;
+            if (isWritableSession(activeSession)) {
+                void loadMoreChatHistoryMessages();
+            } else {
+                void loadMoreHistoryMessages();
+            }
+        }, { root: container, rootMargin: '100px 0px 0px' });
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [
+        activeSession,
+        chatHistoryHasMore,
+        chatHistoryLoadingMore,
+        chatMessages.length,
+        historyHasMore,
+        historyLoadingMore,
+        historyMsgs.length,
+        loadMoreChatHistoryMessages,
+        loadMoreHistoryMessages,
+    ]);
 
     const handleHistoryScroll = () => {
         const el = historyContainerRef.current;
@@ -6721,6 +6750,7 @@ export default function AgentDetailPage() {
                                                 )}
                                             </div>
                                             <div ref={historyContainerRef} onScroll={handleHistoryScroll} className="agent-chat-message-scroll" style={{ padding: '48px 16px 12px' }}>
+                                                <div ref={historySentinelRef} className="agent-chat-history-sentinel" aria-hidden="true" />
                                                 {historyLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
                                                         Loading more messages...
@@ -6842,6 +6872,7 @@ export default function AgentDetailPage() {
                                                 className="agent-chat-message-scroll"
                                                 style={{ padding: '12px 16px' }}
                                             >
+                                                <div ref={chatHistorySentinelRef} className="agent-chat-history-sentinel" aria-hidden="true" />
                                                 {chatHistoryLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-tertiary)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                                         <div className="cw-spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></div>

@@ -19,4 +19,11 @@ test('direct chat keeps document scrolling separate from history pagination', ()
     styles,
     /\.agent-chat-message-scroll\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior-y:\s*contain;/s,
   );
+  assert.equal(
+    agentDetail.match(/className="agent-chat-history-sentinel"/g)?.length,
+    2,
+    'both history views must load from a top sentinel when scrollTop cannot change',
+  );
+  assert.match(agentDetail, /new IntersectionObserver\(/);
+  assert.match(agentDetail, /root:\s*container/);
 });
