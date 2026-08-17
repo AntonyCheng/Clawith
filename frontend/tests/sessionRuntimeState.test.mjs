@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -10,8 +11,15 @@ import {
   sessionRuntimeStateResponseIsValid,
   mergeTerminalAssistantMessage,
   terminalAssistantMessageAlreadyPresent,
+  toolReconciliationNeedsUserAction,
+  toolReconciliationsByCallId,
   waitingSessionActiveRunHint,
 } from '../src/pages/agent-detail/sessionRuntimeState.ts';
+
+const agentDetailSource = readFileSync(
+  new URL('../src/pages/agent-detail/AgentDetailPage.tsx', import.meta.url),
+  'utf8',
+);
 
 const waitingRun = {
   runId: 'run-1',
@@ -215,6 +223,77 @@ test('unknown write reconciliation is parsed strictly and disables plain resume'
       pending_tool_reconciliations: [{ execution_id: 'execution-1' }],
     },
   }), null);
+});
+
+test('workspace reconciliation fields preserve status and file counts', () => {
+  const parsed = sessionActiveRunFromResponse({
+    active_run: {
+      run_id: 'run-1',
+      thread_id: 'session-1',
+      session_id: 'session-1',
+      status: 'waiting_user',
+      pending_tool_reconciliations: [{
+        execution_id: 'execution-1',
+        tool_call_id: 'call-1',
+        tool_name: 'write_file',
+        can_reconcile: true,
+        resolution_status: 'conflicted',
+        savedCount: 1,
+        pendingCount: 2,
+        conflictedCount: 1,
+        workspaceResolution: true,
+      }],
+    },
+  });
+
+  assert.deepEqual(parsed?.pendingToolReconciliations[0], {
+    executionId: 'execution-1',
+    toolCallId: 'call-1',
+    toolName: 'write_file',
+    resultSummary: null,
+    errorCode: null,
+    canReconcile: true,
+    resolutionStatus: 'conflicted',
+    savedCount: 1,
+    pendingCount: 2,
+    conflictedCount: 1,
+    workspaceResolution: true,
+  });
+  assert.equal(toolReconciliationNeedsUserAction(parsed.pendingToolReconciliations[0]), true);
+  assert.equal(
+    toolReconciliationsByCallId(parsed.pendingToolReconciliations).get('call-1')?.executionId,
+    'execution-1',
+  );
+});
+
+test('only settled verification avoids user action; pending receipts always keep an exit', () => {
+  assert.equal(toolReconciliationNeedsUserAction({
+    executionId: 'execution-1',
+    toolCallId: 'call-1',
+    toolName: 'write_file',
+    canReconcile: false,
+    resolutionStatus: 'checking',
+    workspaceResolution: true,
+  }), false);
+  assert.equal(toolReconciliationNeedsUserAction({
+    executionId: 'execution-1',
+    toolCallId: 'call-1',
+    toolName: 'write_file',
+    canReconcile: true,
+    resolutionStatus: 'saved',
+    workspaceResolution: true,
+  }), true);
+});
+
+test('workspace reconciliation keeps decisions in the composer and passive status on the tool row', () => {
+  assert.match(agentDetailSource, /toolCallId: msg\.toolCallId/);
+  assert.match(agentDetailSource, /reconciliationsByToolCallId\.get\(tc\.toolCallId\)/);
+  assert.match(agentDetailSource, /Agent 处理后的文件与工作区中的源文件不同。请选择要保留哪一个。/);
+  assert.match(agentDetailSource, /使用 Agent 的结果/);
+  assert.match(agentDetailSource, /保留源文件/);
+  assert.match(agentDetailSource, /className="chat-tool-reconciliation"/);
+  assert.doesNotMatch(agentDetailSource, /locateToolReconciliation/);
+  assert.doesNotMatch(agentDetailSource, /analysis-tool-reconciliation__actions/);
 });
 
 test('onboarding only treats an authoritative runtime-state payload as loaded', () => {

@@ -1030,8 +1030,8 @@ async def test_success_is_reserved_before_execution_and_settled_afterwards(
         order.append(("reserve", kwargs))
         return _reservation(execution)
 
-    async def execute(name, arguments, agent_id, user_id, session_id="", on_output=None):
-        del arguments, agent_id, user_id, session_id, on_output
+    async def execute(name, arguments, agent_id, user_id, session_id="", on_output=None, **kwargs):
+        del arguments, agent_id, user_id, session_id, on_output, kwargs
         order.append(("execute", name))
         return ToolExecutionOutcome(
             status="succeeded",
@@ -2758,7 +2758,9 @@ async def test_l3_private_workspace_delete_requires_approval_before_execution(
         user_id,
         session_id="",
         on_output=None,
+        **kwargs,
     ):
+        del kwargs
         execution_calls.append(
             {
                 "name": name,
@@ -4582,8 +4584,8 @@ async def test_public_heartbeat_comment_limit_counts_successful_receipts(
         assert kwargs["tool_name"] == "plaza_add_comment"
         return successful_counts.popleft()
 
-    async def execute(name, arguments, agent_id, user_id, session_id="", on_output=None):
-        del arguments, agent_id, user_id, session_id, on_output
+    async def execute(name, arguments, agent_id, user_id, session_id="", on_output=None, **kwargs):
+        del arguments, agent_id, user_id, session_id, on_output, kwargs
         executed.append(name)
         return ToolExecutionOutcome(
             status="succeeded",
@@ -4942,8 +4944,8 @@ async def test_group_cross_space_policy_does_not_change_other_tool_paths(
         del db, kwargs
         return _reservation(execution)
 
-    async def execute(name, arguments, agent_id, user_id, session_id="", on_output=None):
-        del arguments, agent_id, user_id, session_id, on_output
+    async def execute(name, arguments, agent_id, user_id, session_id="", on_output=None, **kwargs):
+        del arguments, agent_id, user_id, session_id, on_output, kwargs
         dispatched.append(name)
         return ToolExecutionOutcome(
             status="succeeded",

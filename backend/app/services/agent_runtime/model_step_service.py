@@ -1561,21 +1561,13 @@ class RuntimeModelStepService:
             token_counter=_message_token_counter,
         )
         if build.requires_confirmation:
-            if not _is_group_agent_run(state):
-                return ModelStepResult(
-                    intent="wait",
-                    waiting_request={
-                        "waiting_type": "user",
-                        "correlation_id": f"tool-confirm:{context.run_id}",
-                        "reason": "A prior tool outcome is unknown and requires confirmation.",
-                    },
-                )
-            static_prompt = (
-                f"{static_prompt}\n\n# Group Confirmation Required\n\n"
-                "A prior side-effecting operation has an unknown outcome. Do not "
-                "repeat it or continue the affected work. Ask the human to confirm "
-                "the outcome in the final public group reply as normal Assistant content. "
-                "Do not call `wait`."
+            return ModelStepResult(
+                intent="wait",
+                waiting_request={
+                    "waiting_type": "user",
+                    "correlation_id": f"tool-confirm:{context.run_id}",
+                    "reason": "A prior tool outcome is unknown and requires confirmation.",
+                },
             )
         if build.blocked:
             return ModelStepResult(

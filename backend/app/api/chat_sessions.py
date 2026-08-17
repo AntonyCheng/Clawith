@@ -42,6 +42,11 @@ from app.services.agent_runtime.tool_execution import (
     reconcile_unknown_tool_execution,
 )
 from app.services.participant_identity import get_or_create_user_participant
+from app.services.storage import get_storage_backend
+from app.services.workspace_reconciliation import (
+    ReconciliationScope,
+    WorkspaceReconciliationService,
+)
 
 router = APIRouter(prefix="/api/agents", tags=["chat-sessions"])
 
@@ -168,6 +173,12 @@ class PendingToolReconciliationOut(BaseModel):
     result_summary: str | None = None
     error_code: str | None = None
     can_reconcile: bool = False
+    workspace_resolution: bool = False
+    resolution_status: str | None = None
+    saved_count: int = 0
+    pending_count: int = 0
+    conflicted_count: int = 0
+    unverified_count: int = 0
 
 
 class ReconcileToolExecutionIn(BaseModel):
@@ -537,6 +548,59 @@ async def get_session_runtime_state(
     cancel_inflight = inflight_cancel_result.scalar_one_or_none() is not None
 
     terminal = view.execution_status in {"completed", "failed", "cancelled"}
+    pending_outputs: list[PendingToolReconciliationOut] = []
+    workspace_reconciler = WorkspaceReconciliationService(get_storage_backend())
+    for execution in pending_reconciliations:
+        metadata = execution.result_metadata if isinstance(execution.result_metadata, dict) else {}
+        candidate_ref = metadata.get("workspace_candidate_ref")
+        workspace_resolution = isinstance(candidate_ref, str) and bool(candidate_ref)
+        resolution_status = None
+        counts = {"applied": 0, "not_saved": 0, "conflict": 0, "unverified": 0}
+        if workspace_resolution:
+            try:
+                verification = await workspace_reconciler.verify_current(
+                    ReconciliationScope(
+                        tenant_id=str(tenant_id),
+                        agent_id=agent_id,
+                        run_id=str(run.id),
+                        execution_id=str(execution.id),
+                    ),
+                    candidate_ref,
+                )
+                resolution_status = {
+                    "applied": "saved",
+                    "not_saved": "not_saved",
+                    "needs_resolution": "conflicted",
+                    "unverified": "unavailable",
+                    "mixed": "partial",
+                }[verification.status]
+                counts = verification.counts
+            except Exception:
+                resolution_status = "unavailable"
+                counts["unverified"] = 1
+        pending_outputs.append(
+            PendingToolReconciliationOut(
+                execution_id=str(execution.id),
+                tool_call_id=execution.tool_call_id,
+                tool_name=execution.tool_name,
+                result_summary=execution.result_summary,
+                error_code=(
+                    metadata.get("error_code")
+                    if isinstance(metadata.get("error_code"), str)
+                    else None
+                ),
+                can_reconcile=(
+                    workspace_resolution
+                    or is_user_reconcilable_unknown_execution(execution)
+                ),
+                workspace_resolution=workspace_resolution,
+                resolution_status=resolution_status,
+                saved_count=counts["applied"],
+                pending_count=counts["not_saved"],
+                conflicted_count=counts["conflict"],
+                unverified_count=counts["unverified"],
+            )
+        )
     return SessionRuntimeStateOut(
         active_run=ActiveRunOut(
             run_id=str(view.run_id),
@@ -554,22 +618,7 @@ async def get_session_runtime_state(
                 and not pending_reconciliations
             ),
             can_cancel=not terminal and not cancel_inflight,
-            pending_tool_reconciliations=[
-                PendingToolReconciliationOut(
-                    execution_id=str(execution.id),
-                    tool_call_id=execution.tool_call_id,
-                    tool_name=execution.tool_name,
-                    result_summary=execution.result_summary,
-                    error_code=(
-                        execution.result_metadata.get("error_code")
-                        if isinstance(execution.result_metadata, dict)
-                        and isinstance(execution.result_metadata.get("error_code"), str)
-                        else None
-                    ),
-                    can_reconcile=is_user_reconcilable_unknown_execution(execution),
-                )
-                for execution in pending_reconciliations
-            ],
+            pending_tool_reconciliations=pending_outputs,
         )
     )
 
@@ -641,6 +690,66 @@ async def reconcile_direct_tool_execution(
     note = body.note.strip()
     if not note:
         raise HTTPException(status_code=422, detail="reconciliation_note_required")
+    execution_result = await db.execute(
+        select(AgentToolExecution).where(
+            AgentToolExecution.id == execution_id,
+            AgentToolExecution.tenant_id == tenant_id,
+            AgentToolExecution.run_id == run_id,
+        ).with_for_update()
+    )
+    pending_execution = execution_result.scalar_one_or_none()
+    if pending_execution is None:
+        raise HTTPException(status_code=404, detail="tool_execution_not_found")
+    pending_metadata = (
+        pending_execution.result_metadata
+        if isinstance(pending_execution.result_metadata, dict)
+        else {}
+    )
+    candidate_ref = pending_metadata.get("workspace_candidate_ref")
+    workspace_resolution = isinstance(candidate_ref, str) and bool(candidate_ref)
+    expected_action = (
+        "applied"
+        if body.outcome == "applied"
+        else ("keep_workspace" if workspace_resolution else "not_applied")
+    )
+    if pending_execution.status != "unknown":
+        if (
+            pending_metadata.get("external_reconciliation") is True
+            and pending_metadata.get("workspace_resolution_action") == expected_action
+        ):
+            return ReconcileToolExecutionOut(
+                execution_id=str(pending_execution.id),
+                status=pending_execution.status,  # type: ignore[arg-type]
+                result_summary=pending_execution.result_summary or "",
+            )
+        raise HTTPException(
+            status_code=409,
+            detail="tool_execution_reconciliation_conflict",
+        )
+    reconciliation_scope = ReconciliationScope(
+        tenant_id=str(tenant_id),
+        agent_id=agent_id,
+        run_id=str(run_id),
+        execution_id=str(execution_id),
+    )
+    workspace_reconciler = WorkspaceReconciliationService(get_storage_backend())
+    if workspace_resolution and body.outcome == "applied":
+        try:
+            application = await workspace_reconciler.apply_candidate(
+                reconciliation_scope,
+                candidate_ref,
+                authorized=True,
+            )
+        except (PermissionError, ValueError) as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="workspace_candidate_unavailable",
+            ) from exc
+        if application.status not in {"applied", "already_applied"}:
+            raise HTTPException(
+                status_code=409,
+                detail=f"workspace_candidate_{application.status}",
+            )
     try:
         execution = await reconcile_unknown_tool_execution(
             db,
@@ -648,10 +757,15 @@ async def reconcile_direct_tool_execution(
             run_id=run_id,
             execution_id=execution_id,
             confirmed_status=(
-                "succeeded" if body.outcome == "applied" else "failed"
+                "succeeded"
+                if workspace_resolution or body.outcome == "applied"
+                else "failed"
             ),
             confirmed_by_user_id=current_user.id,
             note=note,
+            resolution_action=(
+                expected_action
+            ),
         )
     except ToolExecutionError as exc:
         status_code = 404 if exc.code == "tool_execution_not_found" else 409
@@ -675,6 +789,16 @@ async def reconcile_direct_tool_execution(
         )
     )
     await db.commit()
+    if workspace_resolution:
+        try:
+            await workspace_reconciler.discard_candidate(
+                reconciliation_scope,
+                candidate_ref,
+            )
+        except Exception:
+            # The receipt is already durably settled. Candidate cleanup is
+            # best-effort and can be retried by retention maintenance.
+            pass
     return ReconcileToolExecutionOut(
         execution_id=str(execution.id),
         status=execution.status,  # type: ignore[arg-type]

@@ -1538,7 +1538,13 @@ class RuntimeToolStepService:
         agentbay_run_token = None
         if accepted.entry.tool_name.startswith("agentbay_"):
             agentbay_run_token = agentbay_run_scope_id.set(context.run_id)
-        executor_arguments: dict[str, object] = {}
+        executor_arguments: dict[str, object] = {
+            "runtime_run_id": context.run_id,
+            "runtime_tool_call_id": accepted.call_instance_id,
+            "runtime_execution_id": str(reservation.execution.id),
+            "runtime_lease_owner": lease_owner,
+            "runtime_tenant_id": context.tenant_id,
+        }
         if confirmation_granted:
             runtime_authorization = issue_feishu_approval_create_authorization(
                 run_id=context.run_id,
@@ -1550,14 +1556,7 @@ class RuntimeToolStepService:
                 actor_user_id=context.actor_user_id or "",
                 arguments=arguments,
             )
-            executor_arguments = {
-                "runtime_authorization": runtime_authorization,
-                "runtime_run_id": context.run_id,
-                "runtime_tool_call_id": accepted.call_instance_id,
-                "runtime_execution_id": str(reservation.execution.id),
-                "runtime_lease_owner": lease_owner,
-                "runtime_tenant_id": context.tenant_id,
-            }
+            executor_arguments["runtime_authorization"] = runtime_authorization
         try:
             if accepted.entry.binding.kind == "mcp":
                 executor_arguments["execution_binding"] = (

@@ -79,6 +79,12 @@ from app.services.workspace_collaboration import (
 from app.services.storage import get_storage_backend, normalize_storage_key
 from app.services.storage_runtime.base import WriteCondition, content_hash_bytes
 from app.services.workspace_locking import workspace_locks
+from app.services.workspace_reconciliation import (
+    CandidateChange,
+    ReconciliationScope,
+    WorkspaceReconciliationService,
+    expand_move,
+)
 from app.services.sandbox.execution_lease import SandboxExecutionLeaseStore
 from app.services.sandbox.local.run_workspace import (
     RunWorkspaceIdentity,
@@ -1878,6 +1884,122 @@ async def flush_temp_workspace(
     return {"updated": updated, "deleted": deleted, "conflicted": conflicted, "skipped": skipped}
 
 
+async def _workspace_candidate_changes(
+    temp_workspace: TempWorkspace,
+) -> list[CandidateChange]:
+    """Freeze the publishable Sandbox delta before the temporary copy is released."""
+    storage = get_storage_backend()
+    selected_paths = [normalize_workspace_path(path) for path in temp_workspace.publish_paths]
+    local_files = _collect_temp_workspace_files(temp_workspace.root, selected_paths)
+    changes: list[CandidateChange] = []
+
+    for rel_path, local_path in local_files.items():
+        if local_path.name.startswith("_exec_tmp") or "__pycache__" in local_path.parts:
+            continue
+        data = local_path.read_bytes()
+        candidate_hash = content_hash_bytes(data)
+        entry = temp_workspace.manifest.get(rel_path)
+        if entry is not None:
+            if entry.base_hash == candidate_hash:
+                continue
+            changes.append(
+                CandidateChange.replace(
+                    rel_path,
+                    data,
+                    base_version=entry.base_version_token,
+                    base_hash=entry.base_hash,
+                )
+            )
+            continue
+
+        storage_key = normalize_storage_key(f"{temp_workspace.agent_id}/{rel_path}")
+        current = await storage.get_version(storage_key)
+        if current.exists:
+            # The path existed but was not materialized (usually a size-budget
+            # omission).  Never misclassify it as durable absence.
+            changes.append(
+                CandidateChange(
+                    path=rel_path,
+                    operation="replace",
+                    base_state="unloaded",
+                    data=data,
+                )
+            )
+        else:
+            changes.append(CandidateChange.create(rel_path, data))
+
+    for rel_path, entry in temp_workspace.manifest.items():
+        if not any(
+            rel_path == selected or rel_path.startswith(selected.rstrip("/") + "/")
+            for selected in selected_paths
+        ):
+            continue
+        if rel_path not in local_files:
+            changes.append(
+                CandidateChange.delete(
+                    rel_path,
+                    base_version=entry.base_version_token,
+                    base_hash=entry.base_hash,
+                )
+            )
+    return changes
+
+
+def _workspace_reconciliation_scope(
+    *,
+    tenant_id: str | None,
+    agent_id: uuid.UUID,
+    run_id: str | None,
+    execution_id: str | None,
+) -> ReconciliationScope | None:
+    if not tenant_id or not run_id or not execution_id:
+        return None
+    return ReconciliationScope(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        run_id=run_id,
+        execution_id=execution_id,
+    )
+
+
+def _workspace_verification_metadata(
+    candidate_ref: str,
+    verification,
+) -> dict[str, object]:
+    return {
+        "workspace_candidate_ref": candidate_ref,
+        "workspace_resolution_status": verification.status,
+        "workspace_saved_count": verification.counts["applied"],
+        "workspace_pending_count": verification.counts["not_saved"],
+        "workspace_conflicted_count": verification.counts["conflict"],
+        "workspace_unverified_count": verification.counts["unverified"],
+    }
+
+
+async def _recover_workspace_candidate(
+    service: WorkspaceReconciliationService,
+    scope: ReconciliationScope,
+    candidate_ref: str,
+) -> tuple[bool, dict[str, object]]:
+    """Apply only unchanged-base items; never overwrite a third version."""
+    verification = await service.verify_current(scope, candidate_ref)
+    if verification.status in {"not_saved", "mixed"} and not (
+        verification.counts["conflict"] or verification.counts["unverified"]
+    ):
+        application = await service.apply_candidate(
+            scope,
+            candidate_ref,
+            authorized=True,
+            require_base_match=True,
+        )
+        if application.status in {"applied", "already_applied"}:
+            verification = await service.verify_current(scope, candidate_ref)
+    return (
+        verification.status == "applied",
+        _workspace_verification_metadata(candidate_ref, verification),
+    )
+
+
 def _collect_temp_workspace_files(root: Path, selected_paths: list[str]) -> dict[str, Path]:
     files: dict[str, Path] = {}
     root_resolved = root.resolve()
@@ -2078,6 +2200,8 @@ async def _execute_code_with_workspace_outcome(
     arguments: dict,
     tool_name: str,
     on_output=None,
+    runtime_run_id: str | None = None,
+    runtime_execution_id: str | None = None,
 ) -> ToolExecutionOutcome:
     """Resolve policy once and guard materialize/execute/publish for local Session code."""
     if tool_name == "execute_code_e2b":
@@ -2150,6 +2274,16 @@ async def _execute_code_with_workspace_outcome(
     execution_started = False
     gateway_flush_result: dict[str, list[str]] | None = None
     run_id = sandbox_run_scope_id.get().strip() or None
+    reconciliation_service = WorkspaceReconciliationService(get_storage_backend())
+    reconciliation_scope: ReconciliationScope | None = None
+    candidate_ref: str | None = None
+    if scope is not None and runtime_execution_id and (runtime_run_id or run_id):
+        reconciliation_scope = ReconciliationScope(
+            tenant_id=str(scope.tenant_id),
+            agent_id=agent_id,
+            run_id=str(runtime_run_id or run_id),
+            execution_id=str(runtime_execution_id),
+        )
     workspace_identity = RunWorkspaceIdentity(
         agent_id=str(agent_id),
         tenant_id=str(scope.tenant_id) if scope else tenant_id,
@@ -2178,6 +2312,80 @@ async def _execute_code_with_workspace_outcome(
         ) as run_workspace:
             temp_workspace = cast(TempWorkspace, run_workspace)
             execution_started = True
+
+            async def ensure_candidate() -> str | None:
+                nonlocal candidate_ref
+                if candidate_ref is not None or reconciliation_scope is None:
+                    return candidate_ref
+                changes = await _workspace_candidate_changes(temp_workspace)
+                if not changes:
+                    return None
+                manifest = await reconciliation_service.persist_candidate(
+                    reconciliation_scope,
+                    changes,
+                )
+                candidate_ref = manifest.candidate_ref
+                return candidate_ref
+
+            async def reconciliation_metadata() -> dict[str, object]:
+                if reconciliation_scope is None or candidate_ref is None:
+                    return {}
+                verification = await reconciliation_service.verify_current(
+                    reconciliation_scope,
+                    candidate_ref,
+                )
+                return {
+                    "workspace_candidate_ref": candidate_ref,
+                    "workspace_resolution_status": verification.status,
+                    "workspace_saved_count": verification.counts["applied"],
+                    "workspace_pending_count": verification.counts["not_saved"],
+                    "workspace_conflicted_count": verification.counts["conflict"],
+                    "workspace_unverified_count": verification.counts["unverified"],
+                }
+
+            async def recover_publication(
+                original_outcome: ToolExecutionOutcome,
+                flush_result: dict[str, list[str]],
+            ) -> ToolExecutionOutcome | None:
+                """Resolve known publication facts without replaying code."""
+                if reconciliation_scope is None or candidate_ref is None:
+                    return None
+                if original_outcome.status == "unknown":
+                    # A gateway-owned backend currently collapses code and
+                    # publication status into one unknown result. Verifying
+                    # files alone cannot prove the process exit status.
+                    return None
+                verification = await reconciliation_service.verify_current(
+                    reconciliation_scope,
+                    candidate_ref,
+                )
+                if verification.status in {"not_saved", "mixed"}:
+                    application = await reconciliation_service.apply_candidate(
+                        reconciliation_scope,
+                        candidate_ref,
+                        authorized=True,
+                    )
+                    if application.status not in {"applied", "already_applied"}:
+                        return None
+                    verification = await reconciliation_service.verify_current(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
+                if verification.status != "applied":
+                    return None
+                await reconciliation_service.discard_candidate(
+                    reconciliation_scope,
+                    candidate_ref,
+                )
+                return replace(
+                    original_outcome,
+                    metadata={
+                        **original_outcome.metadata,
+                        "workspace_publication": flush_result,
+                        "workspace_resolution_status": "applied",
+                        "workspace_saved_count": verification.counts["applied"],
+                    },
+                )
             async def before_gateway_publish() -> bool:
                 if lease is None:
                     return True
@@ -2188,6 +2396,7 @@ async def _execute_code_with_workspace_outcome(
 
             async def gateway_publish() -> None:
                 nonlocal gateway_flush_result
+                await ensure_candidate()
                 gateway_flush_result = await asyncio.wait_for(
                     flush_temp_workspace(
                         temp_workspace,
@@ -2226,10 +2435,18 @@ async def _execute_code_with_workspace_outcome(
                     _workspace_artifact_ref(agent_id, path)
                     for path in flush_result["updated"]
                 )
+                candidate_metadata = await reconciliation_metadata()
+                if outcome.status == "unknown":
+                    recovered = await recover_publication(outcome, flush_result)
+                    if recovered is not None:
+                        return recovered
+                if outcome.status == "succeeded" and reconciliation_scope is not None and candidate_ref is not None:
+                    await reconciliation_service.discard_candidate(reconciliation_scope, candidate_ref)
+                    candidate_metadata = {}
                 return replace(
                     outcome,
                     artifact_refs=tuple(dict.fromkeys((*outcome.artifact_refs, *changed_refs))),
-                    metadata={**outcome.metadata, "workspace_publication": flush_result},
+                    metadata={**outcome.metadata, "workspace_publication": flush_result, **candidate_metadata},
                 )
             if lease is not None and not await lease.ensure_publication_window(120):
                 return _typed_unknown(
@@ -2237,6 +2454,7 @@ async def _execute_code_with_workspace_outcome(
                     "sandbox_execution_lease_lost",
                 )
             try:
+                await ensure_candidate()
                 flush_result = await asyncio.wait_for(
                     flush_temp_workspace(
                         temp_workspace,
@@ -2245,12 +2463,24 @@ async def _execute_code_with_workspace_outcome(
                     timeout=60,
                 )
             except Exception as exc:
+                candidate_metadata = await reconciliation_metadata()
+                recovered = await recover_publication(
+                    outcome,
+                    {"updated": [], "deleted": [], "conflicted": [], "skipped": []},
+                )
+                if recovered is not None:
+                    return recovered
                 return _typed_unknown(
                     f"Local execution completed but workspace sync is unknown: {type(exc).__name__}.",
                     "workspace_sync_outcome_unknown",
+                    metadata=candidate_metadata,
                 )
-            metadata = {**outcome.metadata, "workspace_publication": flush_result}
+            candidate_metadata = await reconciliation_metadata()
+            metadata = {**outcome.metadata, "workspace_publication": flush_result, **candidate_metadata}
             if flush_result["conflicted"]:
+                recovered = await recover_publication(outcome, flush_result)
+                if recovered is not None:
+                    return recovered
                 return _typed_unknown(
                     "Local execution completed but workspace sync conflicted.",
                     "workspace_sync_conflict",
@@ -2260,6 +2490,8 @@ async def _execute_code_with_workspace_outcome(
                 _workspace_artifact_ref(agent_id, path)
                 for path in flush_result["updated"]
             )
+            if reconciliation_scope is not None and candidate_ref is not None:
+                await reconciliation_service.discard_candidate(reconciliation_scope, candidate_ref)
             return replace(
                 outcome,
                 artifact_refs=tuple(dict.fromkeys((*outcome.artifact_refs, *changed_refs))),
@@ -2711,6 +2943,9 @@ async def _write_file_outcome(
     *,
     base_dir: Path,
     session_id: str | None,
+    tenant_id: str | None = None,
+    runtime_run_id: str | None = None,
+    runtime_execution_id: str | None = None,
 ) -> ToolExecutionOutcome:
     """Write one workspace file using the structured collaboration result."""
     path = arguments.get("path")
@@ -2747,6 +2982,41 @@ async def _write_file_outcome(
             "enterprise_info is read-only for Agents.",
             "workspace_path_read_only",
         )
+    storage = get_storage_backend()
+    storage_key, normalized_path, _ = _tool_storage_key(agent_id, path, tenant_id)
+    base_version = await storage.get_version(storage_key)
+    base_bytes = await storage.read_bytes(storage_key) if base_version.exists else None
+    candidate_bytes = (
+        (base_bytes or b"") + content.encode("utf-8")
+        if mode == "append"
+        else content.encode("utf-8")
+    )
+    reconciliation_scope = _workspace_reconciliation_scope(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        run_id=runtime_run_id,
+        execution_id=runtime_execution_id,
+    )
+    reconciliation_service = WorkspaceReconciliationService(storage)
+    candidate_ref: str | None = None
+    if reconciliation_scope is not None:
+        change = (
+            CandidateChange.replace(
+                normalized_path,
+                candidate_bytes,
+                base_version=base_version.token,
+                base_hash=content_hash_bytes(base_bytes or b""),
+            )
+            if base_version.exists
+            else CandidateChange.create(normalized_path, candidate_bytes)
+        )
+        candidate_ref = (
+            await reconciliation_service.persist_candidate(
+                reconciliation_scope,
+                [change],
+            )
+        ).candidate_ref
+
     write_started = False
     try:
         async with async_session() as db:
@@ -2762,9 +3032,18 @@ async def _write_file_outcome(
                 operation="write",
                 session_id=session_id,
                 enforce_human_lock=True,
+                expected_version_token=(
+                    base_version.token if base_version.exists else None
+                ),
+                require_absent=not base_version.exists,
                 append=mode == "append",
             )
             if not write_result.ok:
+                if reconciliation_scope is not None and candidate_ref is not None:
+                    await reconciliation_service.discard_candidate(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
                 return _typed_failure(
                     write_result.message,
                     "workspace_write_rejected",
@@ -2772,6 +3051,23 @@ async def _write_file_outcome(
             await db.commit()
     except Exception as exc:
         if write_started:
+            if reconciliation_scope is not None and candidate_ref is not None:
+                recovered, metadata = await _recover_workspace_candidate(
+                    reconciliation_service,
+                    reconciliation_scope,
+                    candidate_ref,
+                )
+                if recovered:
+                    await reconciliation_service.discard_candidate(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
+                    return _typed_success("Workspace file saved and verified.")
+                return _typed_unknown(
+                    "Workspace write outcome requires file reconciliation.",
+                    "workspace_write_outcome_unknown",
+                    metadata=metadata,
+                )
             return _typed_unknown(
                 "Workspace write outcome is unknown; reconcile before retrying.",
                 "workspace_write_outcome_unknown",
@@ -2779,6 +3075,11 @@ async def _write_file_outcome(
         return _typed_failure(
             f"Workspace write failed: {type(exc).__name__}",
             "workspace_write_failed",
+        )
+    if reconciliation_scope is not None and candidate_ref is not None:
+        await reconciliation_service.discard_candidate(
+            reconciliation_scope,
+            candidate_ref,
         )
     return _typed_success(f"{write_result.message}.")
 
@@ -2909,12 +3210,99 @@ async def _find_files_outcome(
     return _typed_success(summary)
 
 
+async def _move_candidate_changes(
+    agent_id: uuid.UUID,
+    source_path: str,
+    destination_path: str,
+) -> list[CandidateChange]:
+    async def collect_tree_versions(storage, root_key: str) -> list[tuple[str, str]]:
+        collected: list[tuple[str, str]] = []
+        for entry in await storage.list_dir(root_key):
+            if await storage.is_dir(entry.key):
+                collected.extend(await collect_tree_versions(storage, entry.key))
+            else:
+                version = await storage.get_version(entry.key)
+                collected.append((entry.key, version.token))
+        return collected
+
+    storage = get_storage_backend()
+    source_normalized = normalize_workspace_path(source_path)
+    destination_normalized = normalize_workspace_path(destination_path)
+    source_key = normalize_storage_key(f"{agent_id}/{source_normalized}")
+    destination_key = normalize_storage_key(f"{agent_id}/{destination_normalized}")
+    source_is_dir = await storage.is_dir(source_key)
+    if destination_path.replace("\\", "/").strip().endswith("/") or await storage.is_dir(destination_key):
+        destination_normalized = normalize_workspace_path(
+            f"{destination_normalized}/{Path(source_normalized).name}"
+        )
+        destination_key = normalize_storage_key(f"{agent_id}/{destination_normalized}")
+
+    if not source_is_dir:
+        source_version = await storage.get_version(source_key)
+        data = await storage.read_bytes(source_key)
+        destination_version = await storage.get_version(destination_key)
+        destination_hash = (
+            content_hash_bytes(await storage.read_bytes(destination_key))
+            if destination_version.exists
+            else None
+        )
+        return list(
+            expand_move(
+                source_path=source_normalized,
+                destination_path=destination_normalized,
+                data=data,
+                source_base_version=source_version.token,
+                source_base_hash=content_hash_bytes(data),
+                destination_base_state=(
+                    "present" if destination_version.exists else "absent"
+                ),
+                destination_base_version=(
+                    destination_version.token if destination_version.exists else None
+                ),
+                destination_base_hash=destination_hash,
+            )
+        )
+
+    changes: list[CandidateChange] = []
+    source_entries = await collect_tree_versions(storage, source_key)
+    for entry_key, source_version in source_entries:
+        relative = entry_key.removeprefix(source_key.rstrip("/") + "/")
+        source_rel = normalize_workspace_path(f"{source_normalized}/{relative}")
+        destination_rel = normalize_workspace_path(
+            f"{destination_normalized}/{relative}"
+        )
+        data = await storage.read_bytes(entry_key)
+        target_key = normalize_storage_key(f"{agent_id}/{destination_rel}")
+        target_version = await storage.get_version(target_key)
+        target_hash = (
+            content_hash_bytes(await storage.read_bytes(target_key))
+            if target_version.exists
+            else None
+        )
+        changes.extend(
+            expand_move(
+                source_path=source_rel,
+                destination_path=destination_rel,
+                data=data,
+                source_base_version=source_version,
+                source_base_hash=content_hash_bytes(data),
+                destination_base_state=("present" if target_version.exists else "absent"),
+                destination_base_version=(target_version.token if target_version.exists else None),
+                destination_base_hash=target_hash,
+            )
+        )
+    return changes
+
+
 async def _move_file_outcome(
     agent_id: uuid.UUID,
     arguments: dict,
     *,
     base_dir: Path,
     session_id: str | None,
+    tenant_id: str | None = None,
+    runtime_run_id: str | None = None,
+    runtime_execution_id: str | None = None,
 ) -> ToolExecutionOutcome:
     source_path = arguments.get("source_path")
     destination_path = arguments.get("destination_path")
@@ -2933,6 +3321,49 @@ async def _move_file_outcome(
             "enterprise_info is read-only for Agents.",
             "workspace_path_read_only",
         )
+    reconciliation_scope = _workspace_reconciliation_scope(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        run_id=runtime_run_id,
+        execution_id=runtime_execution_id,
+    )
+    reconciliation_service = WorkspaceReconciliationService(get_storage_backend())
+    candidate_ref: str | None = None
+    expected_source_versions: dict[str, str] | None = None
+    expected_destination_versions: dict[str, str | None] | None = None
+    expected_source_version_token: str | None = None
+    expected_destination_version_token: str | None = None
+    if reconciliation_scope is not None:
+        changes = await _move_candidate_changes(
+            agent_id,
+            source_path,
+            destination_path,
+        )
+        if changes:
+            expected_source_versions = {
+                normalize_storage_key(f"{agent_id}/{change.path}"): change.base_version
+                for change in changes
+                if change.operation == "delete" and change.base_version is not None
+            }
+            expected_destination_versions = {
+                normalize_storage_key(f"{agent_id}/{change.path}"): (
+                    change.base_version if change.base_state == "present" else None
+                )
+                for change in changes
+                if change.operation != "delete"
+            }
+            source_changes = [change for change in changes if change.operation == "delete"]
+            destination_changes = [change for change in changes if change.operation != "delete"]
+            if len(source_changes) == 1 and len(destination_changes) == 1:
+                expected_source_version_token = source_changes[0].base_version
+                expected_destination_version_token = destination_changes[0].base_version
+            candidate_ref = (
+                await reconciliation_service.persist_candidate(
+                    reconciliation_scope,
+                    changes,
+                )
+            ).candidate_ref
+
     mutation_started = False
     try:
         async with async_session() as db:
@@ -2948,12 +3379,52 @@ async def _move_file_outcome(
                 session_id=session_id,
                 enforce_human_lock=True,
                 overwrite=bool(arguments.get("overwrite", False)),
+                expected_source_version_token=expected_source_version_token,
+                expected_destination_version_token=expected_destination_version_token,
+                expected_source_versions=expected_source_versions,
+                expected_destination_versions=expected_destination_versions,
             )
             if not result.ok:
+                if reconciliation_scope is not None and candidate_ref is not None:
+                    verification = await reconciliation_service.verify_current(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
+                    if verification.status == "not_saved":
+                        await reconciliation_service.discard_candidate(
+                            reconciliation_scope,
+                            candidate_ref,
+                        )
+                    else:
+                        return _typed_unknown(
+                            "Workspace move requires file reconciliation.",
+                            "workspace_move_outcome_unknown",
+                            metadata=_workspace_verification_metadata(
+                                candidate_ref,
+                                verification,
+                            ),
+                        )
                 return _typed_failure(result.message, "workspace_move_rejected")
             await db.commit()
     except Exception as exc:
         if mutation_started:
+            if reconciliation_scope is not None and candidate_ref is not None:
+                recovered, metadata = await _recover_workspace_candidate(
+                    reconciliation_service,
+                    reconciliation_scope,
+                    candidate_ref,
+                )
+                if recovered:
+                    await reconciliation_service.discard_candidate(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
+                    return _typed_success("Workspace move completed and verified.")
+                return _typed_unknown(
+                    "Workspace move requires file reconciliation.",
+                    "workspace_move_outcome_unknown",
+                    metadata=metadata,
+                )
             return _typed_unknown(
                 "Workspace move outcome is unknown; reconcile before retrying.",
                 "workspace_move_outcome_unknown",
@@ -2962,6 +3433,21 @@ async def _move_file_outcome(
             f"Workspace move failed: {type(exc).__name__}.",
             "workspace_move_failed",
         )
+    if reconciliation_scope is not None and candidate_ref is not None:
+        verification = await reconciliation_service.verify_current(
+            reconciliation_scope,
+            candidate_ref,
+        )
+        if verification.status != "applied":
+            return _typed_unknown(
+                "Workspace move requires file reconciliation.",
+                "workspace_move_outcome_unknown",
+                metadata=_workspace_verification_metadata(
+                    candidate_ref,
+                    verification,
+                ),
+            )
+        await reconciliation_service.discard_candidate(reconciliation_scope, candidate_ref)
     return _typed_success(result.message)
 
 
@@ -2971,6 +3457,9 @@ async def _delete_file_outcome(
     *,
     base_dir: Path,
     session_id: str | None,
+    tenant_id: str | None = None,
+    runtime_run_id: str | None = None,
+    runtime_execution_id: str | None = None,
 ) -> ToolExecutionOutcome:
     path = arguments.get("path")
     if not isinstance(path, str) or not path:
@@ -2988,6 +3477,59 @@ async def _delete_file_outcome(
             "enterprise_info is read-only for Agents.",
             "workspace_path_read_only",
         )
+    storage = get_storage_backend()
+    storage_key, normalized_path, _ = _tool_storage_key(agent_id, path, tenant_id)
+    reconciliation_scope = _workspace_reconciliation_scope(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        run_id=runtime_run_id,
+        execution_id=runtime_execution_id,
+    )
+    reconciliation_service = WorkspaceReconciliationService(storage)
+    candidate_ref: str | None = None
+    expected_version_token: str | None = None
+    expected_version_tokens: dict[str, str] | None = None
+    if reconciliation_scope is not None:
+        changes: list[CandidateChange] = []
+        if await storage.is_dir(storage_key):
+            expected_version_tokens = {}
+            async def collect_delete_changes(root_key: str, root_path: str) -> None:
+                for entry in await storage.list_dir(root_key):
+                    relative = entry.key.removeprefix(root_key.rstrip("/") + "/")
+                    item_path = normalize_workspace_path(f"{root_path}/{relative}")
+                    if await storage.is_dir(entry.key):
+                        await collect_delete_changes(entry.key, item_path)
+                    else:
+                        version = await storage.get_version(entry.key)
+                        expected_version_tokens[entry.key] = version.token
+                        data = await storage.read_bytes(entry.key)
+                        changes.append(
+                            CandidateChange.delete(
+                                item_path,
+                                base_version=version.token,
+                                base_hash=content_hash_bytes(data),
+                            )
+                        )
+            await collect_delete_changes(storage_key, normalized_path)
+        else:
+            version = await storage.get_version(storage_key)
+            expected_version_token = version.token
+            data = await storage.read_bytes(storage_key)
+            changes.append(
+                CandidateChange.delete(
+                    normalized_path,
+                    base_version=version.token,
+                    base_hash=content_hash_bytes(data),
+                )
+            )
+        if changes:
+            candidate_ref = (
+                await reconciliation_service.persist_candidate(
+                    reconciliation_scope,
+                    changes,
+                )
+            ).candidate_ref
+
     mutation_started = False
     try:
         async with async_session() as db:
@@ -3001,12 +3543,50 @@ async def _delete_file_outcome(
                 actor_id=agent_id,
                 session_id=session_id,
                 enforce_human_lock=True,
+                expected_version_token=expected_version_token,
+                expected_version_tokens=expected_version_tokens,
             )
             if not result.ok:
+                if reconciliation_scope is not None and candidate_ref is not None:
+                    verification = await reconciliation_service.verify_current(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
+                    if verification.status == "not_saved":
+                        await reconciliation_service.discard_candidate(
+                            reconciliation_scope,
+                            candidate_ref,
+                        )
+                    else:
+                        return _typed_unknown(
+                            "Workspace deletion requires file reconciliation.",
+                            "workspace_delete_outcome_unknown",
+                            metadata=_workspace_verification_metadata(
+                                candidate_ref,
+                                verification,
+                            ),
+                        )
                 return _typed_failure(result.message, "workspace_delete_rejected")
             await db.commit()
     except Exception as exc:
         if mutation_started:
+            if reconciliation_scope is not None and candidate_ref is not None:
+                recovered, metadata = await _recover_workspace_candidate(
+                    reconciliation_service,
+                    reconciliation_scope,
+                    candidate_ref,
+                )
+                if recovered:
+                    await reconciliation_service.discard_candidate(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
+                    return _typed_success("Workspace deletion completed and verified.")
+                return _typed_unknown(
+                    "Workspace deletion requires file reconciliation.",
+                    "workspace_delete_outcome_unknown",
+                    metadata=metadata,
+                )
             return _typed_unknown(
                 "Workspace delete outcome is unknown; reconcile before retrying.",
                 "workspace_delete_outcome_unknown",
@@ -3014,6 +3594,11 @@ async def _delete_file_outcome(
         return _typed_failure(
             f"Workspace delete failed: {type(exc).__name__}.",
             "workspace_delete_failed",
+        )
+    if reconciliation_scope is not None and candidate_ref is not None:
+        await reconciliation_service.discard_candidate(
+            reconciliation_scope,
+            candidate_ref,
         )
     return _typed_success(result.message)
 
@@ -3024,6 +3609,9 @@ async def _edit_file_outcome(
     *,
     base_dir: Path,
     session_id: str | None,
+    tenant_id: str | None = None,
+    runtime_run_id: str | None = None,
+    runtime_execution_id: str | None = None,
 ) -> ToolExecutionOutcome:
     path = arguments.get("path")
     old_string = arguments.get("old_string")
@@ -3045,12 +3633,13 @@ async def _edit_file_outcome(
         )
     try:
         storage = get_storage_backend()
-        storage_key, normalized_path, _ = _tool_storage_key(agent_id, path, None)
+        storage_key, normalized_path, _ = _tool_storage_key(agent_id, path, tenant_id)
         if not await storage.is_file(storage_key):
             return _typed_failure(
                 f"File not found: {path}",
                 "workspace_file_not_found",
             )
+        version = await storage.get_version(storage_key)
         content = await storage.read_text(storage_key, encoding="utf-8", errors="replace")
     except Exception as exc:
         return _typed_failure(
@@ -3075,6 +3664,28 @@ async def _edit_file_outcome(
         if replace_all
         else content.replace(old_string, new_string, 1)
     )
+    reconciliation_scope = _workspace_reconciliation_scope(
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        run_id=runtime_run_id,
+        execution_id=runtime_execution_id,
+    )
+    reconciliation_service = WorkspaceReconciliationService(storage)
+    candidate_ref: str | None = None
+    if reconciliation_scope is not None:
+        candidate_ref = (
+            await reconciliation_service.persist_candidate(
+                reconciliation_scope,
+                [
+                    CandidateChange.replace(
+                        normalized_path,
+                        new_content.encode("utf-8"),
+                        base_version=version.token,
+                        base_hash=content_hash_bytes(content.encode("utf-8")),
+                    )
+                ],
+            )
+        ).candidate_ref
     mutation_started = False
     try:
         async with async_session() as db:
@@ -3090,12 +3701,35 @@ async def _edit_file_outcome(
                 operation="edit",
                 session_id=session_id,
                 enforce_human_lock=True,
+                expected_version_token=version.token,
             )
             if not result.ok:
+                if reconciliation_scope is not None and candidate_ref is not None:
+                    await reconciliation_service.discard_candidate(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
                 return _typed_failure(result.message, "workspace_edit_rejected")
             await db.commit()
     except Exception as exc:
         if mutation_started:
+            if reconciliation_scope is not None and candidate_ref is not None:
+                recovered, metadata = await _recover_workspace_candidate(
+                    reconciliation_service,
+                    reconciliation_scope,
+                    candidate_ref,
+                )
+                if recovered:
+                    await reconciliation_service.discard_candidate(
+                        reconciliation_scope,
+                        candidate_ref,
+                    )
+                    return _typed_success("Workspace edit completed and verified.")
+                return _typed_unknown(
+                    "Workspace edit requires file reconciliation.",
+                    "workspace_edit_outcome_unknown",
+                    metadata=metadata,
+                )
             return _typed_unknown(
                 "Workspace edit outcome is unknown; reconcile before retrying.",
                 "workspace_edit_outcome_unknown",
@@ -3103,6 +3737,11 @@ async def _edit_file_outcome(
         return _typed_failure(
             f"Workspace edit failed: {type(exc).__name__}.",
             "workspace_edit_failed",
+        )
+    if reconciliation_scope is not None and candidate_ref is not None:
+        await reconciliation_service.discard_candidate(
+            reconciliation_scope,
+            candidate_ref,
         )
     replaced = count if replace_all else 1
     return _typed_success(
@@ -3146,13 +3785,17 @@ async def execute_builtin_tool_outcome(
             "workspace_scope=group is only available in a validated Group Run.",
             "workspace_scope_unavailable",
         )
-    tenant_id: str | None = None
+    tenant_id: str | None = runtime_tenant_id
     if tool_name in {
         "list_files",
         "read_file",
         "search_files",
         "find_files",
         "read_document",
+        "write_file",
+        "edit_file",
+        "move_file",
+        "delete_file",
         "execute_code",
         "execute_code_e2b",
         "convert_csv_to_xlsx",
@@ -3163,7 +3806,8 @@ async def execute_builtin_tool_outcome(
         "upload_image",
         *_IMAGE_GENERATION_TOOL_NAMES,
     }:
-        tenant_id = await _get_agent_tenant_id(agent_id)
+        if tenant_id is None:
+            tenant_id = await _get_agent_tenant_id(agent_id)
     if tool_name == "list_files":
         return await _list_files_outcome(
             agent_id,
@@ -3206,6 +3850,9 @@ async def execute_builtin_tool_outcome(
             arguments,
             base_dir=_agent_workspace_root(agent_id),
             session_id=session_id or None,
+            tenant_id=tenant_id,
+            runtime_run_id=runtime_run_id,
+            runtime_execution_id=runtime_execution_id,
         )
     if tool_name == "move_file":
         return await _move_file_outcome(
@@ -3213,6 +3860,9 @@ async def execute_builtin_tool_outcome(
             arguments,
             base_dir=_agent_workspace_root(agent_id),
             session_id=session_id or None,
+            tenant_id=tenant_id,
+            runtime_run_id=runtime_run_id,
+            runtime_execution_id=runtime_execution_id,
         )
     if tool_name == "delete_file":
         return await _delete_file_outcome(
@@ -3220,6 +3870,9 @@ async def execute_builtin_tool_outcome(
             arguments,
             base_dir=_agent_workspace_root(agent_id),
             session_id=session_id or None,
+            tenant_id=tenant_id,
+            runtime_run_id=runtime_run_id,
+            runtime_execution_id=runtime_execution_id,
         )
     if tool_name == "edit_file":
         return await _edit_file_outcome(
@@ -3227,6 +3880,9 @@ async def execute_builtin_tool_outcome(
             arguments,
             base_dir=_agent_workspace_root(agent_id),
             session_id=session_id or None,
+            tenant_id=tenant_id,
+            runtime_run_id=runtime_run_id,
+            runtime_execution_id=runtime_execution_id,
         )
     if tool_name in {
         "convert_csv_to_xlsx",
@@ -3258,6 +3914,8 @@ async def execute_builtin_tool_outcome(
             arguments=arguments,
             tool_name=tool_name,
             on_output=on_output,
+            runtime_run_id=runtime_run_id,
+            runtime_execution_id=runtime_execution_id,
         )
     if tool_name == "read_webpage":
         return await _read_webpage_outcome(arguments)

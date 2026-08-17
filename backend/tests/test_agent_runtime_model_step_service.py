@@ -2358,7 +2358,7 @@ async def test_group_run_repairs_waiting_user_instead_of_entering_unresumable_wa
 
 
 @pytest.mark.asyncio
-async def test_group_confirmation_is_turned_into_a_public_finish_not_waiting_user() -> None:
+async def test_group_confirmation_waits_for_a_human_member_without_calling_model() -> None:
     tenant_id = uuid.uuid4()
     model = _model(tenant_id)
     agent = _agent(tenant_id)
@@ -2403,11 +2403,14 @@ async def test_group_confirmation_is_turned_into_a_public_finish_not_waiting_use
         complete,
     ).complete_once(state, _context(state))
 
-    assert result.intent == "finish"
-    assert result.waiting_request is None
-    assert calls
-    assert "unknown outcome" in str(calls[0][0][0].content)
-    assert "final public group reply" in str(calls[0][0][0].content)
+    assert result.intent == "wait"
+    assert result.waiting_request is not None
+    assert result.waiting_request["waiting_type"] == "user"
+    assert str(result.waiting_request["correlation_id"]).startswith("tool-confirm:")
+    assert result.waiting_request["reason"] == (
+        "A prior tool outcome is unknown and requires confirmation."
+    )
+    assert calls == []
 
 
 @pytest.mark.asyncio

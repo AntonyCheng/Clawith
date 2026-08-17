@@ -38,6 +38,8 @@ from app.services.agent_runtime.tool_execution import (
     ToolExecutionReconciliationPending,
 )
 from app.services.sandbox.local.subprocess_backend import close_subprocess_sandbox_run
+from app.services.storage import get_storage_backend
+from app.services.workspace_reconciliation import WorkspaceReconciliationService
 from app.services.sandbox.run_scope import sandbox_run_scope_id
 from app.services.group_realtime import publish_stored_group_message
 
@@ -865,6 +867,20 @@ class RuntimeCommandWorker:
             command=command,
             checkpoint=observed,
         )
+        if disposition == "terminal" and run.agent_id is not None:
+            try:
+                await WorkspaceReconciliationService(
+                    get_storage_backend()
+                ).cleanup_run_candidates(
+                    tenant_id=str(run.tenant_id),
+                    agent_id=uuid.UUID(run.agent_id),
+                    run_id=str(run.run_id),
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to clean terminal Run Workspace candidates run_id={}",
+                    run.run_id,
+                )
         return CommandWorkResult(
             status="applied",
             command_id=command.id,
