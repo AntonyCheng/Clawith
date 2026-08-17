@@ -7,6 +7,10 @@ const agentDetail = readFileSync(
   'utf8',
 );
 const styles = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+const historyScroll = readFileSync(
+  new URL('../src/hooks/useHistoryPaginationScroll.ts', import.meta.url),
+  'utf8',
+);
 
 test('direct chat keeps document scrolling separate from history pagination', () => {
   assert.doesNotMatch(agentDetail, /height:\s*'calc\(100vh - 100px\)'/);
@@ -19,18 +23,18 @@ test('direct chat keeps document scrolling separate from history pagination', ()
     styles,
     /\.agent-chat-message-scroll\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior-y:\s*contain;/s,
   );
-  assert.equal(
-    agentDetail.match(/className="agent-chat-history-sentinel"/g)?.length,
-    2,
-    'both history views must load from a top sentinel when scrollTop cannot change',
-  );
-  assert.match(agentDetail, /new IntersectionObserver\(/);
-  assert.match(agentDetail, /root:\s*container/);
-  assert.match(agentDetail, /useLayoutEffect/);
-  assert.match(agentDetail, /anchor\.scrollTop \+ \(element\.scrollHeight - anchor\.scrollHeight\)/);
-  assert.doesNotMatch(agentDetail, /newScrollHeight - oldScrollHeight/);
-  assert.match(agentDetail, /chatHistoryPrependingRef\.current = true;\s*cancelLiveAutoFollow\(\);/);
-  assert.match(agentDetail, /if \(chatHistoryPrependingRef\.current\) return;/);
-  assert.match(agentDetail, /chatHistoryPrependingRef\.current = false;/);
+  assert.doesNotMatch(agentDetail, /IntersectionObserver/);
+  assert.doesNotMatch(agentDetail, /agent-chat-history-sentinel/);
+  assert.equal((agentDetail.match(/useOlderHistoryGesture\(/g) ?? []).length, 2);
+  assert.equal((agentDetail.match(/usePrependScrollAnchor\(/g) ?? []).length, 2);
+  assert.match(historyScroll, /event\.deltaY >= 0/);
+  assert.match(historyScroll, /currentY - startY <= 6/);
+  assert.match(historyScroll, /\['ArrowUp', 'PageUp', 'Home'\]/);
+  assert.match(historyScroll, /requestInFlightRef/);
+  assert.match(historyScroll, /wheelGestureLatchedRef/);
+  assert.match(historyScroll, /touchPageRequestedRef/);
+  assert.match(historyScroll, /event\.repeat/);
+  assert.match(historyScroll, /anchor\.element\.scrollTop = anchor\.scrollTop/);
+  assert.match(agentDetail, /if \(chatPrependAnchor\.isPrependingRef\.current\) return;/);
   assert.match(styles, /\.agent-chat-message-scroll\s*\{[^}]*overflow-anchor:\s*none;/s);
 });

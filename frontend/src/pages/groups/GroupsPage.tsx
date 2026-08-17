@@ -841,7 +841,7 @@ export default function GroupsPage() {
                             loadingMore={loadingMore}
                             isPlanning={isPlanning}
                             runningAgents={runningAgents}
-                            onLoadMore={() => void loadMore()}
+                            onLoadMore={loadMore}
                             onLatestMessageSeen={markLatestMessageSeen}
                         />
 

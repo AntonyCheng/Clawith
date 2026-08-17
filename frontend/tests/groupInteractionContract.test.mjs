@@ -96,6 +96,17 @@ test('group composer and stream use session-wide active runs', () => {
   assert.match(groupsPage, /runningAgents=\{runningAgents\}/);
 });
 
+test('group and direct histories share user-driven prepend pagination semantics', () => {
+  assert.match(messageStream, /useOlderHistoryGesture/);
+  assert.match(messageStream, /usePrependScrollAnchor/);
+  assert.match(messageStream, /onWheelCapture=\{historyLoadGesture\.onWheelCapture\}/);
+  assert.match(messageStream, /onTouchMoveCapture=\{historyLoadGesture\.onTouchMoveCapture\}/);
+  assert.match(messageStream, /prependAnchor\.isPrependingRef\.current/);
+  assert.doesNotMatch(messageStream, /previousHeightRef/);
+  assert.match(groupStyles, /\.group-stream\s*\{[\s\S]*?overflow-anchor:\s*none/);
+  assert.match(groupStyles, /\.group-stream\s*\{[\s\S]*?overscroll-behavior-y:\s*contain/);
+});
+
 test('planning-to-entry transition keeps polling and preserves the typing indicator', () => {
   assert.match(groupsPage, /ACTIVE_RUN_TRANSITION_GRACE_MS/);
   assert.match(groupsPage, /planningTransitionUntilRef/);

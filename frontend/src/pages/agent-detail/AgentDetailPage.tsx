@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -52,6 +52,7 @@ import {
     IconAlertTriangle,
 } from '@tabler/icons-react';
 import { useDropZone } from '../../hooks/useDropZone';
+import { useOlderHistoryGesture, usePrependScrollAnchor } from '../../hooks/useHistoryPaginationScroll';
 import ApprovalsTab from './tabs/ApprovalsTab';
 import { AGENT_DETAIL_TABS } from './agentDetailTabs';
 import MindTab from './tabs/MindTab';
@@ -3921,19 +3922,16 @@ export default function AgentDetailPage() {
     const [chatScrollBtnBottom, setChatScrollBtnBottom] = useState(96);
     // Read-only history scroll-to-bottom
     const historyContainerRef = useRef<HTMLDivElement>(null);
-    const historySentinelRef = useRef<HTMLDivElement>(null);
-    const pendingHistoryScrollAnchorRef = useRef<{
-        element: HTMLDivElement;
-        scrollHeight: number;
-        scrollTop: number;
-    } | null>(null);
-    const pendingChatScrollAnchorRef = useRef<{
-        element: HTMLDivElement;
-        scrollHeight: number;
-        scrollTop: number;
-    } | null>(null);
-    const chatHistoryPrependingRef = useRef(false);
-    const chatHistoryPrependReleaseRef = useRef<number | null>(null);
+    const historyPrependAnchor = usePrependScrollAnchor({
+        containerRef: historyContainerRef,
+        itemCount: historyMsgs.length,
+        scopeKey: activeSession?.id,
+    });
+    const chatPrependAnchor = usePrependScrollAnchor({
+        containerRef: chatContainerRef,
+        itemCount: chatMessages.length,
+        scopeKey: activeSession?.id,
+    });
     const [showHistoryScrollBtn, setShowHistoryScrollBtn] = useState(false);
     const scheduleComposerFocus = useCallback(() => {
         let attempts = 0;
@@ -3964,7 +3962,7 @@ export default function AgentDetailPage() {
         setShowScrollBtn(true);
     }, [cancelLiveAutoFollow]);
     const scheduleLiveScrollToBottom = useCallback(() => {
-        if (chatHistoryPrependingRef.current) return;
+        if (chatPrependAnchor.isPrependingRef.current) return;
         if (userPinnedAwayFromBottomRef.current) return;
         cancelLiveAutoFollow();
         const jobId = liveScrollJobRef.current;
@@ -3983,7 +3981,7 @@ export default function AgentDetailPage() {
             window.setTimeout(scroll, 80),
             window.setTimeout(scroll, 220),
         ];
-    }, [cancelLiveAutoFollow]);
+    }, [cancelLiveAutoFollow, chatPrependAnchor.isPrependingRef]);
     useEffect(() => {
         return () => cancelLiveAutoFollow();
     }, [cancelLiveAutoFollow]);
@@ -4028,14 +4026,7 @@ export default function AgentDetailPage() {
                     runtimeError: normalizeRuntimeError({ error: m.runtime_error }),
                 }),
             }));
-            const el = historyContainerRef.current;
-            if (el) {
-                pendingHistoryScrollAnchorRef.current = {
-                    element: el,
-                    scrollHeight: el.scrollHeight,
-                    scrollTop: el.scrollTop,
-                };
-            }
+            historyPrependAnchor.captureAnchor();
             setHistoryMsgs(prev => [...preParsed, ...prev]);
             // Update the oldest cursor (first message in the new batch, since messages are in chronological order).
             // Round-trip the compound `<created_at>|<id>` cursor so equal-timestamp batches don't stall pagination.
@@ -4046,7 +4037,7 @@ export default function AgentDetailPage() {
         } finally {
             setHistoryLoadingMore(false);
         }
-    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp]);
+    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp, historyPrependAnchor.captureAnchor]);
 
     const loadMoreChatHistoryMessages = useCallback(async () => {
         if (chatHistoryLoadingMore || !chatHistoryHasMore || !activeSession || !id || !chatOldestTimestamp) return;
@@ -4076,16 +4067,8 @@ export default function AgentDetailPage() {
                     runtimeError: normalizeRuntimeError({ error: m.runtime_error }),
                 }),
             }));
-            const el = chatContainerRef.current;
-            if (el) {
-                chatHistoryPrependingRef.current = true;
-                cancelLiveAutoFollow();
-                pendingChatScrollAnchorRef.current = {
-                    element: el,
-                    scrollHeight: el.scrollHeight,
-                    scrollTop: el.scrollTop,
-                };
-            }
+            cancelLiveAutoFollow();
+            chatPrependAnchor.captureAnchor();
             setChatMessages(prev => [...preParsed, ...prev]);
             // Update the oldest cursor (first message in the new batch, since messages are in chronological order).
             // Round-trip the compound `<created_at>|<id>` cursor so equal-timestamp batches don't stall pagination.
@@ -4096,77 +4079,25 @@ export default function AgentDetailPage() {
         } finally {
             setChatHistoryLoadingMore(false);
         }
-    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp, cancelLiveAutoFollow]);
+    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp, cancelLiveAutoFollow, chatPrependAnchor.captureAnchor]);
 
-    useLayoutEffect(() => {
-        const anchor = pendingHistoryScrollAnchorRef.current;
-        if (!anchor) return;
-        pendingHistoryScrollAnchorRef.current = null;
-        const { element } = anchor;
-        if (element !== historyContainerRef.current) return;
-        element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
-    }, [historyMsgs.length]);
-
-    useLayoutEffect(() => {
-        const anchor = pendingChatScrollAnchorRef.current;
-        if (!anchor) return;
-        pendingChatScrollAnchorRef.current = null;
-        const { element } = anchor;
-        if (element === chatContainerRef.current) {
-            element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
-        }
-        if (chatHistoryPrependReleaseRef.current != null) {
-            window.cancelAnimationFrame(chatHistoryPrependReleaseRef.current);
-        }
-        chatHistoryPrependReleaseRef.current = window.requestAnimationFrame(() => {
-            chatHistoryPrependingRef.current = false;
-            chatHistoryPrependReleaseRef.current = null;
-        });
-    }, [chatMessages.length]);
-
-    useEffect(() => () => {
-        if (chatHistoryPrependReleaseRef.current != null) {
-            window.cancelAnimationFrame(chatHistoryPrependReleaseRef.current);
-        }
-        chatHistoryPrependingRef.current = false;
-    }, []);
-
-    useEffect(() => {
-        const container = isWritableSession(activeSession) ? chatContainerRef.current : historyContainerRef.current;
-        const sentinel = isWritableSession(activeSession) ? chatHistorySentinelRef.current : historySentinelRef.current;
-        if (!container || !sentinel || typeof IntersectionObserver === 'undefined') return;
-
-        const observer = new IntersectionObserver(([entry]) => {
-            if (!entry.isIntersecting) return;
-            if (isWritableSession(activeSession)) {
-                void loadMoreChatHistoryMessages();
-            } else {
-                void loadMoreHistoryMessages();
-            }
-        }, { root: container, rootMargin: '100px 0px 0px' });
-        observer.observe(sentinel);
-        return () => observer.disconnect();
-    }, [
-        activeSession,
-        chatHistoryHasMore,
-        chatHistoryLoadingMore,
-        chatMessages.length,
-        historyHasMore,
-        historyLoadingMore,
-        historyMsgs.length,
-        loadMoreChatHistoryMessages,
-        loadMoreHistoryMessages,
-    ]);
+    const historyLoadGesture = useOlderHistoryGesture({
+        containerRef: historyContainerRef,
+        canLoad: historyHasMore && !historyLoadingMore,
+        onLoadMore: loadMoreHistoryMessages,
+    });
+    const chatHistoryLoadGesture = useOlderHistoryGesture({
+        containerRef: chatContainerRef,
+        canLoad: chatHistoryHasMore && !chatHistoryLoadingMore,
+        onLoadMore: loadMoreChatHistoryMessages,
+    });
 
     const handleHistoryScroll = () => {
         const el = historyContainerRef.current;
         if (!el) return;
         const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
         setShowHistoryScrollBtn(distFromBottom > 200);
-        // Load more when scrolling near the top
-        if (el.scrollTop < 100 && historyHasMore && !historyLoadingMore) {
-            loadMoreHistoryMessages();
-        }
+        historyLoadGesture.onScroll();
     };
     const scrollHistoryToBottom = () => {
         scheduleHistoryScrollToBottom();
@@ -4333,12 +4264,10 @@ export default function AgentDetailPage() {
             cancelLiveAutoFollow();
         }
         setShowScrollBtn(distFromBottom > 200);
-        // Load more when scrolling near the top
-        if (el.scrollTop < 100 && chatHistoryHasMore && !chatHistoryLoadingMore) {
-            loadMoreChatHistoryMessages();
-        }
+        chatHistoryLoadGesture.onScroll();
     };
     const handleChatWheelCapture = (event: React.WheelEvent<HTMLDivElement>) => {
+        chatHistoryLoadGesture.onWheelCapture(event);
         const el = chatContainerRef.current;
         if (!el) return;
         if (event.deltaY < 0 && el.scrollTop > 0) {
@@ -4346,9 +4275,11 @@ export default function AgentDetailPage() {
         }
     };
     const handleChatTouchStartCapture = (event: React.TouchEvent<HTMLDivElement>) => {
+        chatHistoryLoadGesture.onTouchStartCapture(event);
         chatTouchStartYRef.current = event.touches[0]?.clientY ?? null;
     };
     const handleChatTouchMoveCapture = (event: React.TouchEvent<HTMLDivElement>) => {
+        chatHistoryLoadGesture.onTouchMoveCapture(event);
         const startY = chatTouchStartYRef.current;
         const currentY = event.touches[0]?.clientY;
         const el = chatContainerRef.current;
@@ -6798,8 +6729,19 @@ export default function AgentDetailPage() {
                                                     <>Read-only · {activeSession.username || 'User'}</>
                                                 )}
                                             </div>
-                                            <div ref={historyContainerRef} onScroll={handleHistoryScroll} className="agent-chat-message-scroll" style={{ padding: '48px 16px 12px' }}>
-                                                <div ref={historySentinelRef} className="agent-chat-history-sentinel" aria-hidden="true" />
+                                            <div
+                                                ref={historyContainerRef}
+                                                onScroll={handleHistoryScroll}
+                                                onWheelCapture={historyLoadGesture.onWheelCapture}
+                                                onPointerDownCapture={historyLoadGesture.onPointerDownCapture}
+                                                onTouchStartCapture={historyLoadGesture.onTouchStartCapture}
+                                                onTouchMoveCapture={historyLoadGesture.onTouchMoveCapture}
+                                                onTouchEndCapture={historyLoadGesture.onTouchEndCapture}
+                                                onKeyDownCapture={historyLoadGesture.onKeyDownCapture}
+                                                className="agent-chat-message-scroll"
+                                                style={{ padding: '48px 16px 12px' }}
+                                                tabIndex={0}
+                                            >
                                                 {historyLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
                                                         Loading more messages...
@@ -6916,12 +6858,15 @@ export default function AgentDetailPage() {
                                                 ref={chatContainerRef}
                                                 onScroll={handleChatScroll}
                                                 onWheelCapture={handleChatWheelCapture}
+                                                onPointerDownCapture={chatHistoryLoadGesture.onPointerDownCapture}
                                                 onTouchStartCapture={handleChatTouchStartCapture}
                                                 onTouchMoveCapture={handleChatTouchMoveCapture}
+                                                onTouchEndCapture={chatHistoryLoadGesture.onTouchEndCapture}
+                                                onKeyDownCapture={chatHistoryLoadGesture.onKeyDownCapture}
                                                 className="agent-chat-message-scroll"
                                                 style={{ padding: '12px 16px' }}
+                                                tabIndex={0}
                                             >
-                                                <div ref={chatHistorySentinelRef} className="agent-chat-history-sentinel" aria-hidden="true" />
                                                 {chatHistoryLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-tertiary)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                                                         <div className="cw-spinner" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></div>
