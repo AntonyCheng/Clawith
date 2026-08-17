@@ -1341,25 +1341,6 @@ class DeterministicRuntimeNodeExecutor:
         waiting_request = _validate_waiting_request(
             cast(JsonObject | None, state["lifecycle"].get("waiting_request"))
         )
-        if resume_value.get("resume_type") == "tool_reconciliation":
-            payload = resume_value.get("payload")
-            content = (
-                payload.get("content")
-                if isinstance(payload, Mapping)
-                and isinstance(payload.get("content"), str)
-                else "文件冲突已处理。"
-            )
-            lifecycle.update(
-                {
-                    "status": "completed",
-                    "next_route": "terminal",
-                    "final_answer": content,
-                    "waiting_request": None,
-                    "reason": "tool_reconciliation_completed",
-                    "delivery_request": {"content": content},
-                }
-            )
-            return {"lifecycle": cast(RuntimeLifecycle, lifecycle)}
         lifecycle.update(
             {
                 "status": "running",

@@ -345,6 +345,82 @@ class WorkspaceReconciliationService:
         )
         return ApplyResult(status=status, changes=tuple(results))
 
+    async def preserve_conflicts_and_apply_safe_changes(
+        self,
+        scope: ReconciliationScope,
+        candidate_ref: str,
+    ) -> VerificationResult:
+        """Keep third-party versions while publishing independent safe writes.
+
+        Deletes are intentionally skipped whenever any path is conflicted or
+        unreadable. A delete may be the source half of a move, so applying it
+        after preserving a conflicting destination could lose the only copy.
+        """
+        manifest = await self._load_manifest(scope, candidate_ref)
+        candidate_bytes = await self._load_candidate_bytes(scope, manifest)
+        paths = [change.path for change in manifest.changes]
+
+        async with self.lock_factory(
+            scope.agent_id,
+            paths,
+            tenant_id=scope.tenant_id,
+        ):
+            snapshots: dict[str, tuple[StorageVersion, str | None] | None] = {}
+            statuses: dict[str, VerificationStatus] = {}
+            for change in manifest.changes:
+                try:
+                    snapshot = await self._read_current(scope, change.path)
+                except Exception:  # noqa: BLE001 - unreadable paths stay untouched
+                    snapshots[change.path] = None
+                    statuses[change.path] = "unverified"
+                    continue
+                snapshots[change.path] = snapshot
+                version, current_hash = snapshot
+                if (change.operation == "delete" and not version.exists) or (
+                    change.operation != "delete" and current_hash == change.candidate_hash
+                ):
+                    statuses[change.path] = "applied"
+                else:
+                    statuses[change.path] = self._compare_with_base(
+                        change,
+                        version,
+                        current_hash,
+                    )
+
+            has_unsafe_path = any(status in {"conflict", "unverified"} for status in statuses.values())
+            ordered = sorted(
+                manifest.changes,
+                key=lambda change: change.operation == "delete",
+            )
+            for change in ordered:
+                if statuses[change.path] != "not_saved":
+                    continue
+                if change.operation == "delete" and has_unsafe_path:
+                    continue
+                snapshot = snapshots[change.path]
+                if snapshot is None:
+                    continue
+                version, _current_hash = snapshot
+                condition = (
+                    WriteCondition(version_token=version.token)
+                    if version.exists
+                    else WriteCondition(require_absent=True)
+                )
+                storage_key = self._workspace_key(scope, change.path)
+                if change.operation == "delete":
+                    await self.storage.delete_if_match(
+                        storage_key,
+                        condition=condition,
+                    )
+                else:
+                    await self.storage.write_bytes_if_match(
+                        storage_key,
+                        candidate_bytes[change.path],
+                        condition=condition,
+                    )
+
+        return await self.verify_current(scope, candidate_ref)
+
     async def discard_candidate(self, scope: ReconciliationScope, candidate_ref: str) -> None:
         expected_ref = f"{self._scope_prefix(scope)}/manifest.json"
         if candidate_ref != expected_ref:

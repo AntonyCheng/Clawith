@@ -1411,6 +1411,17 @@ async def reconcile_group_tool_execution(
                 status_code=409,
                 detail=f"workspace_candidate_{application.status}",
             )
+    else:
+        try:
+            await workspace_reconciler.preserve_conflicts_and_apply_safe_changes(
+                reconciliation_scope,
+                candidate_ref,
+            )
+        except (PermissionError, ValueError) as exc:
+            raise HTTPException(
+                status_code=409,
+                detail="workspace_candidate_unavailable",
+            ) from exc
     if body.outcome == "applied" and body.all_accept:
         target = dict(run.delivery_target or {})
         target["workspace_conflict_policy"] = "use_agent_result"

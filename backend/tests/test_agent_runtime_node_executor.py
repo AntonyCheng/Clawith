@@ -1110,6 +1110,52 @@ async def test_user_resume_with_pending_tool_returns_to_tool_before_model() -> N
 
 
 @pytest.mark.asyncio
+async def test_workspace_reconciliation_resume_returns_to_pending_tools() -> None:
+    run_id = uuid.uuid4()
+    executor = _executor(ModelService())
+    state = _state(run_id)
+    pending_call: JsonObject = {
+        "id": "call-write-1",
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "arguments": '{"path":"result.md","content":"done"}',
+        },
+    }
+    state["lifecycle"].update(
+        {
+            "status": "waiting_user",
+            "next_route": "wait",
+            "pending_tool_calls": [pending_call],
+            "waiting_request": {
+                "waiting_type": "user",
+                "correlation_id": "tool-confirm-1",
+                "tool_call_id": "call-write-1",
+            },
+        }
+    )
+
+    update = await executor.execute(
+        "wait",
+        state,
+        _context(run_id, executor, "command-reconcile"),
+        resume_value={
+            "resume_type": "tool_reconciliation",
+            "payload": {"content": "已保留工作区中的源文件。"},
+        },
+    )
+
+    assert update["lifecycle"]["status"] == "running"
+    assert update["lifecycle"]["next_route"] == "tool"
+    assert update["lifecycle"]["pending_tool_calls"] == [pending_call]
+    assert update["lifecycle"]["resumed_waiting_request"] == {
+        "waiting_type": "user",
+        "correlation_id": "tool-confirm-1",
+        "tool_call_id": "call-write-1",
+    }
+
+
+@pytest.mark.asyncio
 async def test_confirmation_resume_discards_unconfirmed_tail_calls() -> None:
     run_id = uuid.uuid4()
     approval_call: JsonObject = {

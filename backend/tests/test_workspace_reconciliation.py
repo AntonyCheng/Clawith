@@ -220,6 +220,88 @@ async def test_apply_requires_authorization_and_rechecks_version_inside_lock(tmp
 
 
 @pytest.mark.asyncio
+async def test_preserve_conflicts_applies_safe_writes_but_skips_deletes(tmp_path) -> None:
+    scope = _scope()
+    storage = LocalStorageBackend(str(tmp_path))
+    service = _service(storage)
+    conflict_key = f"{scope.agent_id}/workspace/conflict.txt"
+    safe_key = f"{scope.agent_id}/workspace/safe.txt"
+    delete_key = f"{scope.agent_id}/workspace/source.txt"
+    await storage.write_bytes(conflict_key, b"base")
+    await storage.write_bytes(safe_key, b"base")
+    await storage.write_bytes(delete_key, b"source")
+    manifest = await service.persist_candidate(
+        scope,
+        [
+            CandidateChange.replace(
+                "workspace/conflict.txt",
+                b"agent",
+                base_hash=service.hash_bytes(b"base"),
+            ),
+            CandidateChange.replace(
+                "workspace/safe.txt",
+                b"agent-safe",
+                base_hash=service.hash_bytes(b"base"),
+            ),
+            CandidateChange.delete(
+                "workspace/source.txt",
+                base_hash=service.hash_bytes(b"source"),
+            ),
+        ],
+    )
+    await storage.write_bytes(conflict_key, b"human")
+
+    result = await service.preserve_conflicts_and_apply_safe_changes(
+        scope,
+        manifest.candidate_ref,
+    )
+
+    assert result.status == "needs_resolution"
+    assert await storage.read_bytes(conflict_key) == b"human"
+    assert await storage.read_bytes(safe_key) == b"agent-safe"
+    assert await storage.read_bytes(delete_key) == b"source"
+
+
+@pytest.mark.asyncio
+async def test_preserve_conflicts_uses_cas_for_safe_writes(tmp_path) -> None:
+    scope = _scope()
+
+    class RacingStorage(LocalStorageBackend):
+        async def write_bytes_if_match(self, key, data, *, condition=None, **kwargs):
+            if key.endswith("workspace/safe.txt"):
+                await self.write_bytes(key, b"newer-human")
+            return await super().write_bytes_if_match(
+                key,
+                data,
+                condition=condition,
+                **kwargs,
+            )
+
+    storage = RacingStorage(str(tmp_path))
+    service = _service(storage)
+    key = f"{scope.agent_id}/workspace/safe.txt"
+    await storage.write_bytes(key, b"base")
+    manifest = await service.persist_candidate(
+        scope,
+        [
+            CandidateChange.replace(
+                "workspace/safe.txt",
+                b"agent",
+                base_hash=service.hash_bytes(b"base"),
+            )
+        ],
+    )
+
+    result = await service.preserve_conflicts_and_apply_safe_changes(
+        scope,
+        manifest.candidate_ref,
+    )
+
+    assert result.status == "needs_resolution"
+    assert await storage.read_bytes(key) == b"newer-human"
+
+
+@pytest.mark.asyncio
 async def test_scope_ref_and_path_validation_reject_cross_scope_access(tmp_path) -> None:
     scope = _scope()
     storage = LocalStorageBackend(str(tmp_path))

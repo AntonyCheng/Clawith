@@ -102,11 +102,11 @@ def test_group_router_exposes_management_and_read_state_boundaries() -> None:
     assert ("POST", "/api/groups/{group_id}/sessions/{session_id}/messages") in routes
     assert ("GET", "/api/groups/{group_id}/sessions/{session_id}/runs") in routes
     assert ("GET", "/api/groups/{group_id}/sessions/{session_id}/runs/{run_id}") in routes
-    assert (
-        "POST",
+    reconcile_route = (
         "/api/groups/{group_id}/sessions/{session_id}/runs/{run_id}"
-        "/tool-executions/{execution_id}/reconcile",
-    ) in routes
+        "/tool-executions/{execution_id}/reconcile"
+    )
+    assert ("POST", reconcile_route) in routes
     assert ("POST", "/api/groups/{group_id}/sessions/{session_id}/runs/{run_id}/cancel") in routes
     assert ("GET", "/api/groups/{group_id}/announcement") in routes
     assert ("PUT", "/api/groups/{group_id}/announcement") in routes
@@ -847,7 +847,14 @@ async def test_current_human_member_settles_group_workspace_candidate_idempotent
         result_summary="unknown",
         result_metadata={"workspace_candidate_ref": candidate_ref},
     )
-    calls = {"apply": 0, "discard": 0, "reconcile": 0, "resume": 0, "commit": 0}
+    calls = {
+        "apply": 0,
+        "preserve": 0,
+        "discard": 0,
+        "reconcile": 0,
+        "resume": 0,
+        "commit": 0,
+    }
 
     class _Result:
         def scalar_one_or_none(self):
@@ -890,6 +897,12 @@ async def test_current_human_member_settles_group_workspace_candidate_idempotent
             assert ref == candidate_ref
             assert authorized is True
             return SimpleNamespace(status="applied")
+
+        async def preserve_conflicts_and_apply_safe_changes(self, scope, ref):
+            calls["preserve"] += 1
+            assert scope.agent_id == run.agent_id
+            assert ref == candidate_ref
+            return SimpleNamespace(status="needs_resolution")
 
         async def discard_candidate(self, scope, ref):
             calls["discard"] += 1
@@ -956,6 +969,7 @@ async def test_current_human_member_settles_group_workspace_candidate_idempotent
     assert first.result_summary == second.result_summary == "settled"
     assert calls == {
         "apply": expected_apply_count,
+        "preserve": int(outcome == "not_applied"),
         "discard": 1,
         "reconcile": 1,
         "resume": 1,
