@@ -9,6 +9,7 @@ import pytest
 
 from app.models.agent import Agent
 from app.models.agent_tool_execution import AgentToolExecution
+from app.services.builtin_tool_definitions import builtin_model_definition
 from app.services.agent_runtime import tool_step_service
 from app.services.agent_runtime.a2a_runtime import A2ARuntimeToolResult
 from app.services.agent_runtime.node_executor import CancelSignal
@@ -312,6 +313,49 @@ async def test_schema_failure_returns_one_repair_result_before_receipt(
     assert "$.path must have type string" in str(message["content"])
     assert "$.credential is not an accepted argument" in str(message["content"])
     assert "must-not-echo" not in str(message)
+
+
+@pytest.mark.asyncio
+async def test_model_cannot_invoke_hidden_vercel_poll_arguments(monkeypatch) -> None:
+    tenant_id = uuid.uuid4()
+    agent = _agent(tenant_id)
+    call = {
+        "id": "model-vercel-poll",
+        "type": "function",
+        "function": {
+            "name": "vercel_deploy",
+            "arguments": (
+                '{"operation":"poll","deployment_id":"deployment-1"}'
+            ),
+        },
+    }
+    state = _state(tenant_id, agent, (call,))
+    _with_step_tool_context(
+        state,
+        call,
+        parameters_schema=builtin_model_definition("vercel_deploy")["function"][
+            "parameters"
+        ],
+    )
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError(f"hidden poll crossed the Model gate: {args}, {kwargs}")
+
+    monkeypatch.setattr(tool_step_service, "reserve_tool_execution", forbidden)
+    result = await tool_step_service.RuntimeToolStepService(
+        session_factory=_session_factory(agent),
+        cancel_source=_CancelSource(None),
+        tool_provider=forbidden,
+        tool_executor=forbidden,
+    ).execute_pending(state, _context(state), (call,))
+
+    assert result.error is None
+    assert result.messages[0]["execution_status"] == "failed"
+    assert result.messages[0]["error_code"] == "tool_arguments_invalid"
+    assert "$.project_name is required" in str(result.messages[0]["content"])
+    assert "$.operation is not an accepted argument" in str(
+        result.messages[0]["content"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -1649,12 +1693,21 @@ async def test_async_pending_interrupts_with_a_deterministic_poll_call(
 
 
 @pytest.mark.asyncio
-async def test_async_poll_reuses_the_origin_frozen_tool_context(monkeypatch) -> None:
+async def test_vercel_async_poll_reuses_the_origin_frozen_tool_context(
+    monkeypatch,
+) -> None:
     tenant_id = uuid.uuid4()
     agent = _agent(tenant_id)
-    launch_call = _call("call-async-resume", "read_file")
+    launch_call = _call("call-async-resume", "vercel_deploy")
+    launch_call["function"]["arguments"] = '{"project_name":"app"}'
     state = _state(tenant_id, agent, (launch_call,))
-    _with_step_tool_context(state, launch_call)
+    _with_step_tool_context(
+        state,
+        launch_call,
+        parameters_schema=builtin_model_definition("vercel_deploy")["function"][
+            "parameters"
+        ],
+    )
     context = _context(state)
     executions = deque(
         [
@@ -1662,19 +1715,19 @@ async def test_async_poll_reuses_the_origin_frozen_tool_context(monkeypatch) -> 
                 tenant_id,
                 uuid.UUID(context.run_id),
                 "call-async-resume",
-                "read_file",
+                "vercel_deploy",
             ),
             _execution(
                 tenant_id,
                 uuid.UUID(context.run_id),
                 "poll-call",
-                "read_file",
+                "vercel_deploy",
             ),
             _execution(
                 tenant_id,
                 uuid.UUID(context.run_id),
                 "poll-call-2",
-                "read_file",
+                "vercel_deploy",
             ),
         ]
     )
@@ -1682,14 +1735,17 @@ async def test_async_poll_reuses_the_origin_frozen_tool_context(monkeypatch) -> 
         pending = status == "pending"
         operation = {
             "version": 1,
-            "operation_key": "operation-key",
-            "operation_id": "op-1",
+            "operation_key": "vercel:deployment:deployment-1",
+            "operation_id": "deployment-1",
             "state": "running" if pending else "success",
         }
         if pending:
             operation["poll"] = {
-                "tool": "read_file",
-                "arguments": {"operation_id": "op-1"},
+                "tool": "vercel_deploy",
+                "arguments": {
+                    "operation": "poll",
+                    "deployment_id": "deployment-1",
+                },
                 "interval_ms": 0,
             }
         return ToolExecutionOutcome(
@@ -1722,7 +1778,7 @@ async def test_async_poll_reuses_the_origin_frozen_tool_context(monkeypatch) -> 
             tenant_id,
             uuid.UUID(context.run_id),
             "call-async-resume",
-            "read_file",
+            "vercel_deploy",
         )
         execution.id = uuid.UUID(str(kwargs["execution_id"]))
         execution.result_metadata = kwargs["metadata"]
@@ -1734,7 +1790,7 @@ async def test_async_poll_reuses_the_origin_frozen_tool_context(monkeypatch) -> 
             tenant_id,
             uuid.UUID(context.run_id),
             "poll-call",
-            "read_file",
+            "vercel_deploy",
         )
         execution.status = kwargs["status"]
         execution.result_metadata = kwargs["metadata"]
@@ -1774,9 +1830,9 @@ async def test_async_poll_reuses_the_origin_frozen_tool_context(monkeypatch) -> 
     assert poll.error is None
     assert poll.messages[-1]["execution_status"] == "succeeded"
     assert dispatched_arguments == [
-        {},
-        {"operation_id": "op-1"},
-        {"operation_id": "op-1"},
+        {"project_name": "app"},
+        {"operation": "poll", "deployment_id": "deployment-1"},
+        {"operation": "poll", "deployment_id": "deployment-1"},
     ]
     assert state["lifecycle"]["step_tool_context"]["assistant_message_id"] == (
         "assistant-message-1"

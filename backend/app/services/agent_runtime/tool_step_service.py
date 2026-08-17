@@ -2098,16 +2098,25 @@ class RuntimeToolStepService:
                         "Accepted Tool Call is missing from Step Tool Context",
                     )
                 inflight_cancel: CancelSignal | None = None
-                try:
-                    validation_issues = validate_tool_arguments(
-                        arguments,
-                        accepted.entry.parameters_schema,
-                    )
-                except ToolValidationContractError as exc:
-                    raise ToolExecutionError(
-                        "tool_context_corrupt",
-                        f"Accepted Tool schema is invalid: {exc}",
-                    ) from exc
+                # Runtime-generated async polls carry an internal continuation
+                # contract, not Model-facing arguments.  Their Tool name is still
+                # bound to the frozen origin call above, while the scheduler and
+                # Tool handler validate the durable poll metadata and operation-
+                # specific arguments.  Reapplying the public schema here can reject
+                # intentionally hidden fields such as Vercel's operation/deployment_id.
+                if async_origin_call_id is not None:
+                    validation_issues = ()
+                else:
+                    try:
+                        validation_issues = validate_tool_arguments(
+                            arguments,
+                            accepted.entry.parameters_schema,
+                        )
+                    except ToolValidationContractError as exc:
+                        raise ToolExecutionError(
+                            "tool_context_corrupt",
+                            f"Accepted Tool schema is invalid: {exc}",
+                        ) from exc
                 if validation_issues:
                     issue_summary = "; ".join(
                         issue.summary for issue in validation_issues
