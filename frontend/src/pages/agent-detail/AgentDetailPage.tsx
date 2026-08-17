@@ -1178,7 +1178,7 @@ function describeAnalysis(items: AnalysisItem[], t: (k: string, opts?: any) => s
 }
 
 function AnalysisCard({
-    items, t, expanded, onToggle, isGroupRunning, chatActive, sessionId,
+    items, t, expanded, onToggle, isGroupRunning, chatActive, sessionId, totalToolCount,
 }: {
     items: AnalysisItem[];
     t: (k: string, opts?: any) => string;
@@ -1189,6 +1189,7 @@ function AnalysisCard({
     /** True while the chat is actively streaming/waiting (any turn in flight) */
     chatActive?: boolean;
     sessionId?: string | null;
+    totalToolCount?: number;
 }) {
     // propose_experience_draft is a human-facing proposal, not a reasoning step —
     // render it as an always-visible card outside the collapsible trace.
@@ -1202,7 +1203,11 @@ function AnalysisCard({
     const stopped = hasRunningTool && chatActive === false;
     const isRunning = !stopped && (hasRunningTool || (!hasTools && isGroupRunning));
     const runningTool = [...toolItems].reverse().find(tc => tc.status === 'running') ?? null;
-    const headerTitle = isRunning && runningTool ? getToolMeta(runningTool).title : describeAnalysis(items, t);
+    const headerTitle = isRunning && runningTool
+        ? getToolMeta(runningTool).title
+        : totalToolCount != null
+            ? t('agent.chat.toolCallsTotal', { count: totalToolCount })
+            : describeAnalysis(items, t);
 
     return (
         <div className={`analysis-trace${expanded ? ' analysis-trace--open' : ''}${isRunning ? ' analysis-trace--running' : ''}${stopped ? ' analysis-trace--stopped' : ''}`}>
@@ -7014,6 +7019,8 @@ export default function AgentDetailPage() {
                                                     }
                                                     flushGroup(); // flush any trailing group
 
+                                                    const analysisGroupCount = grouped.filter(entry => entry.type === 'analysis_group').length;
+
 
                                                     return grouped.map((entry, entryIdx) => {
                                                         const previousEntry = grouped[entryIdx - 1];
@@ -7044,6 +7051,11 @@ export default function AgentDetailPage() {
                                                                         isGroupRunning={groupIsRunning}
                                                                         chatActive={isWaiting || isStreaming}
                                                                         sessionId={activeSessionIdRef.current}
+                                                                        totalToolCount={
+                                                                            analysisGroupCount === 1 && !(isWaiting || isStreaming)
+                                                                                ? activeSession?.tool_call_count
+                                                                                : undefined
+                                                                        }
                                                                     />
                                                                 </div>
                                                             );

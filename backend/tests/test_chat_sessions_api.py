@@ -133,7 +133,7 @@ async def test_list_all_associated_sessions_is_tenant_scoped_and_direct_unread_o
     session = _session(agent, owner_id)
     db = RecordingDB(
         DummyResult([session]),
-        DummyResult([(str(session.id), 3)]),
+        DummyResult([(str(session.id), 3, 2)]),
         DummyResult([]),
         DummyResult([(owner_id, "Alice")]),
     )
@@ -153,6 +153,8 @@ async def test_list_all_associated_sessions_is_tenant_scoped_and_direct_unread_o
     assert len(sessions) == 1
     assert sessions[0].user_id == str(owner_id)
     assert sessions[0].username == "Alice"
+    assert sessions[0].message_count == 3
+    assert sessions[0].tool_call_count == 2
     assert sessions[0].unread_count == 0
     session_sql = _sql(db.statements[0])
     assert f"chat_sessions.tenant_id = '{current_user.tenant_id}'" in session_sql

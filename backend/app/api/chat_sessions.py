@@ -125,6 +125,7 @@ class SessionOut(BaseModel):
     created_at: str
     last_message_at: str | None = None
     message_count: int = 0
+    tool_call_count: int = 0
     unread_count: int = 0
     is_primary: bool = False
     peer_agent_id: str | None = None
@@ -190,6 +191,7 @@ def _session_out(
     *,
     username: str | None = None,
     message_count: int = 0,
+    tool_call_count: int = 0,
     unread_count: int = 0,
     peer_agent_id: uuid.UUID | None = None,
     peer_agent_name: str | None = None,
@@ -207,6 +209,7 @@ def _session_out(
         created_at=session.created_at.isoformat(),
         last_message_at=session.last_message_at.isoformat() if session.last_message_at else None,
         message_count=message_count,
+        tool_call_count=tool_call_count,
         unread_count=unread_count,
         is_primary=bool(session.is_primary),
         peer_agent_id=str(peer_agent_id) if peer_agent_id else None,
@@ -254,7 +257,13 @@ async def list_sessions(
     session_ids = [session.id for session in sessions]
     conversation_ids = [str(session_id) for session_id in session_ids]
     count_result = await db.execute(
-        select(ChatMessage.conversation_id, func.count(ChatMessage.id))
+        select(
+            ChatMessage.conversation_id,
+            func.count(ChatMessage.id),
+            func.count(ChatMessage.id)
+            .filter(ChatMessage.role == "tool_call")
+            .label("tool_call_count"),
+        )
         .join(ChatSession, ChatMessage.conversation_id == cast(ChatSession.id, String))
         .where(
             *session_filters,
@@ -263,7 +272,12 @@ async def list_sessions(
         )
         .group_by(ChatMessage.conversation_id)
     )
-    message_counts = {row[0]: int(row[1] or 0) for row in count_result.all()}
+    count_rows = count_result.all()
+    message_counts = {row[0]: int(row[1] or 0) for row in count_rows}
+    tool_call_counts = {
+        row[0]: int(row[2] or 0) if len(row) > 2 else 0
+        for row in count_rows
+    }
 
     unread_result = await db.execute(
         select(ChatSession.id, func.count(ChatMessage.id))
@@ -348,6 +362,7 @@ async def list_sessions(
                 session,
                 username=username,
                 message_count=count,
+                tool_call_count=tool_call_counts.get(str(session.id), 0),
                 unread_count=unread_counts.get(str(session.id), 0),
                 peer_agent_id=peer_agent_id,
                 peer_agent_name=peer_agent_name,

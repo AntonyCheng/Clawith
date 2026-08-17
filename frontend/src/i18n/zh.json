@@ -476,6 +476,7 @@
       "updatedFiles": "更新了 {{count}} 个文件",
       "deletedFiles": "删除了 {{count}} 个文件",
       "ranCommands": "运行了 {{count}} 个工具",
+      "toolCallsTotal": "共调用 {{count}} 次工具",
       "ranAgents": "联系了 {{count}} 个数字员工",
       "showMore": "显示更多",
       "viewDetails": "查看细节",

@@ -469,6 +469,7 @@
       "updatedFiles": "Updated {{count}} files",
       "deletedFiles": "Deleted {{count}} files",
       "ranCommands": "Ran {{count}} tools",
+      "toolCallsTotal": "{{count}} tool calls",
       "ranAgents": "Contacted {{count}} agents",
       "showMore": "Show more",
       "viewDetails": "View details",
