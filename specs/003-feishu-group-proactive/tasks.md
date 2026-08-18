@@ -43,8 +43,8 @@
 ## Phase 8: Polish, Merge and Deploy
 
 - [x] T018 运行 scoped/full backend tests、Ruff、frontend tests/build、Alembic heads、Architecture Guard
-- [ ] T019 审查最终 diff、提交 Lore commit 并合并到本地 `v1.11.4`
-- [ ] T020 重新发现并备份 3010 部署目标，部署合并后的 `v1.11.4` 并验证容器/迁移/源码 marker
+- [x] T019 审查最终 diff、提交 Lore commit 并合并到本地 `v1.11.4`
+- [x] T020 重新发现并备份 3010 部署目标，部署合并后的 `v1.11.4` 并验证容器/迁移/源码 marker
 - [ ] T021 在 3010 验证浏览器主动飞书群发与自动化群投递，核对 Run、Tool、ChannelDelivery、Provider 回执和群内消息
 
 ## Dependencies
