@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Literal, cast
 
 from app.services.agent_runtime.state import JsonObject, JsonValue
+from app.services.sandbox.config import CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS
 
 ToolBindingKind = Literal["builtin", "mcp", "group", "a2a", "agentbay", "legacy"]
 ToolEffect = Literal["read", "write", "external_write"]
@@ -75,7 +76,10 @@ _DEADLINE_POLICIES = {
         "custom_image_generation", 600.0, 600.0, "stop_waiting_only"
     ),
     "local_code": ToolDeadlinePolicy(
-        "local_code", 30.0, 3600.0, "cooperative"
+        "local_code",
+        float(CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS),
+        3600.0,
+        "cooperative",
     ),
     "agentbay_read": ToolDeadlinePolicy(
         "agentbay_read", 30.0, 60.0, "stop_waiting_only"

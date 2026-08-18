@@ -23,8 +23,24 @@ def test_deadline_precedence_is_explicit_then_default_capped_by_policy() -> None
     assert resolve_tool_deadline_seconds("network_read", 120) == 60
     assert deadline_policy_for_tool("read_emails").name == "network_read"
     assert deadline_policy_for_tool("execute_code").name == "local_code"
+    assert resolve_tool_deadline_seconds("local_code") == 180
     assert tool_cancel_capability("local_code") == "cooperative"
     assert tool_cancel_capability("agentbay_code") == "stop_waiting_only"
+
+
+def test_code_sandbox_defaults_allow_longer_bounded_execution(monkeypatch) -> None:
+    from app.config import Settings
+    from app.services.sandbox.config import SandboxConfig
+
+    monkeypatch.delenv("SANDBOX_DEFAULT_TIMEOUT", raising=False)
+    monkeypatch.delenv("SANDBOX_MAX_TIMEOUT", raising=False)
+    sandbox = SandboxConfig()
+    settings = Settings(_env_file=None)
+
+    assert sandbox.default_timeout == 180
+    assert sandbox.max_timeout == 300
+    assert settings.SANDBOX_DEFAULT_TIMEOUT == 180
+    assert settings.SANDBOX_MAX_TIMEOUT == 300
 
 
 @pytest.mark.asyncio

@@ -80,6 +80,43 @@ def test_seeder_and_model_contracts_are_derived_from_the_same_builtin_source() -
         assert model["parameters"] == seed["parameters_schema"]
 
 
+def test_code_executor_contract_accepts_python3_with_longer_defaults() -> None:
+    for name in ("execute_code", "execute_code_e2b"):
+        definition = next(
+            item for item in BUILTIN_TOOL_DEFINITIONS if item["name"] == name
+        )
+        language = definition["parameters_schema"]["properties"]["language"]
+
+        assert "python3" in language["enum"]
+        assert definition["timeout_seconds"] == 180
+        assert definition["config"]["default_timeout"] == 180
+        assert definition["config"]["max_timeout"] == 300
+
+
+def test_code_executor_legacy_defaults_upgrade_without_overwriting_custom_values() -> None:
+    seed = {"default_timeout": 180, "max_timeout": 300}
+
+    assert tool_seeder._upgrade_code_executor_defaults(
+        "execute_code",
+        {"default_timeout": 30, "max_timeout": 60, "allow_network": True},
+        seed,
+    ) == {
+        "default_timeout": 180,
+        "max_timeout": 300,
+        "allow_network": True,
+    }
+    assert tool_seeder._upgrade_code_executor_defaults(
+        "execute_code_e2b",
+        {"default_timeout": 120, "max_timeout": 600},
+        seed,
+    ) == {"default_timeout": 120, "max_timeout": 600}
+    assert tool_seeder._upgrade_code_executor_defaults(
+        "read_file",
+        {"default_timeout": 30, "max_timeout": 60},
+        seed,
+    ) == {"default_timeout": 30, "max_timeout": 60}
+
+
 def test_builtin_model_definition_ignores_stale_database_contract() -> None:
     stale = {
         "type": "function",
