@@ -429,6 +429,7 @@ _BUILTIN_TOOL_SOURCE = [
                 },
                 "reason": {"type": "string", "minLength": 1, "description": "Self-contained instruction describing exactly what to do when this trigger fires."},
                 "focus_ref": {"type": "string", "description": "Optional: which focus item this relates to. If omitted, one is created automatically."},
+                "delivery_target_id": {"type": "string", "description": "Optional stable Feishu group target ID from query_directory(member_type='group')."},
             },
             "required": ["name", "type", "config", "reason"],
         },
@@ -448,6 +449,7 @@ _BUILTIN_TOOL_SOURCE = [
                 "name": {"type": "string", "description": "Name of the trigger to update"},
                 "config": {"type": "object", "description": "User config fields to patch; this does not replace internal keys."},
                 "reason": {"type": "string", "description": "New reason text"},
+                "delivery_target_id": {"type": ["string", "null"], "description": "Set or clear the stable Feishu group delivery target."},
             },
             "required": ["name"],
         },
@@ -508,7 +510,7 @@ _BUILTIN_TOOL_SOURCE = [
     {
         "name": "query_directory",
         "display_name": "Query Directory",
-        "description": "Query the people and digital employees this agent can see in its Directory. Use this before recommending or contacting a colleague.",
+        "description": "Query the people, digital employees, and reachable Feishu groups this agent can see in its Directory. Use member_type='group' before sending to a Feishu group.",
         "category": "communication",
         "icon": "📇",
         "is_default": True,
@@ -517,7 +519,7 @@ _BUILTIN_TOOL_SOURCE = [
             "properties": {
                 "query": {"type": "string", "description": "Optional search keyword for name, role, title, department, or skill."},
                 "target_member_id": {"type": "string", "description": "Optional exact human member ID returned by query_directory. Use this to verify one specific person."},
-                "member_type": {"type": "string", "enum": ["all", "agent", "human"], "description": "Filter by member type. Defaults to all."},
+                "member_type": {"type": "string", "enum": ["all", "agent", "human", "group"], "description": "Filter by member type. Use group for Feishu groups. Defaults to all."},
                 "include_uncontactable": {"type": "boolean", "description": "Whether to include members that are visible but currently unavailable. Defaults to false. This never returns invisible members."},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "Maximum number of members to return. Defaults to 20."},
                 "offset": {"type": "integer", "minimum": 0, "description": "Number of matching members to skip. Defaults to 0."},
@@ -552,7 +554,7 @@ _BUILTIN_TOOL_SOURCE = [
     {
         "name": "send_channel_message",
         "display_name": "Channel Message",
-        "description": "Send a message to a human colleague via their configured external channel (Feishu, DingTalk, WeCom, Slack, Teams, WeChat). Use query_directory first, then pass target_member_id.",
+        "description": "Send a message through an external channel. For a person, use query_directory then target_member_id. For a Feishu group, use query_directory(member_type='group') then target_recipient_id. Do not guess IDs.",
         "category": "communication",
         "icon": "💬",
         "is_default": False,
@@ -560,6 +562,7 @@ _BUILTIN_TOOL_SOURCE = [
             "type": "object",
             "properties": {
                 "target_member_id": {"type": "string", "description": "Stable human member ID returned by query_directory. Preferred recipient identifier."},
+                "target_recipient_id": {"type": "string", "description": "Stable Feishu group target ID returned by query_directory(member_type='group')."},
                 "message": {"type": "string", "description": "Message content"},
                 "channel": {
                     "type": "string",
@@ -567,7 +570,7 @@ _BUILTIN_TOOL_SOURCE = [
                     "enum": ["feishu", "dingtalk", "wecom", "slack", "teams", "microsoft_teams", "wechat"],
                 },
             },
-            "required": ["target_member_id", "message"],
+            "required": ["message"],
         },
         "config": {},
         "config_schema": {},
