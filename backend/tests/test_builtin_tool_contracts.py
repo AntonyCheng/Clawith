@@ -111,6 +111,11 @@ def test_code_executor_legacy_defaults_upgrade_without_overwriting_custom_values
         seed,
     ) == {"default_timeout": 120, "max_timeout": 600}
     assert tool_seeder._upgrade_code_executor_defaults(
+        "execute_code",
+        {"default_timeout": 30, "max_timeout": 600},
+        seed,
+    ) == {"default_timeout": 180, "max_timeout": 600}
+    assert tool_seeder._upgrade_code_executor_defaults(
         "read_file",
         {"default_timeout": 30, "max_timeout": 60},
         seed,
