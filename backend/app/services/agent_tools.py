@@ -69,6 +69,10 @@ from app.services.focus_service import (
     list_focus_items,
     upsert_focus_item,
 )
+from app.services.feishu_group_targets import (
+    FeishuGroupTargetError,
+    resolve_feishu_group_target,
+)
 from app.services import agent_directory
 from app.services.workspace_collaboration import (
     delete_workspace_file,
@@ -9090,10 +9094,10 @@ async def _query_directory_payload(agent_id: uuid.UUID, args: dict) -> dict:
             "error": {"code": "invalid_offset", "message": "offset must be greater than or equal to 0"},
         }
 
-    if member_type not in {"all", "agent", "human"}:
+    if member_type not in {"all", "agent", "human", "group"}:
         return {
             "ok": False,
-            "error": {"code": "invalid_member_type", "message": "member_type must be all, agent, or human"},
+            "error": {"code": "invalid_member_type", "message": "member_type must be all, agent, human, or group"},
         }
     if limit < 1 or limit > 50:
         return {
@@ -9114,7 +9118,7 @@ async def _query_directory_payload(agent_id: uuid.UUID, args: dict) -> dict:
                 "ok": False,
                 "error": {"code": "invalid_target_member_id", "message": "target_member_id must be a valid UUID"},
             }
-        if member_type == "agent":
+        if member_type in {"agent", "group"}:
             return {
                 "ok": False,
                 "error": {
@@ -9338,6 +9342,7 @@ async def _send_feishu_message_to_member(
 async def _send_channel_message(agent_id: uuid.UUID, args: dict) -> str:
     """Send message via a resolved human target's configured external channel."""
     target_member_id = (args.get("target_member_id") or "").strip()
+    target_recipient_id = (args.get("target_recipient_id") or "").strip()
     provider_user_id = (args.get("provider_user_id") or "").strip()
     member_name = (args.get("member_name") or "").strip()
     message_text = (args.get("message") or "").strip()
@@ -9345,6 +9350,16 @@ async def _send_channel_message(agent_id: uuid.UUID, args: dict) -> str:
 
     if not message_text:
         return "❌ Please provide message content"
+    if target_recipient_id:
+        if target_member_id:
+            return "❌ Provide exactly one of target_member_id or target_recipient_id."
+        outcome = await _send_channel_message_outcome(agent_id, args)
+        if isinstance(outcome, ToolExecutionOutcome):
+            return _legacy_tool_outcome_text(
+                outcome,
+                fallback="Channel message did not return a summary.",
+            )
+        return str(outcome)
     if (provider_user_id or member_name) and not target_member_id:
         return (
             "❌ provider_user_id and member_name are no longer supported for send_channel_message. "
@@ -9420,13 +9435,19 @@ async def _send_channel_message_outcome(
     string so Durable Runtime rejects the result as untyped.
     """
     target_member_id = (args.get("target_member_id") or "").strip()
+    target_recipient_id = (args.get("target_recipient_id") or "").strip()
     provider_user_id = (args.get("provider_user_id") or "").strip()
     member_name = (args.get("member_name") or "").strip()
     message_text = (args.get("message") or "").strip()
     target_channel = _normalize_roster_provider_type(args.get("channel"))
-    if not message_text or not target_member_id:
+    if not message_text or (not target_member_id and not target_recipient_id):
         return _typed_failure(
-            "send_channel_message requires target_member_id and message.",
+            "send_channel_message requires message and one Directory target.",
+            "invalid_tool_arguments",
+        )
+    if target_member_id and target_recipient_id:
+        return _typed_failure(
+            "send_channel_message accepts exactly one of target_member_id or target_recipient_id.",
             "invalid_tool_arguments",
         )
     if provider_user_id or member_name:
@@ -9434,6 +9455,55 @@ async def _send_channel_message_outcome(
             "send_channel_message accepts stable target_member_id, not provider_user_id/member_name.",
             "invalid_tool_arguments",
         )
+    if target_recipient_id:
+        if target_channel not in {None, "feishu"}:
+            return _typed_failure(
+                "target_recipient_id currently supports Feishu groups only.",
+                "channel_recipient_invalid",
+            )
+        from app.services.feishu_service import FeishuAPIError, feishu_service
+
+        try:
+            async with async_session() as db:
+                target = await resolve_feishu_group_target(
+                    db,
+                    agent_id=agent_id,
+                    target_recipient_id=target_recipient_id,
+                )
+                config_result = await db.execute(
+                    select(ChannelConfig).where(
+                        ChannelConfig.agent_id == agent_id,
+                        ChannelConfig.channel_type == "feishu",
+                    )
+                )
+                config = config_result.scalar_one_or_none()
+            if config is None:
+                return _typed_failure("This Agent has no Feishu channel configured.", "feishu_channel_not_configured")
+            response = await feishu_service.send_message(
+                config.app_id,
+                config.app_secret,
+                receive_id=target.chat_id,
+                msg_type="text",
+                content=json.dumps({"text": message_text}, ensure_ascii=False),
+                receive_id_type="chat_id",
+                stage="send_channel_message",
+            )
+        except FeishuGroupTargetError as exc:
+            return _typed_failure(exc.message, exc.code)
+        except FeishuAPIError as exc:
+            if exc.code is not None or (exc.http_status is not None and exc.http_status < 500):
+                return _typed_failure(f"Feishu rejected the message: {exc.user_message}", "feishu_message_rejected")
+            return _typed_unknown("Feishu group message outcome is unknown; reconcile before retrying.", "feishu_message_outcome_unknown")
+        except Exception:
+            return _typed_unknown("Feishu group message outcome is unknown; reconcile before retrying.", "feishu_message_outcome_unknown")
+        if not isinstance(response, Mapping):
+            return _typed_unknown("Feishu returned an unreadable response; reconcile before retrying.", "feishu_response_invalid")
+        if response.get("code") != 0:
+            return _typed_failure(
+                f"Feishu rejected the message: {response.get('msg') or 'unknown error'} (code {response.get('code')}).",
+                "feishu_message_rejected",
+            )
+        return _typed_success(f"Successfully sent message to Feishu group {target.display_name}.")
     try:
         async with async_session() as db:
             target, error = await _resolve_roster_human_target(
@@ -11439,6 +11509,11 @@ async def _handle_set_trigger_outcome(
     config = dict(raw_config)
     reason = raw_reason.strip()
     focus_ref = raw_focus_ref.strip()  # agenda_ref is backward compatibility only
+    delivery_target_id_raw = arguments.get("delivery_target_id")
+    try:
+        delivery_target_id = uuid.UUID(delivery_target_id_raw) if delivery_target_id_raw else None
+    except (TypeError, ValueError):
+        return _typed_failure("delivery_target_id must be a valid UUID.", "invalid_tool_arguments")
 
     if not name:
         return _typed_failure(
@@ -11688,6 +11763,15 @@ async def _handle_set_trigger_outcome(
             _a_result = await db.execute(select(_AgentModel).where(_AgentModel.id == agent_id))
             _agent_obj = _a_result.scalar_one_or_none()
             agent_max_triggers = (_agent_obj.max_triggers if _agent_obj else None) or MAX_TRIGGERS_PER_AGENT
+            if delivery_target_id is not None:
+                try:
+                    await resolve_feishu_group_target(
+                        db,
+                        agent_id=agent_id,
+                        target_recipient_id=delivery_target_id,
+                    )
+                except FeishuGroupTargetError as exc:
+                    return _typed_failure(exc.message, exc.code)
 
             # Check max triggers
             from sqlalchemy import func as sa_func
@@ -11737,6 +11821,7 @@ async def _handle_set_trigger_outcome(
                     existing.reason = reason
                     existing.focus_ref = focus_ref
                     existing.is_enabled = True
+                    existing.delivery_target_id = delivery_target_id
                     # Keep fire_count and last_fired_at — they are cumulative stats,
                     # but reset fire_count if it reached max_fires to allow it to run again.
                     if existing.max_fires and existing.fire_count >= existing.max_fires:
@@ -11762,6 +11847,7 @@ async def _handle_set_trigger_outcome(
                 config=config,
                 reason=reason,
                 focus_ref=focus_ref,
+                delivery_target_id=delivery_target_id,
             )
             # Fix 4: Safety cap for on_message triggers —
             # prevent infinite loops if agent creates broad watchers.
@@ -11841,8 +11927,10 @@ async def _handle_update_trigger_outcome(
 
     new_config = arguments.get("config")
     new_reason = arguments.get("reason")
+    delivery_target_provided = "delivery_target_id" in arguments
+    delivery_target_raw = arguments.get("delivery_target_id")
 
-    if new_config is None and new_reason is None:
+    if new_config is None and new_reason is None and not delivery_target_provided:
         return _typed_failure(
             "Provide at least one of config or reason to update.",
             "invalid_tool_arguments",
@@ -11865,6 +11953,20 @@ async def _handle_update_trigger_outcome(
                 )
 
             changes = []
+            if delivery_target_provided:
+                if delivery_target_raw in (None, ""):
+                    trigger.delivery_target_id = None
+                else:
+                    try:
+                        target_id = uuid.UUID(str(delivery_target_raw))
+                    except ValueError:
+                        return _typed_failure("delivery_target_id must be a valid UUID.", "invalid_tool_arguments")
+                    try:
+                        await resolve_feishu_group_target(db, agent_id=agent_id, target_recipient_id=target_id)
+                    except FeishuGroupTargetError as exc:
+                        return _typed_failure(exc.message, exc.code)
+                    trigger.delivery_target_id = target_id
+                changes.append("delivery_target_id")
             if new_config is not None:
                 if not isinstance(new_config, dict):
                     return _typed_failure(
