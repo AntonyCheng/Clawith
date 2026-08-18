@@ -188,6 +188,26 @@ async def seed_builtin_tools():
                     if merged != existing.config:
                         existing.config = merged
                         updated_fields.append("config")
+                if t["name"] in _CODE_EXECUTOR_NAMES:
+                    assignment_result = await query_dao.execute(
+                        db,
+                        select(AgentTool).where(AgentTool.tool_id == existing.id),
+                    )
+                    upgraded_assignments = 0
+                    for assignment in assignment_result.scalars().all():
+                        upgraded_assignment_config = _upgrade_code_executor_defaults(
+                            t["name"],
+                            assignment.config or {},
+                            seed_config,
+                        )
+                        if upgraded_assignment_config != (assignment.config or {}):
+                            assignment.config = upgraded_assignment_config
+                            upgraded_assignments += 1
+                    if upgraded_assignments:
+                        logger.info(
+                            "[ToolSeeder] Upgraded legacy timeout defaults for "
+                            f"{upgraded_assignments} {t['name']} Agent assignments"
+                        )
                 legacy_model = LEGACY_IMAGE_TOOL_MODEL_DEFAULTS.get(t["name"])
                 if legacy_model and existing.config == {
                     "model": legacy_model,
