@@ -523,6 +523,53 @@ async def test_move_workspace_path_fails_when_source_changes(monkeypatch, tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_move_overwrite_keeps_existing_target_when_candidate_write_conflicts(
+    monkeypatch,
+    tmp_path,
+):
+    agent_id = uuid.uuid4()
+
+    class ConflictingTargetStorage(MemoryStorageBackend):
+        async def write_bytes_if_match(self, key, data, **kwargs):
+            if key.endswith("workspace/dest.md"):
+                current = await self.get_version(key)
+                return ConditionalWriteResult(
+                    ok=False,
+                    conflict=True,
+                    current_version=current,
+                )
+            return await super().write_bytes_if_match(key, data, **kwargs)
+
+    storage = ConflictingTargetStorage(
+        {
+            f"{agent_id}/workspace/source.md": b"candidate",
+            f"{agent_id}/workspace/dest.md": b"keep-current",
+        }
+    )
+    monkeypatch.setattr(workspace_collaboration, "get_storage_backend", lambda: storage)
+
+    async def _noop_revision(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(workspace_collaboration, "record_revision", _noop_revision)
+    result = await workspace_collaboration.move_workspace_path(
+        db=None,
+        agent_id=agent_id,
+        base_dir=tmp_path / str(agent_id),
+        source_path="workspace/source.md",
+        destination_path="workspace/dest.md",
+        actor_type="agent",
+        actor_id=agent_id,
+        enforce_human_lock=False,
+        overwrite=True,
+    )
+
+    assert result.ok is False
+    assert storage.files[f"{agent_id}/workspace/dest.md"] == b"keep-current"
+    assert storage.files[f"{agent_id}/workspace/source.md"] == b"candidate"
+
+
+@pytest.mark.asyncio
 async def test_delete_workspace_directory_uses_prefix_existence(monkeypatch, tmp_path):
     agent_id = uuid.uuid4()
     storage = MemoryStorageBackend({

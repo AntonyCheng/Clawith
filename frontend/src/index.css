@@ -7310,12 +7310,24 @@ select:focus {
 }
 
 .chat-tool-reconciliation__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   justify-content: flex-end;
   margin-top: 10px;
 }
 
 .chat-tool-reconciliation__unsupported {
   margin-top: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.analysis-tool-reconciliation__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
   color: var(--text-tertiary);
   font-size: 12px;
 }

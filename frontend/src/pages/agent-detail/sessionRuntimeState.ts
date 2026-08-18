@@ -1,3 +1,11 @@
+export type ToolResolutionStatus =
+    | 'checking'
+    | 'saved'
+    | 'not_saved'
+    | 'partial'
+    | 'conflicted'
+    | 'unavailable';
+
 export type ToolReconciliation = {
     executionId: string;
     toolCallId: string;
@@ -5,6 +13,11 @@ export type ToolReconciliation = {
     resultSummary?: string | null;
     errorCode?: string | null;
     canReconcile: boolean;
+    resolutionStatus?: ToolResolutionStatus;
+    savedCount?: number;
+    pendingCount?: number;
+    conflictedCount?: number;
+    workspaceResolution?: boolean;
 };
 
 export type SessionActiveRun = {
@@ -117,6 +130,38 @@ const requiredText = (value: unknown): string | null => {
 const optionalText = (value: unknown): string | null =>
     value == null ? null : requiredText(value);
 
+const TOOL_RESOLUTION_STATUSES = new Set<ToolResolutionStatus>([
+    'checking',
+    'saved',
+    'not_saved',
+    'partial',
+    'conflicted',
+    'unavailable',
+]);
+
+const optionalCount = (value: unknown): number | undefined => (
+    typeof value === 'number' && Number.isInteger(value) && value >= 0
+        ? value
+        : undefined
+);
+
+const firstDefined = (raw: Record<string, unknown>, ...keys: string[]): unknown => {
+    for (const key of keys) {
+        if (raw[key] !== undefined) return raw[key];
+    }
+    return undefined;
+};
+
+export const toolReconciliationNeedsUserAction = (
+    reconciliation: ToolReconciliation,
+): boolean => reconciliation.canReconcile;
+
+export const toolReconciliationsByCallId = (
+    reconciliations: ToolReconciliation[],
+): Map<string, ToolReconciliation> => new Map(
+    reconciliations.map((reconciliation) => [reconciliation.toolCallId, reconciliation]),
+);
+
 export const sessionActiveRunFromResponse = (payload: unknown): SessionActiveRun | null => {
     const body = record(payload);
     const rawValue = body?.active_run;
@@ -149,6 +194,12 @@ export const sessionActiveRunFromResponse = (payload: unknown): SessionActiveRun
         const toolCallId = requiredText(item.tool_call_id);
         const toolName = requiredText(item.tool_name);
         if (!executionId || !toolCallId || !toolName) return null;
+        const rawResolutionStatus = firstDefined(item, 'resolution_status', 'resolutionStatus');
+        if (
+            rawResolutionStatus !== undefined
+            && (typeof rawResolutionStatus !== 'string'
+                || !TOOL_RESOLUTION_STATUSES.has(rawResolutionStatus as ToolResolutionStatus))
+        ) return null;
         pendingToolReconciliations.push({
             executionId,
             toolCallId,
@@ -156,6 +207,21 @@ export const sessionActiveRunFromResponse = (payload: unknown): SessionActiveRun
             resultSummary: optionalText(item.result_summary),
             errorCode: optionalText(item.error_code),
             canReconcile: item.can_reconcile === true,
+            ...(rawResolutionStatus !== undefined
+                ? { resolutionStatus: rawResolutionStatus as ToolResolutionStatus }
+                : {}),
+            ...(optionalCount(firstDefined(item, 'saved_count', 'savedCount')) !== undefined
+                ? { savedCount: optionalCount(firstDefined(item, 'saved_count', 'savedCount')) }
+                : {}),
+            ...(optionalCount(firstDefined(item, 'pending_count', 'pendingCount')) !== undefined
+                ? { pendingCount: optionalCount(firstDefined(item, 'pending_count', 'pendingCount')) }
+                : {}),
+            ...(optionalCount(firstDefined(item, 'conflicted_count', 'conflictedCount')) !== undefined
+                ? { conflictedCount: optionalCount(firstDefined(item, 'conflicted_count', 'conflictedCount')) }
+                : {}),
+            ...(typeof firstDefined(item, 'workspace_resolution', 'workspaceResolution') === 'boolean'
+                ? { workspaceResolution: firstDefined(item, 'workspace_resolution', 'workspaceResolution') as boolean }
+                : {}),
         });
     }
 

@@ -271,6 +271,41 @@ async def test_unknown_reconciliation_rejects_unsupported_tool() -> None:
         )
 
 
+@pytest.mark.asyncio
+async def test_workspace_candidate_can_preserve_current_workspace_without_retry() -> None:
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    execution = _execution(
+        tenant_id=tenant_id,
+        run_id=run_id,
+        status="unknown",
+        effect="write",
+        retry_policy="conditional",
+    )
+    execution.tool_name = "execute_code"
+    execution.result_metadata = {
+        "workspace_candidate_ref": "private/workspace-reconciliation/candidate",
+    }
+    db = _FakeSession(execution)
+
+    result = await tool_execution.reconcile_unknown_tool_execution(
+        db,  # type: ignore[arg-type]
+        tenant_id=tenant_id,
+        run_id=run_id,
+        execution_id=execution.id,
+        confirmed_status="succeeded",
+        confirmed_by_user_id=uuid.uuid4(),
+        note="Keep the source files.",
+        resolution_action="keep_workspace",
+        clock=lambda: _NOW,
+    )
+
+    assert result.status == "succeeded"
+    assert result.result_metadata["workspace_resolution_action"] == "keep_workspace"
+    assert result.result_metadata["error_code"] == "externally_confirmed_workspace_preserved"
+    assert "Do not repeat" in result.result_summary
+
+
 def test_argument_fingerprint_is_canonical_and_rejects_non_json_values():
     first = tool_execution.fingerprint_arguments({"message": "你好", "nested": {"b": 2, "a": 1}})
     second = tool_execution.fingerprint_arguments({"nested": {"a": 1, "b": 2}, "message": "你好"})

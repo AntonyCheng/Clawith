@@ -138,6 +138,12 @@ _RESULT_METADATA_KEYS = frozenset(
         "updated_refs",
         "report_type",
         "workspace_path",
+        "workspace_candidate_ref",
+        "workspace_resolution_status",
+        "workspace_saved_count",
+        "workspace_pending_count",
+        "workspace_conflicted_count",
+        "workspace_unverified_count",
         "db_status",
         "projection_status",
         "provider",
@@ -192,6 +198,7 @@ _RESULT_METADATA_KEYS = frozenset(
         "reconciliation_note",
         "original_status",
         "original_completed_at",
+        "workspace_resolution_action",
     }
 )
 _SENSITIVE_KEYS = frozenset(
@@ -1987,6 +1994,7 @@ async def reconcile_unknown_tool_execution(
     confirmed_status: Literal["succeeded", "failed"],
     confirmed_by_user_id: uuid.UUID,
     note: str,
+    resolution_action: Literal["applied", "not_applied", "keep_workspace"] | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> AgentToolExecution:
     """Settle one unknown receipt from an explicit, audited human confirmation."""
@@ -2035,18 +2043,28 @@ async def reconcile_unknown_tool_execution(
 
     reconciled_at = (clock or (lambda: datetime.now(UTC)))()
     original_completed_at = execution.completed_at
-    error_code = (
-        "externally_confirmed_applied"
-        if confirmed_status == "succeeded"
-        else "externally_confirmed_not_applied"
+    action = resolution_action or (
+        "applied" if confirmed_status == "succeeded" else "not_applied"
     )
-    summary = (
-        f"User confirmed that the prior {execution.tool_name} operation took "
-        "effect. Do not repeat it."
-        if confirmed_status == "succeeded"
-        else f"User confirmed that the prior {execution.tool_name} operation "
-        "did not take effect. A new tool call may retry it safely."
-    )
+    if action == "keep_workspace":
+        error_code = "externally_confirmed_workspace_preserved"
+        summary = (
+            f"User chose to preserve the current Workspace instead of applying "
+            f"the prior {execution.tool_name} candidate. Do not repeat the "
+            "original Tool call automatically."
+        )
+    elif confirmed_status == "succeeded":
+        error_code = "externally_confirmed_applied"
+        summary = (
+            f"User confirmed that the prior {execution.tool_name} operation took "
+            "effect. Do not repeat it."
+        )
+    else:
+        error_code = "externally_confirmed_not_applied"
+        summary = (
+            f"User confirmed that the prior {execution.tool_name} operation "
+            "did not take effect. A new tool call may retry it safely."
+        )
     execution.status = confirmed_status
     execution.result_summary = summary
     if confirmed_status == "failed":
@@ -2060,6 +2078,7 @@ async def reconcile_unknown_tool_execution(
             "reconciled_by_user_id": str(confirmed_by_user_id),
             "reconciled_at": reconciled_at.isoformat(),
             "reconciliation_note": normalized_note,
+            "workspace_resolution_action": action,
             "original_status": "unknown",
             "original_completed_at": (
                 original_completed_at.isoformat()
@@ -2085,6 +2104,15 @@ def is_user_reconcilable_unknown_execution(execution: AgentToolExecution) -> boo
     effect, retry_policy = _execution_metadata(execution)
     contract_version = getattr(execution, "contract_version", None)
     tool_name = str(getattr(execution, "tool_name", "") or "")
+    metadata = (
+        execution.result_metadata
+        if isinstance(execution.result_metadata, dict)
+        else {}
+    )
+    has_workspace_candidate = isinstance(
+        metadata.get("workspace_candidate_ref"),
+        str,
+    ) and bool(metadata.get("workspace_candidate_ref"))
     is_registered_dynamic_mcp = (
         tool_name not in BUILTIN_TOOL_NAMES
         and isinstance(contract_version, str)
@@ -2092,7 +2120,7 @@ def is_user_reconcilable_unknown_execution(execution: AgentToolExecution) -> boo
         and effect == "external_write"
         and retry_policy == "never"
     )
-    return (
+    return has_workspace_candidate or (
         tool_name == "write_file"
         and effect == "write"
         and retry_policy == "conditional"

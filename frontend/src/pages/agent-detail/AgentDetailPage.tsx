@@ -74,6 +74,8 @@ import {
     sessionRuntimeStateResponseIsValid,
     type SessionActiveRun,
     type ToolReconciliation,
+    toolReconciliationNeedsUserAction,
+    toolReconciliationsByCallId,
     waitingSessionActiveRunHint,
 } from './sessionRuntimeState';
 import { onboardingKickoffKey, shouldKickoffOnboarding } from './onboardingKickoff';
@@ -1037,7 +1039,7 @@ if (typeof document !== 'undefined' && !document.getElementById(_PULSE_STYLE_ID)
  */
 type AnalysisItem =
     | { type: 'thinking'; content: string }
-    | { type: 'tool'; name: string; args: any; status: 'running' | 'done'; result?: string };
+    | { type: 'tool'; toolCallId?: string; name: string; args: any; status: 'running' | 'done'; result?: string };
 
 type AnalysisToolMeta = {
     title: string;
@@ -1181,8 +1183,40 @@ function describeAnalysis(items: AnalysisItem[], t: (k: string, opts?: any) => s
     return parts.join(', ');
 }
 
+function describeToolResolution(
+    reconciliation: ToolReconciliation,
+    t: (key: string, options?: any) => string,
+): string {
+    switch (reconciliation.resolutionStatus) {
+        case 'checking':
+            return t('agent.chat.workspaceChecking', '正在核验文件操作…');
+        case 'saved':
+            return reconciliation.savedCount
+                ? t('agent.chat.workspaceSavedCount', { count: reconciliation.savedCount, defaultValue: `Agent 的结果已保存（${reconciliation.savedCount} 个文件）` })
+                : t('agent.chat.workspaceSaved', 'Agent 的文件结果已保存');
+        case 'not_saved':
+            return t('agent.chat.workspaceNotSaved', '已保留源文件');
+        case 'partial': {
+            const saved = reconciliation.savedCount || 0;
+            const pending = reconciliation.pendingCount || 0;
+            return saved || pending
+                ? t('agent.chat.workspacePartialCount', { saved, pending, defaultValue: `已保存 ${saved} 个文件，仍有 ${pending} 个文件待核验` })
+                : t('agent.chat.workspacePartial', '部分文件已保存，仍有文件待核验');
+        }
+        case 'conflicted':
+            return reconciliation.conflictedCount
+                ? t('agent.chat.workspaceConflictCount', { count: reconciliation.conflictedCount, defaultValue: `${reconciliation.conflictedCount} 个文件内容有变化，等待处理` })
+                : t('agent.chat.workspaceConflictPending', '文件内容有变化，等待处理');
+        case 'unavailable':
+            return t('agent.chat.workspaceUnavailable', '暂时无法核验文件操作');
+        default:
+            return t('agent.chat.workspaceVerifying', '文件操作正在核验');
+    }
+}
+
 function AnalysisCard({
     items, t, expanded, onToggle, isGroupRunning, chatActive, sessionId, totalToolCount,
+    reconciliationsByToolCallId,
 }: {
     items: AnalysisItem[];
     t: (k: string, opts?: any) => string;
@@ -1194,6 +1228,7 @@ function AnalysisCard({
     chatActive?: boolean;
     sessionId?: string | null;
     totalToolCount?: number;
+    reconciliationsByToolCallId: Map<string, ToolReconciliation>;
 }) {
     // propose_experience_draft is a human-facing proposal, not a reasoning step —
     // render it as an always-visible card outside the collapsible trace.
@@ -1207,10 +1242,11 @@ function AnalysisCard({
     const stopped = hasRunningTool && chatActive === false;
     const isRunning = !stopped && (hasRunningTool || (!hasTools && isGroupRunning));
     const runningTool = [...toolItems].reverse().find(tc => tc.status === 'running') ?? null;
+    const resolvedToolCount = Math.max(totalToolCount ?? 0, toolItems.length);
     const headerTitle = isRunning && runningTool
         ? getToolMeta(runningTool).title
         : totalToolCount != null
-            ? t('agent.chat.toolCallsTotal', { count: totalToolCount })
+            ? t('agent.chat.toolCallsTotal', { count: resolvedToolCount })
             : describeAnalysis(items, t);
 
     return (
@@ -1279,6 +1315,15 @@ function AnalysisCard({
                             const argsStr = tc.args && Object.keys(tc.args).length > 0
                                 ? JSON.stringify(tc.args, null, 2) : '';
                             const hasDetail = true;
+                            const reconciliation = tc.toolCallId
+                                ? reconciliationsByToolCallId.get(tc.toolCallId)
+                                : undefined;
+                            const needsUserAction = reconciliation
+                                ? toolReconciliationNeedsUserAction(reconciliation)
+                                : false;
+                            const statusText = reconciliation
+                                ? describeToolResolution(reconciliation, t)
+                                : null;
                             return (
                                 <div key={idx} className={`analysis-trace-row${running ? ' analysis-trace-row--running' : ''}`}>
                                     <div className="analysis-trace-node-wrap">
@@ -1342,6 +1387,12 @@ function AnalysisCard({
                                                 </span>
                                             )}
                                         </div>
+                                        {reconciliation?.resolutionStatus && !needsUserAction && (
+                                            <div className="analysis-tool-reconciliation__status">
+                                                <IconClock size={14} stroke={1.7} />
+                                                <span>{statusText}</span>
+                                            </div>
+                                        )}
                                         {hasDetail && (
                                             <details style={{ marginTop: '8px' }}>
                                                 <summary style={{
@@ -2399,6 +2450,10 @@ export default function AgentDetailPage() {
     const runtimeEventCursorRef = useRef<Record<SessionRuntimeKey, string>>({});
     const [activeRun, setActiveRun] = useState<SessionActiveRun | null>(null);
     const selectedSessionActiveRun = activeRunForSession(activeRun, activeSession?.id);
+    const selectedReconciliationsByToolCallId = useMemo(
+        () => toolReconciliationsByCallId(selectedSessionActiveRun?.pendingToolReconciliations || []),
+        [selectedSessionActiveRun?.pendingToolReconciliations],
+    );
     const [reconcilingExecutionId, setReconcilingExecutionId] = useState<string | null>(null);
     const [messagesLoadedRuntimeKey, setMessagesLoadedRuntimeKey] = useState<string | null>(null);
     const [runtimeStateLoadedRuntimeKey, setRuntimeStateLoadedRuntimeKey] = useState<string | null>(null);
@@ -3738,13 +3793,18 @@ export default function AgentDetailPage() {
     const handleToolReconciliation = async (
         reconciliation: ToolReconciliation,
         outcome: 'applied' | 'not_applied',
+        allAccept = false,
     ) => {
         if (!id || !activeSession?.id || !selectedSessionActiveRun?.correlationId) return;
         const correlationId = selectedSessionActiveRun.correlationId;
         const applied = outcome === 'applied';
-        const confirmation = applied
-            ? t('agent.chat.reconcileAppliedConfirm', '确认该操作已经生效，并且不得重复执行？')
-            : t('agent.chat.reconcileNotAppliedConfirm', '确认该操作没有生效，可以让 Agent 重新决定是否重试？');
+        const confirmation = reconciliation.workspaceResolution
+            ? applied
+                ? t('agent.chat.useAgentResultConfirm', '使用 Agent 的结果覆盖工作区中的源文件？')
+                : t('agent.chat.keepSourceFileConfirm', '保留工作区中的源文件，放弃 Agent 的文件结果？')
+            : applied
+                ? t('agent.chat.reconcileAppliedConfirm', '确认该操作已经生效，并且不得重复执行？')
+                : t('agent.chat.reconcileNotAppliedConfirm', '确认该操作没有生效，可以让 Agent 重新决定是否重试？');
         if (!window.confirm(confirmation)) return;
 
         const run = selectedSessionActiveRun;
@@ -3766,6 +3826,7 @@ export default function AgentDetailPage() {
                         note: applied
                             ? 'User confirmed in Direct Chat that the operation took effect.'
                             : 'User confirmed in Direct Chat that the operation did not take effect.',
+                        all_accept: allAccept,
                     }),
                 },
             );
@@ -3774,9 +3835,18 @@ export default function AgentDetailPage() {
                 throw new Error(body?.detail || `HTTP ${response.status}`);
             }
 
-            const userMsg = applied
-                ? t('agent.chat.reconcileAppliedMessage', '我确认这次工具操作已经生效，请继续，且不要重复执行该操作。')
-                : t('agent.chat.reconcileNotAppliedMessage', '我确认这次工具操作没有生效，请消费失败结果后继续，并重新决定是否需要新的工具调用。');
+            if (reconciliation.workspaceResolution) {
+                await fetchSessionRuntimeState(id, sessionId);
+                return;
+            }
+
+            const userMsg = reconciliation.workspaceResolution
+                ? applied
+                    ? t('agent.chat.useAgentResultMessage', '使用 Agent 的文件结果继续，不要重新执行原工具。')
+                    : t('agent.chat.keepSourceFileMessage', '保留工作区中的源文件继续，不要重新执行原工具。')
+                : applied
+                    ? t('agent.chat.reconcileAppliedMessage', '我确认这次工具操作已经生效，请继续，且不要重复执行该操作。')
+                    : t('agent.chat.reconcileNotAppliedMessage', '我确认这次工具操作没有生效，请消费失败结果后继续，并重新决定是否需要新的工具调用。');
             const pending: PendingChatMessage = {
                 runtimeKey,
                 contentForLLM: userMsg,
@@ -6956,6 +7026,7 @@ export default function AgentDetailPage() {
                                                                 }
                                                                 currentGroup.push({
                                                                     type: 'tool',
+                                                                    toolCallId: msg.toolCallId,
                                                                     name: msg.toolName || 'tool',
                                                                     args: msg.toolArgs || {},
                                                                     status: msg.toolStatus === 'running' ? 'running' : 'done',
@@ -7035,6 +7106,7 @@ export default function AgentDetailPage() {
                                                                                 ? activeSession?.tool_call_count
                                                                                 : undefined
                                                                         }
+                                                                        reconciliationsByToolCallId={selectedReconciliationsByToolCallId}
                                                                     />
                                                                 </div>
                                                             );
@@ -7128,17 +7200,26 @@ export default function AgentDetailPage() {
                                             ) : null}
                                             <div ref={chatInputAreaRef} className="chat-input-area" style={{ flexShrink: 0 }}>
                                                 <div className="chat-composer">
-                                                    {selectedSessionActiveRun?.pendingToolReconciliations.map((reconciliation) => (
-                                                        <div className="chat-tool-reconciliation" key={reconciliation.executionId}>
-                                                            <div className="chat-tool-reconciliation__title">
-                                                                <IconAlertTriangle size={16} />
-                                                                {t('agent.chat.reconcileTitle', '工具执行结果需要确认')}
-                                                            </div>
-                                                            <div className="chat-tool-reconciliation__detail">
-                                                                <code>{reconciliation.toolName}</code>
-                                                                <span>{reconciliation.resultSummary || reconciliation.errorCode || t('agent.chat.reconcileUnknown', '该操作可能已生效，也可能未生效。')}</span>
-                                                            </div>
-                                                            {reconciliation.canReconcile ? (
+                                                    {selectedSessionActiveRun?.pendingToolReconciliations
+                                                        .filter(toolReconciliationNeedsUserAction)
+                                                        .map((reconciliation) => (
+                                                            <div className="chat-tool-reconciliation" key={reconciliation.executionId}>
+                                                                <div className="chat-tool-reconciliation__title">
+                                                                    <IconAlertTriangle size={16} />
+                                                                    {reconciliation.workspaceResolution
+                                                                        ? t('agent.chat.workspaceConflictTitle', '文件内容有变化')
+                                                                        : t('agent.chat.reconcileTitle', '工具执行结果需要确认')}
+                                                                </div>
+                                                                <div className="chat-tool-reconciliation__detail">
+                                                                    {reconciliation.workspaceResolution ? (
+                                                                        <span>{t('agent.chat.workspaceConflictBody', 'Agent 处理后的文件与工作区中的源文件不同。请选择要保留哪一个。')}</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <code>{reconciliation.toolName}</code>
+                                                                            <span>{reconciliation.resultSummary || reconciliation.errorCode || t('agent.chat.reconcileUnknown', '该操作可能已生效，也可能未生效。')}</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
                                                                 <div className="chat-tool-reconciliation__actions">
                                                                     <button
                                                                         type="button"
@@ -7146,7 +7227,9 @@ export default function AgentDetailPage() {
                                                                         disabled={reconcilingExecutionId !== null}
                                                                         onClick={() => void handleToolReconciliation(reconciliation, 'not_applied')}
                                                                     >
-                                                                        {t('agent.chat.reconcileNotApplied', '确认未生效，可继续')}
+                                                                        {reconciliation.workspaceResolution
+                                                                            ? t('agent.chat.keepSourceFile', '保留源文件')
+                                                                            : t('agent.chat.reconcileNotApplied', '确认未生效，可继续')}
                                                                     </button>
                                                                     <button
                                                                         type="button"
@@ -7154,16 +7237,27 @@ export default function AgentDetailPage() {
                                                                         disabled={reconcilingExecutionId !== null}
                                                                         onClick={() => void handleToolReconciliation(reconciliation, 'applied')}
                                                                     >
-                                                                        {t('agent.chat.reconcileApplied', '确认已生效，继续')}
+                                                                        {reconciliation.workspaceResolution
+                                                                            ? t('agent.chat.useAgentResult', '使用 Agent 的结果')
+                                                                            : t('agent.chat.reconcileApplied', '确认已生效，继续')}
                                                                     </button>
+                                                                    {reconciliation.workspaceResolution && (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-primary"
+                                                                            disabled={reconcilingExecutionId !== null}
+                                                                            onClick={() => void handleToolReconciliation(
+                                                                                reconciliation,
+                                                                                'applied',
+                                                                                true,
+                                                                            )}
+                                                                        >
+                                                                            {t('agent.chat.useAgentResultForRun', '本次任务全部使用 Agent 的结果')}
+                                                                        </button>
+                                                                    )}
                                                                 </div>
-                                                            ) : (
-                                                                <div className="chat-tool-reconciliation__unsupported">
-                                                                    {t('agent.chat.reconcileUnsupported', '此工具暂不支持在前端安全结算，请联系管理员。')}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ))}
+                                                            </div>
+                                                        ))}
                                                     {(chatUploadDrafts.length > 0 || attachedFiles.length > 0) && (
                                                         <div className="chat-composer-attachments">
                                                             {chatUploadDrafts.map((draft) => (

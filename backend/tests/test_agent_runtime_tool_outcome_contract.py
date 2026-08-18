@@ -1065,6 +1065,82 @@ async def test_completion_gate_explicit_repair_is_actionable() -> None:
     assert "Read the report" in (result.reason or "")
 
 
+@pytest.mark.asyncio
+async def test_completion_gate_treats_workspace_preservation_as_task_amendment() -> None:
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    model_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    model = LLMModel(
+        id=model_id,
+        tenant_id=tenant_id,
+        provider="openai",
+        model="judge-model",
+        api_key_encrypted="unused",
+        label="Judge",
+        enabled=True,
+    )
+    captured: dict[str, object] = {}
+
+    async def passing_completion(_model, messages, **_kwargs):
+        captured["system"] = messages[0].content
+        captured["payload"] = json.loads(messages[1].content)
+        return LLMCompletionStep(
+            content=json.dumps(
+                {
+                    "verdict": "pass",
+                    "missing_requirements": [],
+                    "next_actions": [],
+                    "evidence": ["human Workspace decision"],
+                }
+            ),
+            tool_calls=(),
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(),
+        )
+
+    gate = TaskCompletionGate(
+        session_factory=_factory(_ScalarResult(model)),
+        completion=passing_completion,
+    )
+    context = RuntimeContext(
+        tenant_id=str(tenant_id),
+        run_id=str(run_id),
+        command_id="command-gate",
+        executor=object(),  # type: ignore[arg-type]
+        goal="Write AGENT candidate bytes",
+        model_id=str(model_id),
+        agent_id=str(agent_id),
+    )
+    state = _state(tenant_id, run_id)
+    state["messages"] = [
+        {
+            "id": "resume-workspace",
+            "role": "user",
+            "content": "保留工作区中的源文件，不要覆盖。",
+            "runtime_input": "resume",
+            "runtime_confirmation_text": "keep_workspace",
+            "runtime_reconciliation_action": "keep_workspace",
+        }
+    ]
+
+    result = await gate.verify(state, context, "已保留源文件并继续。")
+
+    assert result.outcome == "pass"
+    assert "latest human decision wins" in str(captured["system"])
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    amendments = payload["available_evidence"]["authoritative_task_amendments"]
+    assert amendments == [
+        {
+            "content": "保留工作区中的源文件，不要覆盖。",
+            "runtime_confirmation_text": "keep_workspace",
+            "runtime_reconciliation_action": "keep_workspace",
+        }
+    ]
+
+
 async def _true_reference(
     ref: str,
     tenant_id: uuid.UUID,

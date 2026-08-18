@@ -464,7 +464,7 @@ def _message_for_channel(message: JsonObject) -> JsonObject:
 def _resume_message_content(resume_value: Mapping[str, JsonValue]) -> str | list:
     resume_type = resume_value.get("resume_type")
     payload = resume_value.get("payload")
-    if resume_type == "user_input" and isinstance(payload, Mapping):
+    if resume_type in {"user_input", "tool_reconciliation"} and isinstance(payload, Mapping):
         content = payload.get("content")
         if isinstance(content, (str, list)):
             return parse_multimodal_content(content)
@@ -479,7 +479,7 @@ def _resume_message_content(resume_value: Mapping[str, JsonValue]) -> str | list
 def _resume_confirmation_text(
     resume_value: Mapping[str, JsonValue],
 ) -> str | None:
-    if resume_value.get("resume_type") != "user_input":
+    if resume_value.get("resume_type") not in {"user_input", "tool_reconciliation"}:
         return None
     payload = resume_value.get("payload")
     if not isinstance(payload, Mapping):
@@ -1391,6 +1391,18 @@ class DeterministicRuntimeNodeExecutor:
         )
         if confirmation_text is not None:
             resume_message["runtime_confirmation_text"] = confirmation_text
+        if resume_value.get("resume_type") == "tool_reconciliation":
+            payload = resume_value.get("payload")
+            reconciliation_action = (
+                payload.get("workspace_resolution_action")
+                if isinstance(payload, Mapping)
+                else None
+            )
+            if reconciliation_action in {"applied", "keep_workspace"}:
+                resume_message["runtime_reconciliation_action"] = cast(
+                    str,
+                    reconciliation_action,
+                )
         pending_calls = _tool_calls(cast(RuntimeLifecycle, lifecycle))
         if waiting_status == "waiting_user" and pending_calls:
             lifecycle["resumed_waiting_request"] = waiting_request
