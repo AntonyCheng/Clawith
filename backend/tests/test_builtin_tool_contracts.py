@@ -121,6 +121,26 @@ def test_code_executor_legacy_defaults_upgrade_without_overwriting_custom_values
         seed,
     ) == {"default_timeout": 30, "max_timeout": 60}
 
+    assert tool_seeder._upgrade_code_executor_tenant_value(
+        "execute_code",
+        {
+            "config": {"default_timeout": 30, "max_timeout": 60},
+            "source": "company",
+        },
+        seed,
+    ) == {
+        "config": {"default_timeout": 180, "max_timeout": 300},
+        "source": "company",
+    }
+    custom_tenant_value = {
+        "config": {"default_timeout": 120, "max_timeout": 600}
+    }
+    assert tool_seeder._upgrade_code_executor_tenant_value(
+        "execute_code",
+        custom_tenant_value,
+        seed,
+    ) == custom_tenant_value
+
 
 def test_builtin_model_definition_ignores_stale_database_contract() -> None:
     stale = {
