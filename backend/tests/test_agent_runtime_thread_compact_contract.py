@@ -13,7 +13,7 @@ from app.services.agent_runtime.node_executor import (
     ToolStepResult,
 )
 from app.services.agent_runtime.run_compactor import (
-    _SUMMARY_FIELDS,
+    _SUMMARY_FORMAT,
     RunCompactorError,
     TransientRunCompactorError,
     compact_context_budgets,
@@ -145,16 +145,8 @@ def test_product_run_record_flattens_runtime_context_without_registry_wrapper() 
     } <= fields.keys()
 
 
-def test_compact_summary_has_exactly_the_five_frozen_sections() -> None:
-    assert _SUMMARY_FIELDS == frozenset(
-        {
-            "task_goal_and_constraints",
-            "completed_work_and_results",
-            "key_decisions_and_evidence",
-            "unfinished_or_blocked",
-            "next_actions",
-        }
-    )
+def test_compact_summary_uses_versioned_markdown_without_a_tool_protocol() -> None:
+    assert _SUMMARY_FORMAT == "thread_running_summary_markdown_v1"
 
 
 @pytest.mark.parametrize(

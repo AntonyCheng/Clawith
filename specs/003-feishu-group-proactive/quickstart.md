@@ -13,7 +13,7 @@
 
 1. 重新发现 3010 当前代码、容器、数据库与迁移状态；部署前备份变更文件/数据库。
 2. 部署同一候选代码并执行 migration；记录源码 marker/hash、容器 image/status/restart count 和 Alembic version。
-3. 使用已明确的测试 Agent 和测试飞书群产生可信群 Session。
+3. 使用已明确的测试 Agent 主动查询 Bot 所在群并同步可信群 Session，无需群成员先发消息。
 4. 浏览器 Direct Chat 请求 Agent 向该群发送唯一 marker；核对 Run、Tool ledger、ChannelDelivery、Provider receipt 和群内实收。
 5. 创建一次性测试自动化绑定同一群；核对无需群内新消息即可投递唯一 marker，重复调度不重复发送。
 6. 删除测试自动化；保留群消息和数据库证据，分别报告本地、部署和真实 Provider 验证边界。

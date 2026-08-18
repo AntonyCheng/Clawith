@@ -10,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import Agent
 from app.models.chat_session import ChatSession
+from app.models.channel_config import ChannelConfig
+from app.services.channel_session import find_or_create_channel_session
+from app.services.feishu_service import FeishuAPIError, feishu_service
 
 
 class FeishuGroupTargetError(ValueError):
@@ -17,6 +20,98 @@ class FeishuGroupTargetError(ValueError):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+async def sync_feishu_group_targets(
+    db: AsyncSession,
+    *,
+    agent: Agent,
+) -> int:
+    """Synchronize groups currently joined by this Agent's Feishu bot."""
+    config = (
+        await db.execute(
+            select(ChannelConfig).where(
+                ChannelConfig.agent_id == agent.id,
+                ChannelConfig.channel_type == "feishu",
+                ChannelConfig.is_configured.is_(True),
+            )
+        )
+    ).scalar_one_or_none()
+    if config is None or not config.app_id or not config.app_secret:
+        raise FeishuGroupTargetError(
+            "feishu_channel_not_configured",
+            "This Agent has no configured Feishu bot for group discovery.",
+        )
+
+    page_token: str | None = None
+    seen_tokens: set[str] = set()
+    synchronized = 0
+    for _page in range(100):
+        try:
+            response = await feishu_service.list_bot_chats(
+                config.app_id,
+                config.app_secret,
+                page_size=100,
+                page_token=page_token,
+            )
+        except FeishuAPIError as exc:
+            raise FeishuGroupTargetError(
+                "feishu_group_directory_failed",
+                f"Feishu group directory failed: {exc.user_message}",
+            ) from exc
+        data = response.get("data") if isinstance(response, dict) else None
+        if not isinstance(data, dict):
+            raise FeishuGroupTargetError(
+                "feishu_group_directory_invalid",
+                "Feishu group directory returned an invalid response.",
+            )
+        items = data.get("items", [])
+        if not isinstance(items, list):
+            raise FeishuGroupTargetError(
+                "feishu_group_directory_invalid",
+                "Feishu group directory returned invalid items.",
+            )
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            chat_id = str(item.get("chat_id") or "").strip()
+            chat_mode = str(item.get("chat_mode") or "group").strip()
+            if not chat_id or chat_mode not in {"group", "topic"}:
+                continue
+            display_name = str(item.get("name") or f"Feishu Group {chat_id[:8]}").strip()
+            session = await find_or_create_channel_session(
+                db=db,
+                agent_id=agent.id,
+                user_id=agent.creator_id,
+                external_conv_id=f"feishu_group_{chat_id}",
+                source_channel="feishu",
+                first_message_title=display_name,
+                is_group=True,
+                group_name=display_name,
+                created_by_user_id=agent.creator_id,
+            )
+            if session.group_name != display_name or session.title != display_name:
+                session.group_name = display_name
+                session.title = display_name
+            synchronized += 1
+        has_more = data.get("has_more") is True
+        next_token = data.get("page_token")
+        if not has_more:
+            break
+        if not isinstance(next_token, str) or not next_token or next_token in seen_tokens:
+            raise FeishuGroupTargetError(
+                "feishu_group_directory_pagination_invalid",
+                "Feishu group directory pagination did not advance.",
+            )
+        seen_tokens.add(next_token)
+        page_token = next_token
+    else:
+        raise FeishuGroupTargetError(
+            "feishu_group_directory_page_limit",
+            "Feishu group directory exceeded the safe page limit.",
+        )
+    await db.commit()
+    return synchronized
 
 
 @dataclass(frozen=True)
@@ -124,4 +219,5 @@ __all__ = [
     "FeishuGroupTargetError",
     "format_feishu_group_target",
     "resolve_feishu_group_target",
+    "sync_feishu_group_targets",
 ]

@@ -153,26 +153,19 @@ def _state(messages: list[JsonObject]) -> tuple[RuntimeGraphState, RuntimeContex
 
 
 def _step(**overrides: str) -> LLMCompletionStep:
-    arguments = {
-        "task_goal_and_constraints": "Complete the work accurately",
-        "completed_work_and_results": "Reviewed earlier context",
-        "key_decisions_and_evidence": "Use the durable receipt",
-        "unfinished_or_blocked": "No blockers",
-        "next_actions": "Answer the exact current request",
+    sections = {
+        "Goal": "Complete the work accurately",
+        "Completed Work": "Reviewed earlier context",
+        "Key Decisions and Evidence": "Use the durable receipt",
+        "Unfinished or Blocked": "No blockers",
+        "Next Actions": "Answer the exact current request",
         **overrides,
     }
     return LLMCompletionStep(
-        content="",
-        tool_calls=(
-            {
-                "id": "compact-1",
-                "type": "function",
-                "function": {
-                    "name": "commit_thread_summary",
-                    "arguments": json.dumps(arguments),
-                },
-            },
+        content="\n\n".join(
+            f"## {heading}\n{value}" for heading, value in sections.items()
         ),
+        tool_calls=(),
         reasoning_content=None,
         retry_instruction=None,
         usage=TokenUsage(total_tokens=10),
@@ -313,7 +306,11 @@ async def test_at_eighty_percent_compacts_prefix_and_keeps_current_input_exact()
         },
     ]
     state, context, tenant_id = _state(messages)
-    async def complete(*_args, **_kwargs):
+    observed_tools: list[dict] | None = None
+
+    async def complete(*_args, **kwargs):
+        nonlocal observed_tools
+        observed_tools = kwargs.get("tools")
         return _step()
 
     result = await _service(
@@ -325,13 +322,9 @@ async def test_at_eighty_percent_compacts_prefix_and_keeps_current_input_exact()
 
     assert result.compacted is True
     assert result.thread_summary is not None
-    assert set(result.thread_summary) == {
-        "task_goal_and_constraints",
-        "completed_work_and_results",
-        "key_decisions_and_evidence",
-        "unfinished_or_blocked",
-        "next_actions",
-    }
+    assert result.thread_summary["format"] == "thread_running_summary_markdown_v1"
+    assert "## Goal" in result.thread_summary["text"]
+    assert observed_tools == []
     assert result.recent_messages is not None
     assert result.recent_messages[-1]["content"] == "EXACT CURRENT INPUT"
     assert result.recent_messages[-1]["runtime_input"] == "current"
@@ -771,7 +764,7 @@ async def test_invalid_summary_is_deterministic_and_never_committed() -> None:
 
     async def complete(*_args, **_kwargs):
         return LLMCompletionStep(
-            content="free text",
+            content="   ",
             tool_calls=(),
             reasoning_content=None,
             retry_instruction=None,
@@ -786,7 +779,7 @@ async def test_invalid_summary_is_deterministic_and_never_committed() -> None:
             current_tokens=900,
         ).compact_if_needed(state, context)
 
-    assert raised.value.code == "invalid_thread_compact_output"
+    assert raised.value.code == "empty_thread_compact_output"
     assert "thread_summary" not in state
     assert "summary_covered_through_message_id" not in state
 
@@ -798,7 +791,7 @@ async def test_summary_over_4096_tokens_is_rejected() -> None:
     )
 
     async def complete(*_args, **_kwargs):
-        return _step(completed_work_and_results="x" * 20_000)
+        return _step(**{"Completed Work": "x" * 20_000})
 
     with pytest.raises(RunCompactorError) as raised:
         await _service(

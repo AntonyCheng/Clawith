@@ -2,14 +2,14 @@
 
 ## Decision 1: 复用 ChatSession 作为稳定飞书群目标
 
-**Decision**: 仅将当前 Agent 已经通过可信飞书入站建立的、未删除的飞书群 `ChatSession` 投影到目录；模型使用 Session UUID，Provider `chat_id` 保持内部。
+**Decision**: 调用飞书官方“获取用户或机器人所在的群列表”同步 Bot 当前所在群，并复用可信飞书入站进行增量更新；同步结果落为 Agent 范围内的 `ChatSession`。模型使用 Session UUID，Provider `chat_id` 保持内部。
 
-**Rationale**: Session 已有 tenant、agent、source channel、group 标志、展示名和唯一外部会话标识，并且现有入站/回复链路已经验证该 Agent Bot 与群的关系。复用它可避免新的重复群登记表和同步生命周期。
+**Rationale**: 官方接口能在群内无人先发消息时列出 Bot 已加入的群；Session 已有 tenant、agent、source channel、group 标志、展示名和唯一外部会话标识。同步到 Session 可避免新的重复群登记表和生命周期。
 
 **Alternatives considered**:
 - 新建 `feishu_group_targets` 表：重复保存 Session 已拥有的身份与状态，增加同步漂移。
 - 允许模型直接传 `chat_id`：无法证明来源与 Agent/租户授权，且泄漏 Provider 寻址细节。
-- 调飞书 API 全量搜索群：扩大权限与网络依赖，本期不需要。
+- 搜索 Bot 未加入的公开群：扩大权限和误发范围，本期不允许。
 
 ## Decision 2: 增强现有 send_channel_message
 

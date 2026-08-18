@@ -448,11 +448,8 @@ async def test_compact_atomically_replaces_thread_summary_and_covered_messages()
         RunCompactResult(
             compacted=True,
             thread_summary={
-                "task_goal_and_constraints": "done",
-                "completed_work_and_results": "done",
-                "key_decisions_and_evidence": "",
-                "unfinished_or_blocked": "",
-                "next_actions": "continue",
+                "format": "thread_running_summary_markdown_v1",
+                "text": "## Next Actions\ncontinue",
             },
             recent_messages=(retained,),
             covered_through_message_id="old-boundary",
@@ -478,7 +475,7 @@ async def test_compact_atomically_replaces_thread_summary_and_covered_messages()
     lifecycle = update["lifecycle"]
     assert compactor.calls == 1
     assert lifecycle["next_route"] == "model"
-    assert update["thread_summary"]["next_actions"] == "continue"
+    assert "continue" in update["thread_summary"]["text"]
     assert update["summary_covered_through_message_id"] == "old-boundary"
     assert update["messages"][-1] == retained
     assert lifecycle["pending_tool_calls"] == [{"id": "pending-exact"}]

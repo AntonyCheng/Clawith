@@ -382,7 +382,16 @@ async def query_agent_directory(
     source_mode = getattr(source, "access_mode", None) or "company"
 
     if member_type == "group":
-        from app.services.feishu_group_targets import format_feishu_group_target
+        from app.services.feishu_group_targets import (
+            FeishuGroupTargetError,
+            format_feishu_group_target,
+            sync_feishu_group_targets,
+        )
+
+        try:
+            await sync_feishu_group_targets(db, agent=source)
+        except FeishuGroupTargetError as exc:
+            raise DirectoryQueryError(exc.code, exc.message, status_code=502) from exc
 
         conditions = [
             ChatSession.tenant_id == source.tenant_id,
