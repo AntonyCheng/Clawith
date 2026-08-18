@@ -4,6 +4,8 @@ import test from 'node:test';
 import {
   activeRunForSession,
   failClosedSessionActiveRun,
+  mergeSessionToolMessage,
+  mergeSessionToolMessages,
   runtimeCompletionNeedsMessageRefresh,
   runtimeTerminalPacketNeedsMessageRefresh,
   sessionActiveRunFromResponse,
@@ -31,6 +33,39 @@ test('active run controls are projected only onto their own selected session', (
   assert.equal(activeRunForSession(waitingRun, 'session-2'), null);
   assert.equal(activeRunForSession(waitingRun, null), null);
   assert.equal(activeRunForSession(waitingRun, 'session-1'), waitingRun);
+});
+
+test('session Tool cache restores a running card after switching back', () => {
+  const running = {
+    role: 'tool_call',
+    content: '',
+    toolName: 'move_file',
+    toolCallId: 'call-1',
+    toolArgs: { path: 'draft.md' },
+    toolStatus: 'running',
+  };
+
+  assert.deepEqual(mergeSessionToolMessages([
+    { id: 'user-1', role: 'user', content: 'move it' },
+  ], [running]), [
+    { id: 'user-1', role: 'user', content: 'move it' },
+    running,
+  ]);
+});
+
+test('session Tool cache updates by call id without downgrading canonical history', () => {
+  const running = {
+    role: 'tool_call',
+    content: '',
+    toolName: 'move_file',
+    toolCallId: 'call-1',
+    toolArgs: { path: 'draft.md' },
+    toolStatus: 'running',
+  };
+  const done = { ...running, toolStatus: 'done', toolResult: 'moved' };
+
+  assert.deepEqual(mergeSessionToolMessage([running], done), [done]);
+  assert.deepEqual(mergeSessionToolMessage([done], running), [done]);
 });
 
 test('runtime-state request failure preserves display identity but disables actions', () => {
