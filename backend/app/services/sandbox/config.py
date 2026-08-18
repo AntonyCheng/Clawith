@@ -6,6 +6,10 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
+CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS = 180
+CODE_EXECUTION_MAX_TIMEOUT_SECONDS = 300
+
+
 class SandboxType(str, Enum):
     """Supported sandbox backend types."""
 
@@ -37,8 +41,16 @@ class SandboxConfig(BaseModel):
     api_url: str = ""
 
     # Common options
-    default_timeout: int = Field(default=30, ge=1, le=3600)
-    max_timeout: int = Field(default=60, ge=1, le=3600)
+    default_timeout: int = Field(
+        default=CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+        ge=1,
+        le=3600,
+    )
+    max_timeout: int = Field(
+        default=CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
+        ge=1,
+        le=3600,
+    )
 
     # Proxy options
     http_proxy: Optional[str] = None
@@ -120,8 +132,14 @@ class SandboxConfig(BaseModel):
             ),
             workspace_mode=get_value("workspace_mode", "merge"),
             publication_owner=get_value("publication_owner", "workspace_cas"),
-            default_timeout=get_value("default_timeout", 30),
-            max_timeout=get_value("max_timeout", 60),
+            default_timeout=get_value(
+                "default_timeout",
+                CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+            ),
+            max_timeout=get_value(
+                "max_timeout",
+                CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
+            ),
             http_proxy=get_value("http_proxy", None),
             https_proxy=get_value("https_proxy", None),
             no_proxy=get_value("no_proxy", None),

@@ -85,6 +85,10 @@ from app.services.sandbox.local.run_workspace import (
     use_run_workspace,
 )
 from app.services.sandbox.run_scope import sandbox_run_scope_id
+from app.services.sandbox.config import (
+    CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+    CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
+)
 from app.services.sandbox.workspace_policy import (
     SandboxExecutionScope,
     build_workspace_policy,
@@ -10831,8 +10835,10 @@ async def _execute_code_outcome(
                    correct per-agent tool config entry in the database.
     """
     language = arguments.get("language", "python")
+    if language == "python3":
+        language = "python"
     code = arguments.get("code", "")
-    requested_timeout = arguments.get("timeout", 30)
+    requested_timeout = arguments.get("timeout")
 
     if not isinstance(code, str) or not code.strip():
         return _typed_failure("No code provided.", "invalid_tool_arguments")
@@ -10842,18 +10848,19 @@ async def _execute_code_outcome(
             f"Unsupported language: {language}. Use python, bash, or node.",
             "invalid_tool_arguments",
         )
-    try:
-        requested_timeout = int(requested_timeout)
-    except (TypeError, ValueError):
-        return _typed_failure(
-            "execute_code timeout must be an integer.",
-            "invalid_tool_arguments",
-        )
-    if requested_timeout <= 0:
-        return _typed_failure(
-            "execute_code timeout must be positive.",
-            "invalid_tool_arguments",
-        )
+    if requested_timeout is not None:
+        try:
+            requested_timeout = int(requested_timeout)
+        except (TypeError, ValueError):
+            return _typed_failure(
+                "execute_code timeout must be an integer.",
+                "invalid_tool_arguments",
+            )
+        if requested_timeout <= 0:
+            return _typed_failure(
+                "execute_code timeout must be positive.",
+                "invalid_tool_arguments",
+            )
 
     # Working directory is the agent's root directory (must be absolute).
     # This allows code to access skills/, workspace/, memory/ etc. directly.
@@ -10895,8 +10902,18 @@ async def _execute_code_outcome(
                     "sandbox_configuration_missing",
                 )
             try:
-                default_timeout = int(tool_config.get("default_timeout", 30))
-                max_timeout = int(tool_config.get("max_timeout", 60))
+                default_timeout = int(
+                    tool_config.get(
+                        "default_timeout",
+                        CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+                    )
+                )
+                max_timeout = int(
+                    tool_config.get(
+                        "max_timeout",
+                        CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
+                    )
+                )
             except (TypeError, ValueError):
                 return _typed_failure(
                     "E2B timeout configuration must be numeric.",
@@ -10924,8 +10941,14 @@ async def _execute_code_outcome(
                     tool_name,
                 )
 
-        # Clamp timeout by configured max_timeout (default 60s, up to 3600s)
-        timeout = min(requested_timeout, sandbox_config.max_timeout)
+        # Use the configured default when the call omits timeout, then enforce
+        # the independently configurable upper bound.
+        effective_timeout = (
+            sandbox_config.default_timeout
+            if requested_timeout is None
+            else requested_timeout
+        )
+        timeout = min(effective_timeout, sandbox_config.max_timeout)
 
         backend = get_sandbox_backend(sandbox_config)
         if sandbox_config.workspace_mode == "isolated_output" and getattr(backend, "name", None) != "subprocess":
@@ -11019,6 +11042,7 @@ async def _execute_code_outcome(
             ws,
             arguments,
             allow_network=fallback_config.allow_network,
+            default_timeout=fallback_config.default_timeout,
             max_timeout=fallback_config.max_timeout,
             on_output=on_output,
         )
@@ -11064,16 +11088,19 @@ async def _execute_code_legacy_outcome(
     ws: Path,
     arguments: dict,
     allow_network: bool = False,
-    max_timeout: int = 60,
+    default_timeout: int = CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+    max_timeout: int = CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
     on_output=None,
 ) -> ToolExecutionOutcome:
     """Legacy subprocess-based code execution (fallback)."""
     import asyncio
 
     language = arguments.get("language", "python")
+    if language == "python3":
+        language = "python"
     code = arguments.get("code", "")
     try:
-        timeout = min(int(arguments.get("timeout", 30)), max_timeout)
+        timeout = min(int(arguments.get("timeout", default_timeout)), max_timeout)
     except (TypeError, ValueError):
         return _typed_failure(
             "execute_code timeout must be an integer.",
@@ -11234,13 +11261,15 @@ async def _execute_code_legacy(
     ws: Path,
     arguments: dict,
     allow_network: bool = False,
-    max_timeout: int = 60,
+    default_timeout: int = CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+    max_timeout: int = CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
     on_output=None,
 ) -> str:
     outcome = await _execute_code_legacy_outcome(
         ws,
         arguments,
         allow_network=allow_network,
+        default_timeout=default_timeout,
         max_timeout=max_timeout,
         on_output=on_output,
     )

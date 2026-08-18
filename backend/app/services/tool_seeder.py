@@ -53,12 +53,34 @@ LEGACY_IMAGE_TOOL_MODEL_DEFAULTS = {
     "generate_image_google": "gemini-2.5-flash-image",
 }
 
+_CODE_EXECUTOR_NAMES = frozenset({"execute_code", "execute_code_e2b"})
+_LEGACY_CODE_EXECUTOR_DEFAULTS = {
+    "default_timeout": 30,
+    "max_timeout": 60,
+}
+
 
 def _global_builtin_config(tool_data: dict) -> dict:
     """Return config safe to store on the global builtin Tool row."""
     # Builtin tools specify defaults (like 'allow_network': True) in their 'config' dict.
     # The actual sensitive data defaults are empty strings ("") so this is safe to store globally.
     return tool_data.get("config", {})
+
+
+def _upgrade_code_executor_defaults(
+    tool_name: str,
+    existing_config: dict,
+    seed_config: dict,
+) -> dict:
+    """Upgrade only untouched legacy timeout defaults for Code Executors."""
+    upgraded = dict(existing_config)
+    if tool_name not in _CODE_EXECUTOR_NAMES:
+        return upgraded
+    for key, legacy_value in _LEGACY_CODE_EXECUTOR_DEFAULTS.items():
+        if upgraded.get(key) == legacy_value and key in seed_config:
+            upgraded[key] = seed_config[key]
+    return upgraded
+
 
 # Compatibility export for UI/tests. The canonical module owns every builtin
 # name, description, schema, and execution policy.
@@ -125,6 +147,14 @@ async def seed_builtin_tools():
             else:
                 # Sync fields that may evolve
                 updated_fields = []
+                upgraded_config = _upgrade_code_executor_defaults(
+                    t["name"],
+                    existing.config or {},
+                    seed_config,
+                )
+                if upgraded_config != (existing.config or {}):
+                    existing.config = upgraded_config
+                    updated_fields.append("config")
                 if existing.category != t["category"]:
                     existing.category = t["category"]
                     updated_fields.append("category")

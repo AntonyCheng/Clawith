@@ -13,6 +13,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Mapping
 
+from app.services.sandbox.config import (
+    CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+    CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
+)
+
 WRITE_FILE_MAX_CONTENT_CHARS = 6_000
 
 
@@ -1017,9 +1022,21 @@ _BUILTIN_TOOL_SOURCE = [
         "parameters_schema": {
             "type": "object",
             "properties": {
-                "language": {"type": "string", "enum": ["python", "bash", "node"], "description": "Programming language"},
+                "language": {
+                    "type": "string",
+                    "enum": ["python", "python3", "bash", "node"],
+                    "description": "Programming language. python3 is accepted as an alias for python.",
+                },
                 "code": {"type": "string", "description": "Code to execute"},
-                "timeout": {"type": "integer", "minimum": 1, "description": "Execution timeout in seconds. Defaults to 30 and is capped by this tool's current max_timeout configuration."},
+                "timeout": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "Execution timeout in seconds. Defaults to "
+                        f"{CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS} and is capped by "
+                        "this tool's current max_timeout configuration."
+                    ),
+                },
             },
             "required": ["language", "code"],
         },
@@ -1030,8 +1047,8 @@ _BUILTIN_TOOL_SOURCE = [
             "allow_network": True,
             "workspace_mode": "merge",
             "publication_owner": "workspace_cas",
-            "default_timeout": 30,
-            "max_timeout": 60,
+            "default_timeout": CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+            "max_timeout": CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
         },
         "config_schema": {
             "fields": [
@@ -1070,7 +1087,7 @@ _BUILTIN_TOOL_SOURCE = [
                     "key": "default_timeout",
                     "label": "Default Timeout (seconds)",
                     "type": "number",
-                    "default": 30,
+                    "default": CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
                     "min": 5,
                     "max": 3600,
                 },
@@ -1078,7 +1095,7 @@ _BUILTIN_TOOL_SOURCE = [
                     "key": "max_timeout",
                     "label": "Max Timeout (seconds)",
                     "type": "number",
-                    "default": 60,
+                    "default": CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
                     "min": 10,
                     "max": 3600,
                 },
@@ -1095,17 +1112,29 @@ _BUILTIN_TOOL_SOURCE = [
         "parameters_schema": {
             "type": "object",
             "properties": {
-                "language": {"type": "string", "enum": ["python", "bash", "node"], "description": "Programming language"},
+                "language": {
+                    "type": "string",
+                    "enum": ["python", "python3", "bash", "node"],
+                    "description": "Programming language. python3 is accepted as an alias for python.",
+                },
                 "code": {"type": "string", "description": "Code to execute"},
-                "timeout": {"type": "integer", "description": "Max execution time in seconds (default 30, max 60)"},
+                "timeout": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": (
+                        "Max execution time in seconds "
+                        f"(default {CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS}, default "
+                        f"max {CODE_EXECUTION_MAX_TIMEOUT_SECONDS})"
+                    ),
+                },
             },
             "required": ["language", "code"],
         },
         "config": {
             "sandbox_type": "e2b",
             "api_key": "",
-            "default_timeout": 30,
-            "max_timeout": 60,
+            "default_timeout": CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+            "max_timeout": CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
         },
         "config_schema": {
             "fields": [
@@ -1121,7 +1150,7 @@ _BUILTIN_TOOL_SOURCE = [
                     "key": "default_timeout",
                     "label": "Default Timeout (seconds)",
                     "type": "number",
-                    "default": 30,
+                    "default": CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
                     "min": 5,
                     "max": 3600,
                 },
@@ -1129,7 +1158,7 @@ _BUILTIN_TOOL_SOURCE = [
                     "key": "max_timeout",
                     "label": "Max Timeout (seconds)",
                     "type": "number",
-                    "default": 60,
+                    "default": CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
                     "min": 10,
                     "max": 3600,
                 },
@@ -3930,8 +3959,8 @@ _SENSITIVE_PATHS: dict[str, tuple[str, ...]] = {
 }
 
 _TIMEOUT_SECONDS: dict[str, int] = {
-    "execute_code": 30,
-    "execute_code_e2b": 30,
+    "execute_code": CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+    "execute_code_e2b": CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
     "read_webpage": 60,
     "jina_read": 60,
     "upload_image": 60,

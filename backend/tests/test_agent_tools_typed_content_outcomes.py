@@ -340,6 +340,7 @@ async def test_execute_code_uses_exit_code_and_never_reexecutes_unknown(
     from app.services.sandbox import registry
 
     config = SimpleNamespace(
+        default_timeout=180,
         max_timeout=60,
         allow_network=False,
         workspace_mode="merge",
@@ -400,6 +401,51 @@ async def test_execute_code_uses_exit_code_and_never_reexecutes_unknown(
     )
     assert unknown.status == "unknown"
     assert unknown.error_code == "sandbox_execution_outcome_unknown"
+
+
+@pytest.mark.asyncio
+async def test_execute_code_accepts_python3_and_uses_configured_default_timeout(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    import app.config as config_module
+    from app.services.sandbox import registry
+
+    config = SimpleNamespace(
+        default_timeout=180,
+        max_timeout=300,
+        allow_network=False,
+        workspace_mode="merge",
+        publication_owner="workspace_cas",
+    )
+    monkeypatch.setattr(config_module, "get_sandbox_config", lambda: config)
+
+    async def no_agent_config(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(agent_tools, "_get_tool_config", no_agent_config)
+
+    observed: dict[str, object] = {}
+
+    class Backend:
+        async def execute(self, **kwargs):
+            observed.update(kwargs)
+            return SimpleNamespace(success=True, exit_code=0, error=None)
+
+        def _format_result(self, _result):
+            return "ok"
+
+    monkeypatch.setattr(registry, "get_sandbox_backend", lambda _config: Backend())
+
+    outcome = await agent_tools._execute_code_outcome(
+        uuid.uuid4(),
+        tmp_path,
+        {"language": "python3", "code": "print('ok')"},
+    )
+
+    assert outcome.status == "succeeded"
+    assert observed["language"] == "python"
+    assert observed["timeout"] == 180
 
 
 @pytest.mark.asyncio
