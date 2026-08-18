@@ -15,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 from app.dao import query_dao
+from app.dao.base import tenant_context
 from app.config import get_settings
 from app.core.permissions import check_agent_access
 from app.core.security import get_current_user
@@ -590,7 +591,8 @@ async def download_file(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    await check_agent_access(db, user, agent_id)
+    with tenant_context(user.tenant_id):
+        await check_agent_access(db, user, agent_id)
     storage = get_storage_backend()
     key, _ = _visible_storage_key(agent_id, path, user.tenant_id)
     if not await storage.exists(key) or not await storage.is_file(key):
