@@ -82,6 +82,25 @@ def _upgrade_code_executor_defaults(
     return upgraded
 
 
+def _upgrade_code_executor_tenant_value(
+    tool_name: str,
+    setting_value: dict,
+    seed_config: dict,
+) -> dict:
+    """Upgrade timeout defaults nested in one tenant Tool setting value."""
+    tenant_config = setting_value.get("config")
+    if not isinstance(tenant_config, dict):
+        return dict(setting_value)
+    upgraded_config = _upgrade_code_executor_defaults(
+        tool_name,
+        tenant_config,
+        seed_config,
+    )
+    if upgraded_config == tenant_config:
+        return dict(setting_value)
+    return {**setting_value, "config": upgraded_config}
+
+
 # Compatibility export for UI/tests. The canonical module owns every builtin
 # name, description, schema, and execution policy.
 BUILTIN_TOOLS = BUILTIN_TOOL_SEEDS
@@ -207,6 +226,27 @@ async def seed_builtin_tools():
                         logger.info(
                             "[ToolSeeder] Upgraded legacy timeout defaults for "
                             f"{upgraded_assignments} {t['name']} Agent assignments"
+                        )
+                    tenant_setting_result = await query_dao.execute(
+                        db,
+                        select(TenantSetting).where(
+                            TenantSetting.key == tenant_tool_config_key(t["name"])
+                        ),
+                    )
+                    upgraded_tenants = 0
+                    for setting in tenant_setting_result.scalars().all():
+                        upgraded_setting_value = _upgrade_code_executor_tenant_value(
+                            t["name"],
+                            setting.value or {},
+                            seed_config,
+                        )
+                        if upgraded_setting_value != (setting.value or {}):
+                            setting.value = upgraded_setting_value
+                            upgraded_tenants += 1
+                    if upgraded_tenants:
+                        logger.info(
+                            "[ToolSeeder] Upgraded legacy timeout defaults for "
+                            f"{upgraded_tenants} {t['name']} Tenant settings"
                         )
                 legacy_model = LEGACY_IMAGE_TOOL_MODEL_DEFAULTS.get(t["name"])
                 if legacy_model and existing.config == {
