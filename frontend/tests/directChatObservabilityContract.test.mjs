@@ -11,6 +11,10 @@ const source = readFileSync(
   new URL('../src/pages/agent-detail/AgentDetailPage.tsx', import.meta.url),
   'utf8',
 );
+const sessionRuntimeStateSource = readFileSync(
+  new URL('../src/pages/agent-detail/sessionRuntimeState.ts', import.meta.url),
+  'utf8',
+);
 const runtimeErrorSource = readFileSync(
   new URL('../src/services/runtimeError.ts', import.meta.url),
   'utf8',
@@ -24,8 +28,8 @@ test('direct chat reattaches an active run from its last durable event cursor', 
 });
 
 test('replayed tool packets keep one row by stable tool call id', () => {
-  assert.match(source, /msg\.toolCallId === toolMsg\.toolCallId/);
-  assert.match(source, /existing\.toolStatus === 'done' && toolMsg\.toolStatus === 'running'/);
+  assert.match(sessionRuntimeStateSource, /message\.toolCallId === incoming\.toolCallId/);
+  assert.match(sessionRuntimeStateSource, /existing\.toolStatus === 'done' && incoming\.toolStatus === 'running'/);
   assert.match(source, /toolCallId: message\.toolCallId/);
   assert.match(source, /toolCallId: m\.toolCallId/);
 });
@@ -48,6 +52,16 @@ test('direct chat runtime controls and delayed sends stay scoped to the selected
   assert.match(source, /activeRunForSession\(activeRun, activeSession\?\.id\)/);
   assert.match(source, /currentAgentIdRef\.current === runtimeAgentId[\s\S]*activeSessionIdRef\.current === runtimeSessionId/);
   assert.match(source, /if \(isActiveRuntime\) \{[\s\S]*setIsWaiting\(true\);[\s\S]*setChatMessages/);
+});
+
+test('background Tool packets are cached per session and restored only when selected', () => {
+  const cacheWrite = source.indexOf('sessionToolMessagesRef.current[key] = mergeSessionToolMessage');
+  const backgroundReturn = source.indexOf('if (!isActiveRuntime)', cacheWrite);
+
+  assert.ok(cacheWrite >= 0, 'Tool packets must enter a per-session cache');
+  assert.ok(backgroundReturn > cacheWrite, 'Tool packets must be cached before background UI events return');
+  assert.match(source, /mergeSessionToolMessages\(\s*preParsed,\s*sessionToolMessagesRef\.current\[runtimeKey\] \|\| \[\],?\s*\)/);
+  assert.match(source, /activeRunForSession\(activeRun, activeSession\?\.id\)/);
 });
 
 test('direct chat renders canonical runtime diagnostics and keeps legacy fallbacks', () => {

@@ -65,6 +65,8 @@ import { useAgentDetailRoute } from './hooks/useAgentDetailRoute';
 import {
     activeRunForSession,
     failClosedSessionActiveRun,
+    mergeSessionToolMessage,
+    mergeSessionToolMessages,
     mergeTerminalAssistantMessage,
     runtimeCompletionNeedsMessageRefresh,
     runtimeTerminalPacketNeedsMessageRefresh,
@@ -2444,6 +2446,7 @@ export default function AgentDetailPage() {
     const reconnectDisabledRef = useRef<Record<SessionRuntimeKey, boolean>>({});
     const sessionUiStateRef = useRef<Record<SessionRuntimeKey, { isWaiting: boolean; isStreaming: boolean }>>({});
     const sessionActiveRunRef = useRef<Record<SessionRuntimeKey, SessionActiveRun | null>>({});
+    const sessionToolMessagesRef = useRef<Record<SessionRuntimeKey, ChatMsg[]>>({});
     const runtimeEventCursorRef = useRef<Record<SessionRuntimeKey, string>>({});
     const [activeRun, setActiveRun] = useState<SessionActiveRun | null>(null);
     const selectedSessionActiveRun = activeRunForSession(activeRun, activeSession?.id);
@@ -2461,7 +2464,11 @@ export default function AgentDetailPage() {
 
     const buildSessionRuntimeKey = (agentId: string, sessionId: string) => `${agentId}:${sessionId}`;
 
-    const refreshSessionMessages = async (agentId: string, sessionId: string) => {
+    const refreshSessionMessages = async (
+        agentId: string,
+        sessionId: string,
+        discardSessionToolCacheOnSuccess = false,
+    ) => {
         try {
             const tkn = localStorage.getItem('token');
             const response = await fetch(
@@ -2492,7 +2499,14 @@ export default function AgentDetailPage() {
                     runtimeError: normalizeRuntimeError({ error: message.runtime_error }),
                 }),
             }));
-            setChatMessages(parsed);
+            const runtimeKey = buildSessionRuntimeKey(agentId, sessionId);
+            setChatMessages(mergeSessionToolMessages(
+                parsed,
+                sessionToolMessagesRef.current[runtimeKey] || [],
+            ));
+            if (discardSessionToolCacheOnSuccess) {
+                delete sessionToolMessagesRef.current[runtimeKey];
+            }
             // Round-trip the backend's compound `<created_at>|<id>` cursor. A bare
             // created_at cannot page past a batch of messages that share one timestamp
             // (e.g. a burst of tool_call rows), so older messages would never load.
@@ -2522,6 +2536,7 @@ export default function AgentDetailPage() {
         delete wsMapRef.current[key];
         delete sessionUiStateRef.current[key];
         delete sessionActiveRunRef.current[key];
+        delete sessionToolMessagesRef.current[key];
     };
 
     const setSessionUiState = (key: SessionRuntimeKey, next: Partial<{ isWaiting: boolean; isStreaming: boolean }>) => {
@@ -2578,7 +2593,7 @@ export default function AgentDetailPage() {
             ] || null;
             applySessionActiveRun(agentId, sessionId, next);
             if (runtimeCompletionNeedsMessageRefresh(previous, next)) {
-                void refreshSessionMessages(agentId, sessionId);
+                void refreshSessionMessages(agentId, sessionId, true);
             }
             if (
                 currentAgentIdRef.current === agentId
@@ -2775,7 +2790,7 @@ export default function AgentDetailPage() {
         userPinnedAwayFromBottomRef.current = false;
         pendingLiveInitialScrollRef.current = writable;
         pendingHistoryInitialScrollRef.current = !writable;
-        setChatMessages([]);
+        setChatMessages(sessionToolMessagesRef.current[runtimeKey] || []);
         setChatOldestTimestamp(null);
         setChatHistoryHasMore(true);
         setChatHistoryLoadingMore(false);
@@ -2826,7 +2841,10 @@ export default function AgentDetailPage() {
             const oldestTimestamp = msgs.length > 0 ? (msgs[0].cursor ?? msgs[0].created_at) : null;
 
             if (writable) {
-                setChatMessages(preParsed);
+                setChatMessages(mergeSessionToolMessages(
+                    preParsed,
+                    sessionToolMessagesRef.current[runtimeKey] || [],
+                ));
                 setChatOldestTimestamp(oldestTimestamp);
                 setChatHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
                 setMessagesLoadedRuntimeKey(runtimeKey);
@@ -2939,60 +2957,8 @@ export default function AgentDetailPage() {
     };
     interface ChatMsg { id?: string; role: 'user' | 'assistant' | 'tool_call'; content: string; fileName?: string; toolName?: string; toolCallId?: string; toolArgs?: any; toolStatus?: 'running' | 'done'; toolResult?: string; toolThinking?: string; thinking?: string; imageUrl?: string; timestamp?: string; runtimeError?: ReturnType<typeof normalizeRuntimeError>; }
     const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
-    const getToolTargetKey = (args: any): string => {
-        if (!args) return '';
-        const parsed = typeof args === 'string'
-            ? (() => {
-                try { return JSON.parse(args); } catch { return null; }
-            })()
-            : args;
-        if (!parsed || typeof parsed !== 'object') return '';
-        const value = parsed.path
-            || parsed.file_path
-            || parsed.output_path
-            || parsed.target_path
-            || parsed.filename
-            || parsed.url
-            || parsed.query
-            || parsed.name
-            || '';
-        return typeof value === 'string' ? value.trim() : '';
-    };
     const upsertToolCallMessage = (toolMsg: ChatMsg) => {
-        setChatMessages(prev => {
-            const incomingTarget = getToolTargetKey(toolMsg.toolArgs);
-            if (toolMsg.toolCallId) {
-                const exactIdx = prev.findIndex(
-                    (msg) => msg.role === 'tool_call' && msg.toolCallId === toolMsg.toolCallId,
-                );
-                if (exactIdx >= 0) {
-                    const existing = prev[exactIdx];
-                    // A replay can start at the beginning of a Run after page reload.
-                    // Never downgrade the settled canonical history row back to running.
-                    if (existing.toolStatus === 'done' && toolMsg.toolStatus === 'running') return prev;
-                    return [
-                        ...prev.slice(0, exactIdx),
-                        { ...existing, ...toolMsg },
-                        ...prev.slice(exactIdx + 1),
-                    ];
-                }
-            }
-            const sameTool = (msg: ChatMsg) => (
-                msg.role === 'tool_call'
-                && msg.toolName === toolMsg.toolName
-                && msg.toolStatus === 'running'
-                && (
-                    (!!incomingTarget && getToolTargetKey(msg.toolArgs) === incomingTarget)
-                    || (!toolMsg.toolCallId && !incomingTarget)
-                )
-            );
-            const runningIdx = [...prev].reverse().findIndex(sameTool);
-            if (runningIdx >= 0) {
-                const idx = prev.length - 1 - runningIdx;
-                return [...prev.slice(0, idx), { ...prev[idx], ...toolMsg }, ...prev.slice(idx + 1)];
-            }
-            return [...prev, toolMsg];
-        });
+        setChatMessages((previous) => mergeSessionToolMessage(previous, toolMsg));
     };
     // Transient info banner (e.g. fallback model switch notification)
     const [chatInfoMsg, setChatInfoMsg] = useState<string | null>(null);
@@ -3345,6 +3311,7 @@ export default function AgentDetailPage() {
         });
         wsMapRef.current = {};
         sessionActiveRunRef.current = {};
+        sessionToolMessagesRef.current = {};
         wsRef.current = null;
     }, [currentUser?.id, token]);
 
@@ -3448,6 +3415,22 @@ export default function AgentDetailPage() {
                 return;
             }
             const isActiveRuntime = currentAgentIdRef.current === agentId && activeSessionIdRef.current === sessionId;
+            const streamedToolMessage: ChatMsg | null = d.type === 'tool_call' ? {
+                role: 'tool_call',
+                content: '',
+                toolName: d.name,
+                toolCallId: String(d.call_id || d.id || d.index || ''),
+                toolArgs: d.args,
+                toolStatus: d.status,
+                toolResult: d.result,
+                toolThinking: d.reasoning_content,
+            } : null;
+            if (streamedToolMessage) {
+                sessionToolMessagesRef.current[key] = mergeSessionToolMessage(
+                    sessionToolMessagesRef.current[key] || [],
+                    streamedToolMessage,
+                );
+            }
             if (['thinking', 'chunk', 'workspace_draft', 'tool_call', 'done', 'error', 'quota_exceeded'].includes(d.type)) {
                 const nextStreaming = ['thinking', 'chunk', 'workspace_draft', 'tool_call'].includes(d.type);
                 const endStreaming = ['done', 'error', 'quota_exceeded'].includes(d.type);
@@ -3635,16 +3618,7 @@ export default function AgentDetailPage() {
                         collapseSidebarsForLivePanel();
                     }
                 }
-                upsertToolCallMessage({
-                    role: 'tool_call',
-                    content: '',
-                    toolName: d.name,
-                    toolCallId: String(d.call_id || d.id || d.index || ''),
-                    toolArgs: d.args,
-                    toolStatus: d.status,
-                    toolResult: d.result,
-                    toolThinking: d.reasoning_content,
-                });
+                if (streamedToolMessage) upsertToolCallMessage(streamedToolMessage);
                 if (d.status === 'done') {
                     const currentSessionId = activeSessionIdRef.current ? String(activeSessionIdRef.current) : '';
                     if (currentSessionId) clearUnreadForSession(currentSessionId);
@@ -3712,7 +3686,7 @@ export default function AgentDetailPage() {
                 // the canonical page after a terminal packet even though the local run was
                 // already marked terminal above.
                 if (shouldRefreshCanonicalMessages) {
-                    void refreshSessionMessages(agentId, sessionId);
+                    void refreshSessionMessages(agentId, sessionId, true);
                 }
             } else if (d.type === 'error' || d.type === 'quota_exceeded') {
                 const runtimeError = normalizeRuntimeError(d);
@@ -3975,6 +3949,7 @@ export default function AgentDetailPage() {
                 if (ws.readyState !== WebSocket.CLOSED) ws.close();
             });
             wsMapRef.current = {};
+            sessionToolMessagesRef.current = {};
             wsRef.current = null;
         };
     }, []);

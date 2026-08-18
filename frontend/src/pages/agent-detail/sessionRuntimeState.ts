@@ -42,6 +42,80 @@ export const activeRunForSession = (
     return activeRun.sessionId === String(sessionId) ? activeRun : null;
 };
 
+type SessionToolMessage = {
+    role: string;
+    toolName?: string;
+    toolCallId?: string;
+    toolArgs?: unknown;
+    toolStatus?: string;
+};
+
+const toolTargetKey = (args: unknown): string => {
+    let parsed = args;
+    if (typeof args === 'string') {
+        try {
+            parsed = JSON.parse(args);
+        } catch {
+            return '';
+        }
+    }
+    if (parsed === null || typeof parsed !== 'object') return '';
+    const record = parsed as Record<string, unknown>;
+    const value = record.path
+        || record.file_path
+        || record.output_path
+        || record.target_path
+        || record.filename
+        || record.url
+        || record.query
+        || record.name
+        || '';
+    return typeof value === 'string' ? value.trim() : '';
+};
+
+export const mergeSessionToolMessage = <T extends SessionToolMessage>(
+    messages: T[],
+    incoming: T,
+): T[] => {
+    const incomingTarget = toolTargetKey(incoming.toolArgs);
+    if (incoming.toolCallId) {
+        const exactIndex = messages.findIndex(
+            (message) => message.role === 'tool_call' && message.toolCallId === incoming.toolCallId,
+        );
+        if (exactIndex >= 0) {
+            const existing = messages[exactIndex];
+            if (existing.toolStatus === 'done' && incoming.toolStatus === 'running') return messages;
+            return [
+                ...messages.slice(0, exactIndex),
+                { ...existing, ...incoming },
+                ...messages.slice(exactIndex + 1),
+            ];
+        }
+    }
+    const sameRunningTool = (message: T) => (
+        message.role === 'tool_call'
+        && message.toolName === incoming.toolName
+        && message.toolStatus === 'running'
+        && (
+            (!!incomingTarget && toolTargetKey(message.toolArgs) === incomingTarget)
+            || (!incoming.toolCallId && !incomingTarget)
+        )
+    );
+    const reverseIndex = [...messages].reverse().findIndex(sameRunningTool);
+    if (reverseIndex < 0) return [...messages, incoming];
+    const index = messages.length - 1 - reverseIndex;
+    return [
+        ...messages.slice(0, index),
+        { ...messages[index], ...incoming },
+        ...messages.slice(index + 1),
+    ];
+};
+
+export const mergeSessionToolMessages = <T extends SessionToolMessage>(
+    messages: T[],
+    incoming: T[],
+): T[] => incoming.reduce(mergeSessionToolMessage, messages);
+
 const record = (value: unknown): Record<string, unknown> | null =>
     value !== null && typeof value === 'object'
         ? value as Record<string, unknown>
