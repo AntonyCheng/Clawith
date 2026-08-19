@@ -85,7 +85,7 @@ from app.services.workspace_collaboration import (
     write_workspace_file,
 )
 from app.services.storage import get_storage_backend, normalize_storage_key
-from app.services.storage_runtime.base import WriteCondition, content_hash_bytes
+from app.services.storage_runtime.base import StorageVersion, WriteCondition, content_hash_bytes
 from app.services.workspace_locking import workspace_locks
 from app.services.workspace_reconciliation import (
     CandidateChange,
@@ -1895,6 +1895,30 @@ async def flush_temp_workspace(
                 condition=condition,
             )
             if not result.ok:
+                converged_version = await _stable_identical_storage_version(
+                    storage,
+                    storage_key,
+                    data,
+                    observed_version=result.current_version,
+                )
+                if converged_version is not None:
+                    manifest[rel_path] = TempWorkspaceManifestEntry(
+                        rel_path=rel_path,
+                        storage_key=storage_key,
+                        base_version_token=converged_version.token,
+                        base_hash=current_hash,
+                        size=len(data),
+                    )
+                    skipped.append(rel_path)
+                    logger.info(
+                        "[WorkspaceFlushConverged] run_id={} agent_id={} path={} "
+                        "current_version={}",
+                        run_id,
+                        temp_workspace.agent_id,
+                        rel_path,
+                        converged_version.token,
+                    )
+                    continue
                 conflicted.append(rel_path)
                 logger.warning(
                     "[WorkspaceFlushConflict] run_id={} agent_id={} operation=write "
@@ -1964,6 +1988,38 @@ async def flush_temp_workspace(
             deleted.append(rel_path)
 
     return {"updated": updated, "deleted": deleted, "conflicted": conflicted, "skipped": skipped}
+
+
+async def _stable_identical_storage_version(
+    storage,
+    storage_key: str,
+    expected_data: bytes,
+    *,
+    observed_version: StorageVersion | None,
+) -> StorageVersion | None:
+    """Return the stable version when a lost CAS already stored identical bytes."""
+    try:
+        before = observed_version or await storage.get_version(storage_key)
+        if not before.exists or before.is_dir or before.size != len(expected_data):
+            return None
+        current_data = await storage.read_bytes(storage_key)
+        after = await storage.get_version(storage_key)
+    except Exception as exc:
+        logger.warning(
+            "[WorkspaceFlushConvergenceCheckFailed] path={} error_type={}",
+            storage_key,
+            type(exc).__name__,
+        )
+        return None
+
+    if (
+        not after.exists
+        or after.is_dir
+        or before.token != after.token
+        or current_data != expected_data
+    ):
+        return None
+    return after
 
 
 async def _workspace_candidate_changes(

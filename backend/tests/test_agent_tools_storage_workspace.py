@@ -371,6 +371,86 @@ async def test_flush_temp_workspace_fails_on_conflict(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("existing_before_materialize", [False, True])
+async def test_flush_temp_workspace_accepts_stable_identical_concurrent_write(
+    monkeypatch,
+    existing_before_materialize,
+):
+    agent_id = uuid.uuid4()
+    storage_key = f"{agent_id}/workspace/output/session-id/result.md"
+    initial_files = {storage_key: b"# Initial\n"} if existing_before_materialize else None
+    storage = MemoryStorageBackend(initial_files)
+    monkeypatch.setattr(agent_tools, "get_storage_backend", lambda: storage)
+
+    temp_ws = await agent_tools._prepare_temp_workspace(
+        agent_id,
+        paths=["workspace/output/session-id"],
+        publish_paths=["workspace/output/session-id"],
+    )
+    try:
+        output_path = temp_ws.root / "workspace/output/session-id/result.md"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"# Identical result\n")
+
+        # Another publisher wins the CAS with this execution's exact bytes.
+        await storage.write_bytes(storage_key, b"# Identical result\n")
+        result = await agent_tools.flush_temp_workspace(temp_ws)
+    finally:
+        temp_ws.cleanup()
+
+    assert result == {
+        "updated": [],
+        "deleted": [],
+        "conflicted": [],
+        "skipped": ["workspace/output/session-id/result.md"],
+    }
+    assert storage.files[storage_key] == b"# Identical result\n"
+    manifest = temp_ws.manifest["workspace/output/session-id/result.md"]
+    assert manifest.base_version_token == (await storage.get_version(storage_key)).token
+    assert manifest.base_hash == agent_tools.content_hash_bytes(b"# Identical result\n")
+
+
+@pytest.mark.asyncio
+async def test_flush_temp_workspace_rejects_identical_bytes_when_version_changes_during_check(
+    monkeypatch,
+):
+    agent_id = uuid.uuid4()
+    storage_key = f"{agent_id}/workspace/output/session-id/result.md"
+
+    class RacingReadStorageBackend(MemoryStorageBackend):
+        mutate_after_read = False
+
+        async def read_bytes(self, key: str) -> bytes:
+            data = await super().read_bytes(key)
+            if self.mutate_after_read:
+                self.mutate_after_read = False
+                await self.write_bytes(key, b"# Changed again\n")
+            return data
+
+    storage = RacingReadStorageBackend({storage_key: b"# Initial\n"})
+    monkeypatch.setattr(agent_tools, "get_storage_backend", lambda: storage)
+
+    temp_ws = await agent_tools._prepare_temp_workspace(
+        agent_id,
+        paths=["workspace/output/session-id"],
+        publish_paths=["workspace/output/session-id"],
+    )
+    try:
+        output_path = temp_ws.root / "workspace/output/session-id/result.md"
+        output_path.write_bytes(b"# Identical result\n")
+        await storage.write_bytes(storage_key, b"# Identical result\n")
+        storage.mutate_after_read = True
+
+        result = await agent_tools.flush_temp_workspace(temp_ws)
+    finally:
+        temp_ws.cleanup()
+
+    assert result["conflicted"] == ["workspace/output/session-id/result.md"]
+    assert result["skipped"] == []
+    assert storage.files[storage_key] == b"# Changed again\n"
+
+
+@pytest.mark.asyncio
 async def test_flush_isolated_output_overwrites_unmanifested_existing_file(monkeypatch):
     agent_id = uuid.uuid4()
     session_path = f"workspace/output/{uuid.uuid4()}"
