@@ -3,6 +3,7 @@
 import hashlib
 import hmac
 import json
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -46,6 +47,28 @@ _USER_RESOLUTION_ERROR_TIP = (
     "抱歉，我暂时无法稳定识别你的飞书账号，已停止本次处理以避免重复创建账号。"
     "请稍后重试，或联系管理员检查飞书 Contact API 权限。"
 )
+
+_FEISHU_MENTION_PLACEHOLDER_RE = re.compile(r"@_user_\d+")
+
+
+def _feishu_mention_label(value: object) -> str:
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())[:100]
+
+
+def _restore_feishu_text_mentions(text: object, mentions: object) -> str:
+    """Restore provider placeholders to visible names before model intake."""
+    normalized = text if isinstance(text, str) else ""
+    if isinstance(mentions, list):
+        for mention in mentions:
+            if not isinstance(mention, dict):
+                continue
+            key = mention.get("key")
+            name = _feishu_mention_label(mention.get("name"))
+            if isinstance(key, str) and key and name:
+                normalized = normalized.replace(key, f"@{name}")
+    return _FEISHU_MENTION_PLACEHOLDER_RE.sub("", normalized).strip()
 
 
 def _verify_and_decode_feishu_callback(
@@ -556,6 +579,12 @@ async def process_feishu_event(agent_id: uuid.UUID, body: dict):
                         _href = _elem.get("href", "")
                         _link_text = _elem.get("text", "")
                         _line_parts.append(f"{_link_text} ({_href})" if _href else _link_text)
+                    elif _tag == "at":
+                        _mention_name = _feishu_mention_label(
+                            _elem.get("user_name") or _elem.get("name")
+                        )
+                        if _mention_name:
+                            _line_parts.append(f"@{_mention_name}")
                     elif _tag == "img":
                         _ik = _elem.get("image_key", "")
                         if _ik:
@@ -617,11 +646,11 @@ async def process_feishu_event(agent_id: uuid.UUID, body: dict):
         if msg_type != "text":
             return {"code": 0, "msg": "unsupported message type"}
 
-        import json
-        import re
-
         content = json.loads(message.get("content", "{}"))
-        user_text = re.sub(r"@_user_\d+", "", content.get("text", "")).strip()
+        user_text = _restore_feishu_text_mentions(
+            content.get("text", ""),
+            message.get("mentions"),
+        )
         if not user_text:
             return {"code": 0, "msg": "empty message after stripping mentions"}
 
