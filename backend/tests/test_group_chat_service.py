@@ -843,7 +843,9 @@ async def test_unread_count_uses_message_position_and_excludes_the_reader() -> N
 
 
 @pytest.mark.asyncio
-async def test_unread_count_treats_a_missing_watermark_message_as_unread() -> None:
+async def test_unread_count_treats_a_missing_watermark_message_as_unread(
+    monkeypatch,
+) -> None:
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     actor = _participant("user", user_id)
@@ -869,6 +871,12 @@ async def test_unread_count_treats_a_missing_watermark_message_as_unread() -> No
         _Result(),
         _Result([4]),
     )
+    warnings: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        group_chat_service.logger,
+        "warning",
+        lambda _message, *args: warnings.append(args),
+    )
 
     count = await group_chat_service.get_group_session_unread_count(
         db,
@@ -879,5 +887,17 @@ async def test_unread_count_treats_a_missing_watermark_message_as_unread() -> No
     )
 
     assert count == 4
+    watermark_sql = _sql(db.statements[-2])
     count_sql = _sql(db.statements[-1])
+    assert f"chat_messages.tenant_id = '{tenant_id}'" in watermark_sql
+    assert f"chat_messages.tenant_id = '{tenant_id}'" in count_sql
     assert "chat_messages.created_at >" not in count_sql
+    assert warnings == [
+        (
+            tenant_id,
+            group.id,
+            session.id,
+            actor.id,
+            missing_message_id,
+        )
+    ]
