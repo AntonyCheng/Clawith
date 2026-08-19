@@ -808,27 +808,41 @@ async def reconcile_direct_tool_execution(
         )
     )
     if workspace_resolution:
-        await RuntimeCommandIntake(db).resume_run(
-            ResumeRunCommand(
-                tenant_id=tenant_id,
-                run_id=run_id,
-                idempotency_key=f"resume:workspace-reconcile:{execution_id}:{expected_action}",
-                payload={
-                    "resume_type": "tool_reconciliation",
-                    "correlation_id": body.correlation_id.strip(),
-                    "payload": {
-                        "content": (
-                            "用户已选择使用 Agent 的文件结果，请继续当前任务，且不要重新执行原工具。"
-                            if body.outcome == "applied"
-                            else "用户已选择保留工作区中的源文件；该选择优先于原任务中冲突的文件内容要求。请继续当前任务，且不要重新执行原工具。"
-                        ),
-                        "confirmation_text": note,
-                        "workspace_resolution_action": expected_action,
-                    },
-                },
-                actor_user_id=current_user.id,
-            )
+        resume_content = (
+            "用户已选择使用 Agent 的文件结果，请继续当前任务，且不要重新执行原工具。"
+            if body.outcome == "applied"
+            else "用户已选择保留工作区中的源文件；该选择优先于原任务中冲突的文件内容要求。请继续当前任务，且不要重新执行原工具。"
         )
+        resume_key_scope = "workspace-reconcile"
+    else:
+        resume_content = (
+            "用户已确认原工具操作已经生效。请继续当前任务，且不要重新执行原工具。"
+            if body.outcome == "applied"
+            else "用户已确认原工具操作没有生效。请基于已结算的失败结果继续，且不要重放原工具调用。"
+        )
+        resume_key_scope = "tool-reconcile"
+    resume_payload: dict = {
+        "content": resume_content,
+        "confirmation_text": note,
+        "tool_execution_id": str(execution_id),
+    }
+    if workspace_resolution:
+        resume_payload["workspace_resolution_action"] = expected_action
+    await RuntimeCommandIntake(db).resume_run(
+        ResumeRunCommand(
+            tenant_id=tenant_id,
+            run_id=run_id,
+            idempotency_key=(
+                f"resume:{resume_key_scope}:{execution_id}:{expected_action}"
+            ),
+            payload={
+                "resume_type": "tool_reconciliation",
+                "correlation_id": body.correlation_id.strip(),
+                "payload": resume_payload,
+            },
+            actor_user_id=current_user.id,
+        )
+    )
     await db.commit()
     if workspace_resolution:
         try:

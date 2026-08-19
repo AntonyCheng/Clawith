@@ -28,6 +28,18 @@ MAX_TOOL_BINDING_BYTES = 16 * 1024
 MAX_ID_LENGTH = 255
 MAX_TOOL_NAME_LENGTH = 200
 
+LOCAL_CODE_SETUP_GRACE_SECONDS = 120.0
+LOCAL_CODE_PUBLICATION_GRACE_SECONDS = 60.0
+LOCAL_CODE_TERMINATION_GRACE_SECONDS = 10.0
+LOCAL_CODE_RUNTIME_OVERHEAD_GRACE_SECONDS = 20.0
+LOCAL_CODE_DEADLINE_GRACE_SECONDS = (
+    LOCAL_CODE_SETUP_GRACE_SECONDS
+    + LOCAL_CODE_PUBLICATION_GRACE_SECONDS
+    + LOCAL_CODE_TERMINATION_GRACE_SECONDS
+    + LOCAL_CODE_RUNTIME_OVERHEAD_GRACE_SECONDS
+)
+LOCAL_CODE_MAX_EXECUTION_SECONDS = 3600.0
+
 _SENSITIVE_KEYS = {
     "access_token",
     "api_key",
@@ -77,8 +89,9 @@ _DEADLINE_POLICIES = {
     ),
     "local_code": ToolDeadlinePolicy(
         "local_code",
-        float(CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS),
-        3600.0,
+        float(CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS)
+        + LOCAL_CODE_DEADLINE_GRACE_SECONDS,
+        LOCAL_CODE_MAX_EXECUTION_SECONDS + LOCAL_CODE_DEADLINE_GRACE_SECONDS,
         "cooperative",
     ),
     "agentbay_read": ToolDeadlinePolicy(
@@ -121,6 +134,11 @@ def resolve_tool_deadline_seconds(
     policy = _DEADLINE_POLICIES.get(policy_name)
     if policy is None:
         raise ToolContractError(f"unknown deadline policy {policy_name!r}")
+    if policy_name == "local_code":
+        return (
+            resolve_local_code_execution_seconds(requested_seconds)
+            + LOCAL_CODE_DEADLINE_GRACE_SECONDS
+        )
     if requested_seconds is None:
         return policy.default_seconds
     if (
@@ -130,6 +148,27 @@ def resolve_tool_deadline_seconds(
     ):
         raise ToolContractError("requested Tool deadline must be positive")
     return min(float(requested_seconds), policy.max_seconds)
+
+
+def resolve_local_code_execution_seconds(
+    requested_seconds: object = None,
+) -> float:
+    """Freeze one Runtime code budget independently of mutable sandbox config."""
+    if requested_seconds is None:
+        return float(CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS)
+    if (
+        isinstance(requested_seconds, bool)
+        or not isinstance(requested_seconds, (int, float))
+        or requested_seconds <= 0
+    ):
+        raise ToolContractError("requested Tool deadline must be positive")
+    return min(
+        max(
+            float(requested_seconds),
+            float(CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS),
+        ),
+        LOCAL_CODE_MAX_EXECUTION_SECONDS,
+    )
 
 
 def tool_cancel_capability(policy_name: str) -> ToolCancelCapability:
@@ -513,6 +552,7 @@ __all__ = [
     "ToolWorksetEntry",
     "deadline_policy_for_tool",
     "parse_step_tool_context",
+    "resolve_local_code_execution_seconds",
     "resolve_tool_deadline_seconds",
     "tool_cancel_capability",
     "workset_version",

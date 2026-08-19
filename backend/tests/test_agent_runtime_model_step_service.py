@@ -23,6 +23,7 @@ from app.services.agent_runtime.model_step_service import (
     _provider_tools,
     _prompt_messages,
     _runtime_workset_entry,
+    _safe_provider_failure_message,
     _tool_repair_reset_reason,
     _visible_mention_names,
 )
@@ -3032,6 +3033,23 @@ async def test_provider_validation_error_is_redacted_from_runtime_delivery() -> 
         "code": "model_call_failed",
         "message": "Model provider rejected the request (HTTP 400).",
     }
+
+
+def test_provider_payment_error_is_actionable_and_redacted() -> None:
+    raw_error = RuntimeError(
+        'HTTP 402 Payment Required: {"account":"private-account",'
+        '"message":"Insufficient Balance","request_id":"secret-request-id"}'
+    )
+
+    message = _safe_provider_failure_message(raw_error)
+
+    assert message == (
+        "Model provider payment is required (HTTP 402). "
+        "Check the provider account balance and billing configuration."
+    )
+    assert "private-account" not in message
+    assert "secret-request-id" not in message
+    assert "Insufficient Balance" not in message
 
 
 @pytest.mark.asyncio

@@ -279,7 +279,7 @@ async def test_invalid_compact_model_budget_is_a_deterministic_runtime_error() -
     )
     model = _model(tenant_id)
     model.max_input_tokens = None
-    model.context_window_tokens_override = model.max_output_tokens
+    model.context_window_tokens_override = 250
 
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("invalid compact budget must fail before model use")
@@ -717,13 +717,26 @@ async def test_oversized_settled_exchange_enters_summary_as_facts_and_refs() -> 
 
 
 @pytest.mark.asyncio
-async def test_transient_provider_failure_is_typed_for_langgraph_retry() -> None:
+@pytest.mark.parametrize(
+    "provider_error",
+    [
+        TimeoutError("provider network timeout"),
+        RuntimeError("HTTP 429 Too Many Requests"),
+        RuntimeError("HTTP 503 Service Unavailable"),
+    ],
+)
+async def test_transient_provider_failure_is_typed_for_langgraph_retry(
+    provider_error: Exception,
+) -> None:
     state, context, tenant_id = _state(
         [_normal("old", "old " * 300), _normal("current")]
     )
+    calls = 0
 
     async def complete(*_args, **_kwargs):
-        raise TimeoutError("provider timeout")
+        nonlocal calls
+        calls += 1
+        raise provider_error
 
     with pytest.raises(TransientRunCompactorError) as raised:
         await _service(
@@ -734,6 +747,7 @@ async def test_transient_provider_failure_is_typed_for_langgraph_retry() -> None
         ).compact_if_needed(state, context)
 
     assert raised.value.is_transient_compact_error is True
+    assert calls == 1
 
 
 @pytest.mark.asyncio
@@ -742,7 +756,11 @@ async def test_unknown_provider_failure_is_typed_for_langgraph_retry() -> None:
         [_normal("old", "old " * 300), _normal("current")]
     )
 
+    calls = 0
+
     async def complete(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
         raise json.JSONDecodeError("Expecting value", "", 0)
 
     with pytest.raises(TransientRunCompactorError) as raised:
@@ -754,6 +772,7 @@ async def test_unknown_provider_failure_is_typed_for_langgraph_retry() -> None:
         ).compact_if_needed(state, context)
 
     assert raised.value.is_transient_compact_error is True
+    assert calls == 1
 
 
 @pytest.mark.asyncio
@@ -802,3 +821,196 @@ async def test_summary_over_4096_tokens_is_rejected() -> None:
         ).compact_if_needed(state, context)
 
     assert raised.value.code == "thread_summary_exceeds_budget"
+
+
+@pytest.mark.asyncio
+async def test_compact_request_output_is_capped_by_summary_budget() -> None:
+    state, context, tenant_id = _state(
+        [_normal("old", "old " * 15_000), _normal("current")]
+    )
+    model = _model(tenant_id, input_tokens=100_000)
+    model.max_output_tokens = 32_000
+    observed_limits: list[int | None] = []
+
+    async def complete(*_args, **kwargs):
+        observed_limits.append(kwargs.get("max_output_tokens"))
+        return _step()
+
+    result = await _service(
+        model=model,
+        completion=complete,
+        effective_budget=100_000,
+        current_tokens=80_000,
+    ).compact_if_needed(state, context)
+
+    assert result.compacted is True
+    assert observed_limits
+    assert set(observed_limits) == {4096}
+
+
+@pytest.mark.asyncio
+async def test_compact_request_output_respects_lower_model_limit() -> None:
+    state, context, tenant_id = _state(
+        [_normal("old", "old " * 15_000), _normal("current")]
+    )
+    model = _model(tenant_id, input_tokens=100_000)
+    model.max_output_tokens = 256
+    observed_limits: list[int | None] = []
+
+    async def complete(*_args, **kwargs):
+        observed_limits.append(kwargs.get("max_output_tokens"))
+        return _step()
+
+    result = await _service(
+        model=model,
+        completion=complete,
+        effective_budget=100_000,
+        current_tokens=80_000,
+    ).compact_if_needed(state, context)
+
+    assert result.compacted is True
+    assert observed_limits
+    assert set(observed_limits) == {256}
+
+
+@pytest.mark.asyncio
+async def test_empty_and_length_outputs_are_repaired_without_prompt_growth() -> None:
+    state, context, tenant_id = _state(
+        [_normal("old", "old " * 300), _normal("current")]
+    )
+    responses = [
+        LLMCompletionStep(
+            content="   ",
+            tool_calls=(),
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(total_tokens=1),
+            finish_reason="stop",
+        ),
+        LLMCompletionStep(
+            content="partial summary",
+            tool_calls=(),
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(total_tokens=1),
+            finish_reason="length",
+        ),
+        _step(),
+    ]
+    prompts: list[list] = []
+
+    async def complete(_model, messages, **_kwargs):
+        prompts.append(messages)
+        return responses.pop(0)
+
+    result = await _service(
+        model=_model(tenant_id),
+        completion=complete,
+        effective_budget=1_000,
+        current_tokens=900,
+    ).compact_if_needed(state, context)
+
+    assert result.compacted is True
+    assert len(prompts) == 3
+    assert [len(prompt) for prompt in prompts] == [2, 3, 3]
+    assert prompts[0] == prompts[1][:2] == prompts[2][:2]
+    assert prompts[1][-1].content != prompts[2][-1].content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "finish_reason", "expected_code"),
+    [
+        ("   ", "stop", "empty_thread_compact_output"),
+        ("partial summary", "length", "thread_compact_output_truncated"),
+    ],
+)
+async def test_repairable_compact_output_exhaustion_is_deterministic(
+    content: str,
+    finish_reason: str,
+    expected_code: str,
+) -> None:
+    state, context, tenant_id = _state(
+        [_normal("old", "old " * 300), _normal("current")]
+    )
+    calls = 0
+
+    async def complete(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return LLMCompletionStep(
+            content=content,
+            tool_calls=(),
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(total_tokens=1),
+            finish_reason=finish_reason,
+        )
+
+    with pytest.raises(RunCompactorError) as raised:
+        await _service(
+            model=_model(tenant_id),
+            completion=complete,
+            effective_budget=1_000,
+            current_tokens=900,
+        ).compact_if_needed(state, context)
+
+    assert calls == 3
+    assert raised.value.code == expected_code
+    assert raised.value.is_deterministic_compact_error is True
+    assert "thread_summary" not in state
+    assert "summary_covered_through_message_id" not in state
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("finish_reason", "tool_calls"),
+    [
+        ("content_filter", ()),
+        ("refusal", ()),
+        ("unknown", ()),
+        (
+            "tool_calls",
+            (
+                {
+                    "id": "unexpected",
+                    "type": "function",
+                    "function": {"name": "unexpected", "arguments": "{}"},
+                },
+            ),
+        ),
+    ],
+)
+async def test_nonrepairable_compact_outputs_are_rejected_atomically(
+    finish_reason: str,
+    tool_calls: tuple[dict, ...],
+) -> None:
+    state, context, tenant_id = _state(
+        [_normal("old", "old " * 300), _normal("current")]
+    )
+    calls = 0
+
+    async def complete(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return LLMCompletionStep(
+            content="apparently complete summary",
+            tool_calls=tool_calls,
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(total_tokens=1),
+            finish_reason=finish_reason,
+        )
+
+    with pytest.raises(RunCompactorError) as raised:
+        await _service(
+            model=_model(tenant_id),
+            completion=complete,
+            effective_budget=1_000,
+            current_tokens=900,
+        ).compact_if_needed(state, context)
+
+    assert calls == 1
+    assert raised.value.code == "invalid_thread_compact_output"
+    assert "thread_summary" not in state
+    assert "summary_covered_through_message_id" not in state

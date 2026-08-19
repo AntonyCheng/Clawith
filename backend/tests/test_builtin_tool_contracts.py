@@ -324,6 +324,18 @@ def test_canonical_sensitive_paths_are_consumed_by_observability_sanitizer() -> 
     )
 
     assert sanitized == {"key": "PUBLIC_NAME", "value": "[REDACTED]"}
+    code = agent_tools._observability_arguments(
+        "execute_code",
+        {
+            "language": "python",
+            "code": (
+                'SECRET = "alpha beta gamma"\n'
+                'headers = {"Authorization": "Bearer sk-live-123"}\n'
+                'PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----\nbody\n-----END PRIVATE KEY-----"""'
+            ),
+        },
+    )
+    assert code == {"language": "python", "code": "[REDACTED]"}
     assert builtin_policy("read_document") == {
         "effect": "read",
         "retry_policy": "safe",

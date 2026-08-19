@@ -251,6 +251,7 @@ def test_arguments_are_recursively_redacted_without_changing_the_raw_fingerprint
                 "&response-content-type=text/plain"
             ),
             "message": "postgresql://user:password@example.test/db",
+            "code": 'SECRET = "credential-value"\nprint("done")',
             "bad\x00key": "normalized",
             "items": [{"cookie": "sid=secret"}],
         }
@@ -262,6 +263,8 @@ def test_arguments_are_recursively_redacted_without_changing_the_raw_fingerprint
     assert "view=full" in sanitized["url"]
     assert "secret-signature" not in sanitized["signed"]
     assert "user:password" not in sanitized["message"]
+    assert "credential-value" not in sanitized["code"]
+    assert "SECRET = [REDACTED]" in sanitized["code"]
     assert sanitized["bad�key"] == "normalized"
     assert all("\x00" not in key for key in sanitized)
     assert sanitized["items"] == [{"cookie": "[REDACTED]"}]

@@ -190,6 +190,8 @@ def _sql(statement) -> str:
     ("tool_name", "effect", "retry_policy", "contract_version"),
     [
         ("write_file", "write", "conditional", None),
+        ("execute_code", "external_write", "never", None),
+        ("execute_code_e2b", "external_write", "never", None),
         ("generate_image_openai", "external_write", "never", None),
         (
             "tenant_search",
@@ -240,6 +242,33 @@ async def test_user_reconcilable_unknown_receipt_can_be_settled(
     assert result.result_metadata["retryable"] is False
     assert result.lease_owner is None
     assert db.flush_count == 1
+
+    resumed = await tool_execution.reserve_tool_execution(
+        _FakeSession(run_id, execution),  # type: ignore[arg-type]
+        tenant_id=tenant_id,
+        run_id=run_id,
+        tool_call_id=execution.tool_call_id,
+        tool_name=tool_name,
+        assistant_message_id=execution.assistant_message_id,
+        arguments=_ARGUMENTS,
+        sanitized_arguments=_SANITIZED_ARGUMENTS,
+        request_ref=execution.request_ref,
+        side_effect_classification=effect,  # type: ignore[arg-type]
+        retry_policy=retry_policy,  # type: ignore[arg-type]
+        contract_version=contract_version,
+        lease_owner="resumed-worker",
+        lease_ttl_seconds=60,
+        clock=lambda: _NOW + timedelta(minutes=2),
+    )
+
+    assert resumed.created is False
+    assert resumed.can_execute is False
+    if confirmed_status == "succeeded":
+        assert resumed.reusable_result is not None
+        assert resumed.prior_failure is None
+    else:
+        assert resumed.reusable_result is None
+        assert resumed.prior_failure is not None
 
 
 @pytest.mark.asyncio

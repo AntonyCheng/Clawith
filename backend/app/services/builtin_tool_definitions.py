@@ -3948,8 +3948,8 @@ _FEISHU_TOOL_NAMES = frozenset(
 _EMAIL_TOOL_NAMES = frozenset({"send_email", "read_emails", "reply_email"})
 
 _SENSITIVE_PATHS: dict[str, tuple[str, ...]] = {
-    "execute_code": ("env", "environment"),
-    "execute_code_e2b": ("env", "environment"),
+    "execute_code": ("code", "env", "environment"),
+    "execute_code_e2b": ("code", "env", "environment"),
     "import_mcp_server": (
         "config.api_key",
         "config.token",

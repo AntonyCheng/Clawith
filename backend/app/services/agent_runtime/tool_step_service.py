@@ -69,6 +69,7 @@ from app.services.agent_runtime.tool_contracts import (
     deadline_policy_for_tool,
     parse_step_tool_context,
     resolve_tool_deadline_seconds,
+    resolve_local_code_execution_seconds,
     tool_cancel_capability,
     workset_version,
 )
@@ -1500,6 +1501,24 @@ class RuntimeToolStepService:
                 return signal
             await asyncio.sleep(0.25)
 
+    @staticmethod
+    def _requested_tool_deadline_seconds(
+        accepted: AcceptedToolCall,
+        arguments: Mapping[str, object],
+    ) -> object:
+        explicit_timeout = arguments.get("timeout")
+        if explicit_timeout is not None:
+            return explicit_timeout
+        if accepted.entry.deadline_policy != "local_code":
+            return None
+        properties = accepted.entry.parameters_schema.get("properties")
+        if not isinstance(properties, Mapping):
+            return None
+        timeout_schema = properties.get("timeout")
+        if not isinstance(timeout_schema, Mapping):
+            return None
+        return timeout_schema.get("default")
+
     async def _execute_application_with_controls(
         self,
         *,
@@ -1516,9 +1535,22 @@ class RuntimeToolStepService:
         """Run one application adapter under independent deadline/cancel/lease controls."""
         policy_name = accepted.entry.deadline_policy
         try:
+            requested_deadline_seconds = self._requested_tool_deadline_seconds(
+                accepted,
+                arguments,
+            )
+            local_code_execution_seconds = (
+                resolve_local_code_execution_seconds(requested_deadline_seconds)
+                if policy_name == "local_code"
+                else None
+            )
             deadline_seconds = resolve_tool_deadline_seconds(
                 policy_name,
-                arguments.get("timeout"),
+                (
+                    local_code_execution_seconds
+                    if local_code_execution_seconds is not None
+                    else requested_deadline_seconds
+                ),
             )
             cancel_capability = tool_cancel_capability(policy_name)
         except ToolContractError as exc:
@@ -1545,6 +1577,10 @@ class RuntimeToolStepService:
             "runtime_lease_owner": lease_owner,
             "runtime_tenant_id": context.tenant_id,
         }
+        if local_code_execution_seconds is not None:
+            executor_arguments["runtime_code_timeout_seconds"] = (
+                local_code_execution_seconds
+            )
         if confirmation_granted:
             runtime_authorization = issue_feishu_approval_create_authorization(
                 run_id=context.run_id,

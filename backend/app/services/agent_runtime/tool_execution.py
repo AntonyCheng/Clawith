@@ -229,7 +229,7 @@ _SENSITIVE_KEYS = frozenset(
 )
 _SECRET_ASSIGNMENT_RE = re.compile(
     r"(?i)\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|"
-    r"authorization|cookie|dsn|client[_-]?secret)\b(\s*[:=]\s*)"
+    r"authorization|cookie|dsn|secret|client[_-]?secret)\b(\s*[:=]\s*)"
     r"(?:bearer\s+)?([^\s,;]+)"
 )
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
@@ -2120,6 +2120,11 @@ def is_user_reconcilable_unknown_execution(execution: AgentToolExecution) -> boo
         and effect == "external_write"
         and retry_policy == "never"
     )
+    is_code_executor = (
+        tool_name in {"execute_code", "execute_code_e2b"}
+        and effect == "external_write"
+        and retry_policy == "never"
+    )
     return has_workspace_candidate or (
         tool_name == "write_file"
         and effect == "write"
@@ -2128,4 +2133,4 @@ def is_user_reconcilable_unknown_execution(execution: AgentToolExecution) -> boo
         tool_name in _IMAGE_GENERATION_TOOL_NAMES
         and effect == "external_write"
         and retry_policy == "never"
-    ) or is_registered_dynamic_mcp
+    ) or is_registered_dynamic_mcp or is_code_executor

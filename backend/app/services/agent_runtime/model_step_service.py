@@ -1037,12 +1037,17 @@ def _repair(
 def _safe_provider_failure_message(error: Exception) -> str:
     """Return bounded user-facing provider diagnostics; raw bodies stay in logs."""
     match = re.search(
-        r"(?<!\d)(400|401|403|408|422|429|500|502|503|504)(?!\d)",
+        r"(?<!\d)(400|401|402|403|408|422|429|500|502|503|504)(?!\d)",
         str(error),
     )
     status = match.group(1) if match else "unknown"
     if status in {"401", "403"}:
         return f"Model provider authentication or authorization failed (HTTP {status})."
+    if status == "402":
+        return (
+            "Model provider payment is required (HTTP 402). "
+            "Check the provider account balance and billing configuration."
+        )
     if status in {"400", "422"}:
         return f"Model provider rejected the request (HTTP {status})."
     if status != "unknown":

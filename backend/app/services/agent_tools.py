@@ -1299,6 +1299,39 @@ def _with_isolated_output_prompt(tool: dict) -> dict:
     return patched
 
 
+def _with_code_timeout_schema(
+    tool: dict,
+    *,
+    default_timeout: int,
+    max_timeout: int,
+) -> dict:
+    """Expose the effective sandbox timeout bounds to the model."""
+    patched = deepcopy(tool)
+    function = patched.get("function")
+    if not isinstance(function, dict):
+        return patched
+    parameters = function.get("parameters")
+    if not isinstance(parameters, dict):
+        return patched
+    properties = parameters.get("properties")
+    if not isinstance(properties, dict):
+        return patched
+    timeout_schema = properties.get("timeout")
+    if not isinstance(timeout_schema, dict):
+        return patched
+    effective_max = max(1, int(max_timeout))
+    effective_default = min(max(1, int(default_timeout)), effective_max)
+    timeout_schema["default"] = effective_default
+    timeout_schema["minimum"] = effective_default
+    timeout_schema["maximum"] = effective_max
+    timeout_schema["description"] = (
+        "Code execution timeout in seconds. The current sandbox default is "
+        f"{effective_default}s and the maximum is {effective_max}s; values below "
+        "the default are raised to the default."
+    )
+    return patched
+
+
 async def get_runtime_agent_tools_for_llm(agent_id: uuid.UUID) -> list[dict]:
     """Resolve the current Durable Runtime workset with typed-outcome gating."""
     tools = await get_agent_tools_for_llm(agent_id)
@@ -1319,6 +1352,17 @@ async def get_runtime_agent_tools_for_llm(agent_id: uuid.UUID) -> list[dict]:
             type(exc).__name__,
         )
         sandbox_config = None
+    if sandbox_config is not None:
+        tools = [
+            _with_code_timeout_schema(
+                tool,
+                default_timeout=sandbox_config.default_timeout,
+                max_timeout=sandbox_config.max_timeout,
+            )
+            if tool.get("function", {}).get("name") == "execute_code"
+            else tool
+            for tool in tools
+        ]
     if sandbox_config is not None and sandbox_config.workspace_mode == "isolated_output":
         tools = [
             _with_isolated_output_prompt(tool)
@@ -1389,7 +1433,32 @@ async def get_runtime_agent_tools_for_llm(agent_id: uuid.UUID) -> list[dict]:
                 and isinstance(e2b_config.get("api_key"), str)
                 and bool(e2b_config["api_key"].strip())
             ):
-                ready.append(tool)
+                try:
+                    default_timeout = int(
+                        e2b_config.get(
+                            "default_timeout",
+                            CODE_EXECUTION_DEFAULT_TIMEOUT_SECONDS,
+                        )
+                    )
+                    max_timeout = int(
+                        e2b_config.get(
+                            "max_timeout",
+                            CODE_EXECUTION_MAX_TIMEOUT_SECONDS,
+                        )
+                    )
+                except (TypeError, ValueError):
+                    logger.info(
+                        "[Tools] Durable Runtime hid execute_code_e2b because "
+                        "its timeout configuration is invalid"
+                    )
+                    continue
+                ready.append(
+                    _with_code_timeout_schema(
+                        tool,
+                        default_timeout=default_timeout,
+                        max_timeout=max_timeout,
+                    )
+                )
             else:
                 logger.info(
                     "[Tools] Durable Runtime hid execute_code_e2b because "
@@ -2232,6 +2301,7 @@ async def _execute_code_with_workspace_outcome(
     on_output=None,
     runtime_run_id: str | None = None,
     runtime_execution_id: str | None = None,
+    runtime_code_timeout_seconds: float | None = None,
 ) -> ToolExecutionOutcome:
     """Resolve policy once and guard materialize/execute/publish for local Session code."""
     if tool_name == "execute_code_e2b":
@@ -2244,6 +2314,7 @@ async def _execute_code_with_workspace_outcome(
                 arguments,
                 tool_name=tool_name,
                 on_output=on_output,
+                runtime_code_timeout_seconds=runtime_code_timeout_seconds,
             ),
             sync_back=True,
             sync_back_on_non_success=True,
@@ -2448,6 +2519,7 @@ async def _execute_code_with_workspace_outcome(
                 publish_paths=list(policy.publish_paths),
                 before_gateway_publish=before_gateway_publish,
                 gateway_publish=gateway_publish,
+                runtime_code_timeout_seconds=runtime_code_timeout_seconds,
             )
             if lease is not None and lease.ownership_lost:
                 return _typed_unknown(
@@ -3793,6 +3865,7 @@ async def execute_builtin_tool_outcome(
     runtime_execution_id: str | None = None,
     runtime_lease_owner: str | None = None,
     runtime_tenant_id: str | None = None,
+    runtime_code_timeout_seconds: float | None = None,
     execution_binding: Mapping[str, object] | None = None,
 ) -> ToolExecutionOutcome | str:
     """Execute only explicitly migrated builtin branches as typed outcomes.
@@ -3946,6 +4019,7 @@ async def execute_builtin_tool_outcome(
             on_output=on_output,
             runtime_run_id=runtime_run_id,
             runtime_execution_id=runtime_execution_id,
+            runtime_code_timeout_seconds=runtime_code_timeout_seconds,
         )
     if tool_name == "read_webpage":
         return await _read_webpage_outcome(arguments)
@@ -11573,6 +11647,7 @@ async def _execute_code_outcome(
     publish_paths: list[str] | None = None,
     before_gateway_publish=None,
     gateway_publish=None,
+    runtime_code_timeout_seconds: float | None = None,
 ) -> ToolExecutionOutcome:
     """Execute code using the configured sandbox backend.
 
@@ -11693,12 +11768,27 @@ async def _execute_code_outcome(
 
         # Use the configured default when the call omits timeout, then enforce
         # the independently configurable upper bound.
-        effective_timeout = (
-            sandbox_config.default_timeout
-            if requested_timeout is None
-            else requested_timeout
-        )
-        timeout = min(effective_timeout, sandbox_config.max_timeout)
+        if runtime_code_timeout_seconds is not None:
+            if (
+                isinstance(runtime_code_timeout_seconds, bool)
+                or not isinstance(runtime_code_timeout_seconds, (int, float))
+                or not 1 <= runtime_code_timeout_seconds <= 3600
+            ):
+                return _typed_failure(
+                    "Runtime code timeout is outside the supported range.",
+                    "sandbox_runtime_timeout_invalid",
+                )
+            timeout = runtime_code_timeout_seconds
+        else:
+            effective_timeout = (
+                sandbox_config.default_timeout
+                if requested_timeout is None
+                else requested_timeout
+            )
+            timeout = min(
+                max(effective_timeout, sandbox_config.default_timeout),
+                sandbox_config.max_timeout,
+            )
 
         backend = get_sandbox_backend(sandbox_config)
         if sandbox_config.workspace_mode == "isolated_output" and getattr(backend, "name", None) != "subprocess":
@@ -11850,7 +11940,10 @@ async def _execute_code_legacy_outcome(
         language = "python"
     code = arguments.get("code", "")
     try:
-        timeout = min(int(arguments.get("timeout", default_timeout)), max_timeout)
+        timeout = min(
+            max(int(arguments.get("timeout", default_timeout)), default_timeout),
+            max_timeout,
+        )
     except (TypeError, ValueError):
         return _typed_failure(
             "execute_code timeout must be an integer.",

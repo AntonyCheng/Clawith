@@ -428,6 +428,32 @@ async def test_complete_once_normalizes_tools_and_records_usage_without_executin
 
 
 @pytest.mark.asyncio
+async def test_complete_once_uses_explicit_max_output_tokens_override(
+    monkeypatch,
+) -> None:
+    client = _Client(LLMResponse(content="bounded", finish_reason="stop"))
+    monkeypatch.setattr(single_step, "create_llm_client", lambda **kwargs: client)
+    monkeypatch.setattr(single_step, "get_model_api_key", lambda model: "secret")
+    observed_limits: list[int | None] = []
+
+    def resolve_max_tokens(_provider, _model, configured_limit):
+        observed_limits.append(configured_limit)
+        return configured_limit
+
+    monkeypatch.setattr(single_step, "get_max_tokens", resolve_max_tokens)
+
+    result = await single_step.complete_llm_once(
+        _model(),
+        [LLMMessage(role="user", content="Summarize")],
+        max_output_tokens=4096,
+    )
+
+    assert result.content == "bounded"
+    assert observed_limits == [4096]
+    assert client.calls[0]["max_tokens"] == 4096
+
+
+@pytest.mark.asyncio
 async def test_complete_once_routes_embedded_thinking_to_reasoning_content(
     monkeypatch,
 ) -> None:

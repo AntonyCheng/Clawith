@@ -23,9 +23,44 @@ def test_deadline_precedence_is_explicit_then_default_capped_by_policy() -> None
     assert resolve_tool_deadline_seconds("network_read", 120) == 60
     assert deadline_policy_for_tool("read_emails").name == "network_read"
     assert deadline_policy_for_tool("execute_code").name == "local_code"
-    assert resolve_tool_deadline_seconds("local_code") == 180
+    assert resolve_tool_deadline_seconds("local_code") == 390
+    assert resolve_tool_deadline_seconds("local_code", 30) == 390
+    assert resolve_tool_deadline_seconds("local_code", 300) == 510
     assert tool_cancel_capability("local_code") == "cooperative"
     assert tool_cancel_capability("agentbay_code") == "stop_waiting_only"
+
+
+def test_model_facing_code_timeout_matches_current_sandbox_bounds() -> None:
+    tool = {
+        "type": "function",
+        "function": {
+            "name": "execute_code",
+            "description": "Execute code.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Timeout in seconds.",
+                    }
+                },
+            },
+        },
+    }
+
+    patched = agent_tools._with_code_timeout_schema(
+        tool,
+        default_timeout=180,
+        max_timeout=300,
+    )
+
+    timeout_schema = patched["function"]["parameters"]["properties"]["timeout"]
+    assert timeout_schema["default"] == 180
+    assert timeout_schema["minimum"] == 180
+    assert timeout_schema["maximum"] == 300
+    assert "180" in timeout_schema["description"]
+    assert "300" in timeout_schema["description"]
+    assert "default" not in tool["function"]["parameters"]["properties"]["timeout"]
 
 
 def test_code_sandbox_defaults_allow_longer_bounded_execution(monkeypatch) -> None:
@@ -188,3 +223,153 @@ async def test_local_code_cancellation_terminates_child_and_cleans_script(
         await task
 
     assert not (tmp_path / "_exec_tmp.py").exists()
+
+
+@pytest.mark.asyncio
+async def test_legacy_short_code_timeout_is_clamped_to_current_default(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    observed: dict[str, object] = {}
+
+    class Process:
+        returncode = 0
+
+        class Stream:
+            async def read(self, _size):
+                return b""
+
+        stdout = Stream()
+        stderr = Stream()
+
+        async def wait(self):
+            return 0
+
+    async def create_process(*_args, **_kwargs):
+        observed.update(_kwargs)
+        return Process()
+
+    async def wait_for(awaitable, timeout):
+        observed["timeout"] = timeout
+        return await awaitable
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", create_process)
+    monkeypatch.setattr(asyncio, "wait_for", wait_for)
+
+    outcome = await agent_tools._execute_code_legacy_outcome(
+        tmp_path,
+        {"language": "python", "code": "print('ok')", "timeout": 30},
+        default_timeout=180,
+        max_timeout=300,
+    )
+
+    assert outcome.status == "succeeded"
+    assert observed["timeout"] == 180
+
+
+@pytest.mark.asyncio
+async def test_short_code_timeout_is_clamped_before_sandbox_dispatch(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from app import config as config_module
+    from app.services.sandbox import registry
+    from app.services.sandbox.config import SandboxConfig
+
+    observed: dict[str, object] = {}
+    sandbox_config = SandboxConfig(default_timeout=180, max_timeout=300)
+
+    class Backend:
+        name = "subprocess"
+
+        async def execute(self, **kwargs):
+            observed.update(kwargs)
+            return SimpleNamespace(success=True, exit_code=0, error=None)
+
+        def _format_result(self, _result):
+            return "ok"
+
+    async def no_tool_config(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(config_module, "get_sandbox_config", lambda: sandbox_config)
+    monkeypatch.setattr(agent_tools, "_get_tool_config", no_tool_config)
+    monkeypatch.setattr(registry, "get_sandbox_backend", lambda _config: Backend())
+
+    outcome = await agent_tools._execute_code_outcome(
+        uuid.uuid4(),
+        tmp_path,
+        {"language": "python", "code": "print('ok')", "timeout": 30},
+    )
+
+    assert outcome.status == "succeeded"
+    assert observed["timeout"] == 180
+
+
+@pytest.mark.asyncio
+async def test_runtime_frozen_code_timeout_ignores_later_sandbox_default(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    from app import config as config_module
+    from app.services.sandbox import registry
+    from app.services.sandbox.config import SandboxConfig
+
+    observed: dict[str, object] = {}
+    later_config = SandboxConfig(default_timeout=600, max_timeout=900)
+
+    class Backend:
+        name = "subprocess"
+
+        async def execute(self, **kwargs):
+            observed.update(kwargs)
+            return SimpleNamespace(success=True, exit_code=0, error=None)
+
+        def _format_result(self, _result):
+            return "ok"
+
+    async def no_tool_config(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(config_module, "get_sandbox_config", lambda: later_config)
+    monkeypatch.setattr(agent_tools, "_get_tool_config", no_tool_config)
+    monkeypatch.setattr(registry, "get_sandbox_backend", lambda _config: Backend())
+
+    outcome = await agent_tools._execute_code_outcome(
+        uuid.uuid4(),
+        tmp_path,
+        {"language": "python", "code": "print('ok')", "timeout": 30},
+        runtime_code_timeout_seconds=180,
+    )
+
+    assert outcome.status == "succeeded"
+    assert observed["timeout"] == 180
+
+
+@pytest.mark.asyncio
+async def test_builtin_dispatch_forwards_runtime_frozen_code_timeout(
+    monkeypatch,
+) -> None:
+    observed: dict[str, object] = {}
+
+    async def execute_code(**kwargs):
+        observed.update(kwargs)
+        return agent_tools._typed_success("done")
+
+    monkeypatch.setattr(
+        agent_tools,
+        "_execute_code_with_workspace_outcome",
+        execute_code,
+    )
+
+    outcome = await agent_tools.execute_builtin_tool_outcome(
+        "execute_code",
+        {"language": "python", "code": "print('ok')", "timeout": 30},
+        agent_id=uuid.uuid4(),
+        user_id=uuid.uuid4(),
+        runtime_tenant_id=str(uuid.uuid4()),
+        runtime_code_timeout_seconds=180,
+    )
+
+    assert outcome.status == "succeeded"
+    assert observed["runtime_code_timeout_seconds"] == 180

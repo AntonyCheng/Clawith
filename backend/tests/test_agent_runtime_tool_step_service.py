@@ -4010,6 +4010,7 @@ def _accepted_for_control_test(
     effect: str,
     retry_policy: str,
     deadline_policy: str = "runtime_default",
+    parameters_schema: dict | None = None,
 ) -> AcceptedToolCall:
     return AcceptedToolCall(
         call_instance_id="controlled-call",
@@ -4017,13 +4018,129 @@ def _accepted_for_control_test(
         entry=ToolWorksetEntry(
             tool_name=tool_name,
             contract_version=f"runtime:{tool_name}:v1",
-            parameters_schema={"type": "object", "properties": {}},
+            parameters_schema=(
+                parameters_schema
+                if parameters_schema is not None
+                else {"type": "object", "properties": {}}
+            ),
             binding=ToolExecutionBinding(kind="builtin", handler_key=tool_name),
             effect=effect,  # type: ignore[arg-type]
             retry_policy=retry_policy,  # type: ignore[arg-type]
             deadline_policy=deadline_policy,
         ),
     )
+
+
+def test_local_code_deadline_uses_frozen_schema_default_when_argument_is_omitted(
+) -> None:
+    current_config = {"default_timeout": 300}
+    schema = {
+        "type": "object",
+        "properties": {
+            "timeout": {
+                "type": "integer",
+                "default": current_config["default_timeout"],
+            }
+        },
+    }
+    accepted = _accepted_for_control_test(
+        tool_name="execute_code",
+        effect="external_write",
+        retry_policy="never",
+        deadline_policy="local_code",
+        parameters_schema=schema,
+    )
+
+    current_config["default_timeout"] = 600
+    schema["properties"]["timeout"]["default"] = 600
+
+    frozen_default = (
+        tool_step_service.RuntimeToolStepService._requested_tool_deadline_seconds(
+        accepted,
+        {},
+        )
+    )
+    assert frozen_default == 300
+    assert (
+        tool_step_service.resolve_tool_deadline_seconds(
+            "local_code",
+            frozen_default,
+        )
+        == 510
+    )
+
+    explicit_timeout = (
+        tool_step_service.RuntimeToolStepService._requested_tool_deadline_seconds(
+            accepted,
+            {"timeout": 240},
+        )
+    )
+    assert explicit_timeout == 240
+    assert (
+        tool_step_service.resolve_tool_deadline_seconds(
+            "local_code",
+            explicit_timeout,
+        )
+        == 450
+    )
+
+
+@pytest.mark.asyncio
+async def test_legacy_short_code_timeout_is_frozen_for_outer_and_handler(
+    monkeypatch,
+) -> None:
+    tenant_id = uuid.uuid4()
+    agent = _agent(tenant_id)
+    state = _state(tenant_id, agent, ())
+    context = _context(state)
+    accepted = _accepted_for_control_test(
+        tool_name="execute_code",
+        effect="external_write",
+        retry_policy="never",
+        deadline_policy="local_code",
+        parameters_schema={
+            "type": "object",
+            "properties": {"timeout": {"type": "integer", "minimum": 1}},
+        },
+    )
+    execution = _execution(
+        tenant_id,
+        uuid.UUID(context.run_id),
+        accepted.call_instance_id,
+        "execute_code",
+    )
+    observed: dict[str, object] = {}
+
+    async def execute(*_args, **kwargs):
+        observed.update(kwargs)
+        return ToolExecutionOutcome(
+            status="succeeded",
+            result_summary="done",
+            result_ref=None,
+        )
+
+    service = _service(agent, _CancelSource(None), execute)
+
+    async def fence(**_kwargs):
+        return None
+
+    monkeypatch.setattr(service, "_assert_execution_fence", fence)
+
+    outcome, signal = await service._execute_application_with_controls(
+        state=state,
+        context=context,
+        tenant_id=tenant_id,
+        agent=agent,
+        accepted=accepted,
+        arguments={"timeout": 30},
+        reservation=_reservation(execution),
+        lease_owner=execution.lease_owner,
+    )
+
+    assert signal is None
+    assert outcome.status == "succeeded"
+    assert observed["runtime_code_timeout_seconds"] == 180
+    assert tool_step_service.resolve_tool_deadline_seconds("local_code", 180) == 390
 
 
 @pytest.mark.asyncio
