@@ -73,6 +73,10 @@ from app.services.feishu_group_targets import (
     FeishuGroupTargetError,
     resolve_feishu_group_target,
 )
+from app.services.feishu_contact_search import (
+    resolve_feishu_contacts_by_exact_names,
+    search_feishu_contacts,
+)
 from app.services import agent_directory
 from app.services.workspace_collaboration import (
     delete_workspace_file,
@@ -9832,6 +9836,7 @@ async def _query_directory_payload(agent_id: uuid.UUID, args: dict) -> dict:
     target_member_id_raw = (args.get("target_member_id") or "").strip()
     member_type = (args.get("member_type") or "all").strip().lower()
     include_uncontactable = bool(args.get("include_uncontactable", False))
+    provider_type = agent_directory.normalize_provider_type(args.get("provider_type"))
 
     try:
         limit = int(args.get("limit", 20))
@@ -9890,6 +9895,7 @@ async def _query_directory_payload(agent_id: uuid.UUID, args: dict) -> dict:
                 target_member_id=target_member_id,
                 member_type=member_type,
                 include_uncontactable=include_uncontactable,
+                provider_type=provider_type,
                 limit=limit,
                 offset=offset,
                 max_limit=50,
@@ -17381,16 +17387,30 @@ async def _feishu_calendar_create_outcome(
             "feishu_calendar_create attendee_names must be an array of strings.",
             "invalid_tool_arguments",
         )
+    token, calendar_id, error = await _feishu_calendar_context_outcome(agent_id)
+    if error is not None or token is None or calendar_id is None:
+        return error or _typed_failure(
+            "Feishu Bot primary calendar is unavailable.",
+            "feishu_calendar_unavailable",
+        )
     attendee_open_ids: list[str] = []
     unresolved_names: list[str] = []
-    for attendee_name in attendee_names[:20]:
-        name = attendee_name.strip()
-        if not name:
-            continue
-        try:
-            open_id = await _feishu_open_id_for_visible_name(agent_id, name)
-        except Exception as exc:
-            return _feishu_read_exception_outcome("attendee_lookup", exc)
+    normalized_attendee_names = [
+        attendee_name.strip()
+        for attendee_name in attendee_names[:20]
+        if attendee_name.strip()
+    ]
+    try:
+        resolved_attendees = await _feishu_open_ids_for_visible_names(
+            agent_id,
+            normalized_attendee_names,
+            live_token=token,
+            raise_live_errors=True,
+        )
+    except Exception as exc:
+        return _feishu_read_exception_outcome("attendee_lookup", exc)
+    for name in normalized_attendee_names:
+        open_id = resolved_attendees.get(name)
         if open_id is None:
             unresolved_names.append(name)
             continue
@@ -17406,12 +17426,6 @@ async def _feishu_calendar_create_outcome(
     if sender_open_id and sender_open_id not in attendee_open_ids:
         attendee_open_ids.append(sender_open_id)
 
-    token, calendar_id, error = await _feishu_calendar_context_outcome(agent_id)
-    if error is not None or token is None or calendar_id is None:
-        return error or _typed_failure(
-            "Feishu Bot primary calendar is unavailable.",
-            "feishu_calendar_unavailable",
-        )
     body: dict[str, object] = {
         "summary": required["summary"],
         "start_time": {
@@ -17788,12 +17802,54 @@ async def _feishu_calendar_create(agent_id: uuid.UUID, arguments: dict) -> str:
     from app.services.feishu_service import feishu_service
     token = await feishu_service.get_tenant_access_token(app_id, app_secret)
 
-    # Resolve organizer open_id from email — soft failure
-    organizer_open_id: str | None = None
-    if user_email:
-        organizer_open_id = await _feishu_resolve_open_id(token, user_email)
-        if not organizer_open_id:
-            logger.warning(f"[Feishu Calendar] Could not resolve open_id for '{user_email}', continuing without organizer invite")
+    # Resolve every attendee before the external event write. Once Feishu
+    # returns an event ID, later invitation failures must not hide that receipt.
+    attendee_open_ids: list[str] = []
+    attendee_display: list[str] = []
+    for oid in (arguments.get("attendee_open_ids") or []):
+        if oid and oid not in attendee_open_ids:
+            attendee_open_ids.append(oid)
+            attendee_display.append(oid)
+
+    attendee_names = [
+        str(name).strip()
+        for name in (arguments.get("attendee_names") or [])[:20]
+        if str(name).strip()
+    ]
+    resolved_names = await _feishu_open_ids_for_visible_names(
+        agent_id,
+        attendee_names,
+        live_token=token,
+    )
+    for attendee_name in attendee_names:
+        oid = resolved_names.get(attendee_name)
+        if oid and oid not in attendee_open_ids:
+            attendee_open_ids.append(oid)
+            attendee_display.append(attendee_name)
+        elif not oid:
+            logger.warning(
+                "[Calendar] Could not resolve attendee '{}'",
+                attendee_name,
+            )
+
+    attendee_emails: list[str] = list(arguments.get("attendee_emails") or [])
+    if user_email and user_email not in attendee_emails:
+        attendee_emails.append(user_email)
+    for email in attendee_emails[:20]:
+        oid = await _feishu_resolve_open_id(token, email)
+        if oid and oid not in attendee_open_ids:
+            attendee_open_ids.append(oid)
+            attendee_display.append(email)
+        elif not oid:
+            logger.warning(
+                "[Feishu Calendar] Could not resolve open_id for '{}'; "
+                "continuing without that invite",
+                email,
+            )
+
+    sender_oid = channel_feishu_sender_open_id.get(None)
+    if sender_oid and sender_oid not in attendee_open_ids:
+        attendee_open_ids.append(sender_oid)
 
     agent_cal_id, cal_err = await _get_agent_calendar_id(token)
     if not agent_cal_id:
@@ -17823,63 +17879,38 @@ async def _feishu_calendar_create(agent_id: uuid.UUID, arguments: dict) -> str:
 
     event_id = data.get("data", {}).get("event", {}).get("event_id", "")
 
-    # Collect all attendee open_ids to invite
-    attendee_open_ids: list[str] = []
-    attendee_display: list[str] = []  # for summary message
-
-    # 1. Direct open_ids provided by caller
-    for oid in (arguments.get("attendee_open_ids") or []):
-        if oid and oid not in attendee_open_ids:
-            attendee_open_ids.append(oid)
-            attendee_display.append(oid)
-
-    # 2. Names → look up via feishu_user_search
-    for aname in (arguments.get("attendee_names") or []):
-        aname = aname.strip()
-        if not aname:
-            continue
-        _oid = await _feishu_open_id_for_visible_name(agent_id, aname)
-        if _oid:
-            if _oid not in attendee_open_ids:
-                attendee_open_ids.append(_oid)
-                attendee_display.append(aname)
-        else:
-            logger.warning(
-                f"[Calendar] Could not resolve attendee '{aname}'"
-            )
-
-    # 3. From explicit attendee_emails
-    attendee_emails: list[str] = list(arguments.get("attendee_emails") or [])
-    if user_email and user_email not in attendee_emails:
-        attendee_emails.append(user_email)
-    for email in attendee_emails[:20]:
-        oid = await _feishu_resolve_open_id(token, email)
-        if oid and oid not in attendee_open_ids:
-            attendee_open_ids.append(oid)
-            attendee_display.append(email)
-
-    # 4. Auto-invite the Feishu message sender (from context var)
-    sender_oid = channel_feishu_sender_open_id.get(None)
-    if sender_oid and sender_oid not in attendee_open_ids:
-        attendee_open_ids.append(sender_oid)
-
+    invitation_warnings: list[str] = []
     if attendee_open_ids and event_id:
         async with httpx.AsyncClient(timeout=20) as client:
             for oid in attendee_open_ids:
-                await client.post(
-                    f"https://open.feishu.cn/open-apis/calendar/v4/calendars/{agent_cal_id}/events/{event_id}/attendees",
-                    json={"attendees": [{"type": "user", "user_id": oid}]},
-                    headers={"Authorization": f"Bearer {token}"},
-                    params={"user_id_type": "open_id"},
-                )
+                try:
+                    invite_response = await client.post(
+                        f"https://open.feishu.cn/open-apis/calendar/v4/calendars/{agent_cal_id}/events/{event_id}/attendees",
+                        json={"attendees": [{"type": "user", "user_id": oid}]},
+                        headers={"Authorization": f"Bearer {token}"},
+                        params={"user_id_type": "open_id"},
+                    )
+                    invite_data = invite_response.json()
+                    if invite_data.get("code") != 0:
+                        invitation_warnings.append(str(oid))
+                except Exception:
+                    logger.exception(
+                        "[Feishu Calendar] Attendee invite failed after event creation"
+                    )
+                    invitation_warnings.append(str(oid))
 
     att_str = f"\n**参与人**: {', '.join(attendee_display)}" if attendee_display else ""
     invite_note = "\n（已向您发送日历邀请，请在飞书日历中确认）" if attendee_open_ids else ""
+    warning_note = (
+        "\n⚠️ 日程已创建，但部分参与人邀请失败，请使用上述 Event ID 核对。"
+        if invitation_warnings
+        else ""
+    )
     return (
         f"✅ 日历事件已创建！\n"
         f"**标题**: {summary}\n"
         f"**时间**: {start_time} → {end_time}{att_str}\n"
-        f"**Event ID**: `{event_id}`{invite_note}"
+        f"**Event ID**: `{event_id}`{invite_note}{warning_note}"
     )
 
 
@@ -18554,7 +18585,7 @@ async def _feishu_user_search_outcome(
     agent_id: uuid.UUID,
     arguments: dict,
 ) -> ToolExecutionOutcome:
-    """Project tenant-scoped Directory facts without exposing Provider IDs."""
+    """Search synced contacts first, then the Agent app's live Feishu scope."""
     query = arguments.get("query")
     if not isinstance(query, str) or not query.strip():
         return _typed_failure(
@@ -18576,16 +18607,15 @@ async def _feishu_user_search_outcome(
             "invalid_tool_arguments",
         )
 
-    payload = await _query_directory_payload(
-        agent_id,
-        {
-            "query": query.strip(),
-            "member_type": "human",
-            "include_uncontactable": False,
-            "limit": limit,
-            "offset": offset,
-        },
-    )
+    directory_arguments = {
+        "query": query.strip(),
+        "member_type": "human",
+        "provider_type": "feishu",
+        "include_uncontactable": False,
+        "limit": limit,
+        "offset": offset,
+    }
+    payload = await _query_directory_payload(agent_id, directory_arguments)
     if payload.get("ok") is not True:
         error = (
             payload.get("error")
@@ -18644,6 +18674,61 @@ async def _feishu_user_search_outcome(
             "The tenant directory returned invalid pagination facts.",
             "query_directory_failed",
             retryable=True,
+        )
+    use_live_search = not members and not has_more and offset == 0
+    if not members and not has_more and offset > 0:
+        first_page = await _query_directory_payload(
+            agent_id,
+            {**directory_arguments, "limit": 1, "offset": 0},
+        )
+        first_members = first_page.get("members")
+        first_has_more = first_page.get("has_more")
+        use_live_search = (
+            first_page.get("ok") is True
+            and isinstance(first_members, list)
+            and not first_members
+            and first_has_more is False
+        )
+    if use_live_search:
+        token, token_error = await _feishu_access_token_outcome(agent_id)
+        if token_error is not None or token is None:
+            return token_error or _typed_failure(
+                "Feishu did not return a tenant access token.",
+                "feishu_token_rejected",
+            )
+        try:
+            live_matches, live_has_more = await search_feishu_contacts(
+                token,
+                query.strip(),
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:
+            return _feishu_read_exception_outcome("user_search", exc)
+        live_members: list[dict[str, object]] = []
+        for match in live_matches:
+            member = {
+                "display_name": match.display_name,
+                "source": "feishu_live",
+            }
+            if match.title:
+                member["title"] = match.title
+            live_members.append(member)
+        summary_payload = {
+            "query": query.strip(),
+            "returned_count": len(live_members),
+            "has_more": live_has_more,
+            "members": live_members,
+        }
+        return _typed_success(
+            _bounded_feishu_json(summary_payload),
+            metadata={
+                "returned_count": len(live_members),
+                "has_more": live_has_more,
+                "limit": limit,
+                "offset": offset,
+                "source": "feishu_live",
+            },
         )
     summary_payload = {
         "query": query.strip(),
@@ -19466,51 +19551,97 @@ async def _feishu_open_id_for_visible_name(
     normalized_name = name.strip()
     if not normalized_name:
         return None
+    return (await _feishu_open_ids_for_visible_names(agent_id, [normalized_name])).get(
+        normalized_name
+    )
+
+
+async def _feishu_open_ids_for_visible_names(
+    agent_id: uuid.UUID,
+    names: list[str],
+    *,
+    live_token: str | None = None,
+    raise_live_errors: bool = False,
+) -> dict[str, str | None]:
+    """Resolve up to 20 visible Feishu names with one live directory scan."""
+    requested_names = list(dict.fromkeys(name.strip() for name in names if name.strip()))[:20]
+    if not requested_names:
+        return {}
     # Calendar F1 tests and old extension points replace the legacy adapter.
     # Preserve that narrow injection seam without making raw IDs part of the
     # production user-search result again.
     if _feishu_user_search is not _NATIVE_FEISHU_USER_SEARCH_ADAPTER:
-        legacy_result = await _feishu_user_search(
-            agent_id,
-            {"name": normalized_name, "query": normalized_name},
-        )
-        match = re.search(
-            r"open_id:\s*`(ou_[A-Za-z0-9]+)`",
-            str(legacy_result),
-        )
-        return match.group(1) if match is not None else None
+        resolved: dict[str, str | None] = {}
+        for name in requested_names:
+            legacy_result = await _feishu_user_search(
+                agent_id,
+                {"name": name, "query": name},
+            )
+            match = re.search(
+                r"open_id:\s*`(ou_[A-Za-z0-9]+)`",
+                str(legacy_result),
+            )
+            resolved[name] = match.group(1) if match is not None else None
+        return resolved
 
-    payload = await _query_directory_payload(
-        agent_id,
-        {
-            "query": normalized_name,
-            "member_type": "human",
-            "include_uncontactable": False,
-            "limit": 20,
-            "offset": 0,
-        },
-    )
-    raw_members = payload.get("members") if payload.get("ok") is True else None
-    if not isinstance(raw_members, list):
-        return None
-    exact_open_ids: list[str] = []
-    for member in raw_members:
-        provider = member.get("provider") if isinstance(member, Mapping) else None
-        if (
-            not isinstance(member, Mapping)
-            or member.get("member_type") != "human"
-            or member.get("can_contact") is not True
-            or str(member.get("display_name") or "").casefold()
-            != normalized_name.casefold()
-            or not isinstance(provider, Mapping)
-            or _normalize_roster_provider_type(provider.get("provider_type"))
-            != "feishu"
-        ):
-            continue
-        open_id = provider.get("open_id")
-        if isinstance(open_id, str) and open_id and open_id not in exact_open_ids:
-            exact_open_ids.append(open_id)
-    return exact_open_ids[0] if len(exact_open_ids) == 1 else None
+    resolved = {}
+    live_names: list[str] = []
+    for name in requested_names:
+        payload = await _query_directory_payload(
+            agent_id,
+            {
+                "query": name,
+                "member_type": "human",
+                "provider_type": "feishu",
+                "include_uncontactable": False,
+                "limit": 20,
+                "offset": 0,
+            },
+        )
+        raw_members = payload.get("members") if payload.get("ok") is True else None
+        exact_open_ids: set[str] = set()
+        if isinstance(raw_members, list):
+            for member in raw_members:
+                provider = member.get("provider") if isinstance(member, Mapping) else None
+                if (
+                    not isinstance(member, Mapping)
+                    or member.get("member_type") != "human"
+                    or member.get("can_contact") is not True
+                    or str(member.get("display_name") or "").casefold()
+                    != name.casefold()
+                    or not isinstance(provider, Mapping)
+                ):
+                    continue
+                open_id = provider.get("open_id")
+                if isinstance(open_id, str) and open_id:
+                    exact_open_ids.add(open_id)
+        if len(exact_open_ids) == 1:
+            resolved[name] = next(iter(exact_open_ids))
+        elif len(exact_open_ids) > 1:
+            resolved[name] = None
+        else:
+            live_names.append(name)
+
+    if live_names:
+        token = live_token
+        token_error = None
+        if token is None:
+            token, token_error = await _feishu_access_token_outcome(agent_id)
+        if token_error is None and token is not None:
+            try:
+                resolved.update(
+                    await resolve_feishu_contacts_by_exact_names(token, live_names)
+                )
+            except Exception as exc:
+                if raise_live_errors:
+                    raise
+                logger.warning(
+                    "[Feishu Contact] Live attendee lookup failed: {}",
+                    type(exc).__name__,
+                )
+    for name in requested_names:
+        resolved.setdefault(name, None)
+    return resolved
 
 
 async def _feishu_contacts_refresh(agent_id: uuid.UUID) -> None:

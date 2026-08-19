@@ -280,8 +280,21 @@ def _human_directory_conditions(
     query: str,
     target_member_uuid: uuid.UUID | None,
     include_uncontactable: bool,
+    provider_type: str | None = None,
 ) -> list:
     conditions = [OrgMember.tenant_id == source.tenant_id]
+    if provider_type:
+        conditions.append(
+            OrgMember.provider_id.in_(
+                select(IdentityProvider.id).where(
+                    IdentityProvider.provider_type == provider_type,
+                    or_(
+                        IdentityProvider.tenant_id == source.tenant_id,
+                        IdentityProvider.tenant_id.is_(None),
+                    ),
+                )
+            )
+        )
     if target_member_uuid:
         conditions.append(OrgMember.id == target_member_uuid)
     if source_mode == "private":
@@ -358,12 +371,19 @@ async def query_agent_directory(
     target_member_id: uuid.UUID | str | None = None,
     member_type: str = "all",
     include_uncontactable: bool = False,
+    provider_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     max_limit: int = 100,
 ) -> dict:
     query = (query or "").strip()
+    provider_type = normalize_provider_type(provider_type)
     member_type = _validate_member_type(member_type)
+    if provider_type and member_type != "human":
+        raise DirectoryQueryError(
+            "invalid_provider_type_filter",
+            "provider_type can only be used with member_type human",
+        )
     target_member_uuid = _coerce_target_member_id(target_member_id)
     _validate_pagination(limit, offset, max_limit)
     if target_member_uuid and member_type == "agent":
@@ -452,6 +472,7 @@ async def query_agent_directory(
             query=query,
             target_member_uuid=None,
             include_uncontactable=include_uncontactable,
+            provider_type=provider_type,
         )
         agent_contact_rank = case(
             (
@@ -597,6 +618,7 @@ async def query_agent_directory(
             query=query,
             target_member_uuid=target_member_uuid,
             include_uncontactable=include_uncontactable,
+            provider_type=provider_type,
         )
 
         human_result = await db.execute(

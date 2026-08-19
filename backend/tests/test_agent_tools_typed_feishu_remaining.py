@@ -22,6 +22,7 @@ from app.services.builtin_tool_definitions import (
     builtin_readiness,
     builtin_sensitive_paths,
 )
+from app.services.feishu_contact_search import FeishuContactMatch
 from app.services.feishu_service import feishu_service
 
 
@@ -738,6 +739,16 @@ async def test_user_search_reuses_tenant_scoped_human_directory_window(
         },
     )
 
+    async def token(_agent_id):
+        return "tenant-token", None
+
+    async def live_search(_token, _query, *, limit, offset):
+        assert (limit, offset) == (7, 3)
+        return [], False
+
+    monkeypatch.setattr(agent_tools, "_feishu_access_token_outcome", token)
+    monkeypatch.setattr(agent_tools, "search_feishu_contacts", live_search)
+
     assert_outcome(
         await execute(
             "feishu_user_search",
@@ -753,12 +764,85 @@ async def test_user_search_reuses_tenant_scoped_human_directory_window(
             {
                 "query": "Alice",
                 "member_type": "human",
+                "provider_type": "feishu",
                 "include_uncontactable": False,
                 "limit": 7,
                 "offset": 3,
             },
-        )
+        ),
+        (
+            agent_id,
+            {
+                "query": "Alice",
+                "member_type": "human",
+                "provider_type": "feishu",
+                "include_uncontactable": False,
+                "limit": 1,
+                "offset": 0,
+            },
+        ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_user_search_does_not_switch_source_while_local_page_has_more(
+    monkeypatch,
+) -> None:
+    install_directory_payload(
+        monkeypatch,
+        {"ok": True, "members": [], "has_more": True},
+    )
+
+    async def unexpected_token(_agent_id):
+        raise AssertionError("live Feishu search must not start before local exhaustion")
+
+    monkeypatch.setattr(
+        agent_tools,
+        "_feishu_access_token_outcome",
+        unexpected_token,
+    )
+
+    outcome = assert_outcome(
+        await execute("feishu_user_search", {"query": "Alice"}),
+        "succeeded",
+    )
+
+    assert json.loads(outcome.summary or "")["has_more"] is True
+
+
+@pytest.mark.asyncio
+async def test_user_search_continues_live_pagination_when_local_feishu_set_is_empty(
+    monkeypatch,
+) -> None:
+    directory_calls: list[tuple[int, int]] = []
+    live_calls: list[tuple[int, int]] = []
+
+    async def directory(_agent_id, arguments):
+        directory_calls.append((arguments["limit"], arguments["offset"]))
+        return {"ok": True, "members": [], "has_more": False}
+
+    async def token(_agent_id):
+        return "tenant-token", None
+
+    async def live_search(_token, _query, *, limit, offset):
+        live_calls.append((limit, offset))
+        return [], False
+
+    monkeypatch.setattr(agent_tools, "_query_directory_payload", directory)
+    monkeypatch.setattr(agent_tools, "_feishu_access_token_outcome", token)
+    monkeypatch.setattr(agent_tools, "search_feishu_contacts", live_search)
+
+    outcome = assert_outcome(
+        await execute(
+            "feishu_user_search",
+            {"query": "Alice", "limit": 20, "offset": 20},
+        ),
+        "succeeded",
+    )
+
+    assert directory_calls == [(20, 20), (1, 0)]
+    assert live_calls == [(20, 20)]
+    assert outcome.metadata["source"] == "feishu_live"
 
 
 @pytest.mark.asyncio
@@ -831,6 +915,179 @@ async def test_user_search_returns_only_visible_contactable_feishu_members_witho
         "user-private-hidden",
     ):
         assert forbidden not in serialized
+
+
+@pytest.mark.asyncio
+async def test_user_search_falls_back_to_agent_feishu_directory_without_exposing_open_id(
+    monkeypatch,
+) -> None:
+    install_directory_payload(
+        monkeypatch,
+        {
+            "ok": True,
+            "has_more": False,
+            "members": [],
+        },
+    )
+    calls: list[tuple[str, str, int, int]] = []
+
+    async def token(_agent_id):
+        return "tenant-token", None
+
+    async def live_search(_token, query, *, limit, offset):
+        calls.append((_token, query, limit, offset))
+        return (
+            [
+                FeishuContactMatch(
+                    open_id="ou-private-zhou",
+                    display_name="周逸飞",
+                    title="Engineer",
+                )
+            ],
+            False,
+        )
+
+    monkeypatch.setattr(agent_tools, "_feishu_access_token_outcome", token)
+    monkeypatch.setattr(agent_tools, "search_feishu_contacts", live_search)
+
+    outcome = assert_outcome(
+        await execute("feishu_user_search", {"query": "周逸飞"}),
+        "succeeded",
+    )
+    payload = json.loads(outcome.summary or "")
+
+    assert calls == [("tenant-token", "周逸飞", 20, 0)]
+    assert payload == {
+        "query": "周逸飞",
+        "returned_count": 1,
+        "has_more": False,
+        "members": [
+            {
+                "display_name": "周逸飞",
+                "title": "Engineer",
+                "source": "feishu_live",
+            }
+        ],
+    }
+    assert "ou-private-zhou" not in (outcome.summary or "")
+
+
+@pytest.mark.asyncio
+async def test_calendar_name_resolution_uses_private_live_open_id_fallback(
+    monkeypatch,
+) -> None:
+    async def directory(_agent_id, _arguments):
+        return {"ok": True, "members": [], "has_more": False}
+
+    async def token(_agent_id):
+        return "tenant-token", None
+
+    async def live_search(_token, names):
+        assert names == ["周逸飞"]
+        return {"周逸飞": "ou-private-zhou"}
+
+    monkeypatch.setattr(agent_tools, "_query_directory_payload", directory)
+    monkeypatch.setattr(agent_tools, "_feishu_access_token_outcome", token)
+    monkeypatch.setattr(
+        agent_tools,
+        "resolve_feishu_contacts_by_exact_names",
+        live_search,
+    )
+
+    assert (
+        await agent_tools._feishu_open_id_for_visible_name(uuid.uuid4(), "周逸飞")
+        == "ou-private-zhou"
+    )
+
+
+@pytest.mark.asyncio
+async def test_calendar_single_name_resolution_soft_fails_on_live_error(
+    monkeypatch,
+) -> None:
+    async def directory(_agent_id, _arguments):
+        return {"ok": True, "members": [], "has_more": False}
+
+    async def token(_agent_id):
+        return "tenant-token", None
+
+    async def live_search(_token, _names):
+        raise httpx.TimeoutException("directory timeout")
+
+    monkeypatch.setattr(agent_tools, "_query_directory_payload", directory)
+    monkeypatch.setattr(agent_tools, "_feishu_access_token_outcome", token)
+    monkeypatch.setattr(
+        agent_tools,
+        "resolve_feishu_contacts_by_exact_names",
+        live_search,
+        raising=False,
+    )
+
+    assert await agent_tools._feishu_open_id_for_visible_name(
+        uuid.uuid4(),
+        "周逸飞",
+    ) is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_calendar_resolves_before_write_and_preserves_event_receipt_on_invite_error(
+    monkeypatch,
+) -> None:
+    order: list[str] = []
+    transport = FakeHTTP()
+    transport.add(
+        "post",
+        FakeResponse(
+            {
+                "code": 0,
+                "data": {"event": {"event_id": "event-created-1"}},
+            }
+        ),
+        httpx.TimeoutException("invite timeout"),
+    )
+    install_feishu_provider(monkeypatch, transport)
+    original_request = transport.request
+
+    async def ordered_request(method, url, **kwargs):
+        order.append("event_write" if url.endswith("/events") else "invite_write")
+        return await original_request(method, url, **kwargs)
+
+    transport.request = ordered_request
+
+    async def resolve_names(_agent_id, names, *, live_token=None):
+        order.append("name_lookup")
+        assert live_token == "tenant-token"
+        return {name: "ou-alice" for name in names}
+
+    async def resolve_email(_token, _email):
+        order.append("email_lookup")
+        return "ou-email"
+
+    async def calendar_id(_token):
+        return "calendar-1", None
+
+    monkeypatch.setattr(
+        agent_tools,
+        "_feishu_open_ids_for_visible_names",
+        resolve_names,
+    )
+    monkeypatch.setattr(agent_tools, "_feishu_resolve_open_id", resolve_email)
+    monkeypatch.setattr(agent_tools, "_get_agent_calendar_id", calendar_id)
+
+    result = await agent_tools._feishu_calendar_create(
+        uuid.uuid4(),
+        {
+            "summary": "Review",
+            "start_time": "2026-08-20T10:00:00+08:00",
+            "end_time": "2026-08-20T11:00:00+08:00",
+            "attendee_names": ["Alice"],
+            "attendee_emails": ["alice@example.com"],
+        },
+    )
+
+    assert order[:3] == ["name_lookup", "email_lookup", "event_write"]
+    assert "✅ 日历事件已创建" in result
+    assert "event-created-1" in result
+    assert "参与人邀请失败" in result
 
 
 @pytest.mark.asyncio
