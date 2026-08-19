@@ -52,6 +52,16 @@ what that Tool Result objectively proves. Do not require work that the original
 task did not request, and do not accept partial progress, plans, or unsupported
 completion claims.
 
+For a public Group Run (`chat_session_type=group` or native `group_context`), a
+missing human clarification or authorization may not hold the serialized group
+lane. If the candidate clearly states what is deferred, asks one concrete
+answerable public question, and does not claim that the deferred business work
+is complete, treat that clarification handoff as completion of this Run. A
+later addressed human message starts a new Run. Do not require `waiting_user`,
+`waiting_external`, repeated requests, or a fabricated default merely to keep
+the current Run open. This exception does not permit bypassing confirmation for
+side effects or treating an unsettled Tool outcome as complete.
+
 Return exactly one JSON object with this schema:
 {"verdict":"pass|repair","missing_requirements":["..."],"next_actions":["..."],"evidence":["..."]}
 

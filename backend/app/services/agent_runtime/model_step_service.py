@@ -419,13 +419,11 @@ def _with_runtime_tools(
     if allow_group_handoff:
         resolved.append(group_at_tool_definition())
     names = {_tool_name(tool) for tool in resolved}
-    if _RUNTIME_WAIT_TOOL_NAME not in names:
-        wait_tool = deepcopy(_RUNTIME_WAIT_TOOL_DEFINITION)
-        if not allow_user_wait:
-            wait_tool["function"]["parameters"]["properties"]["waiting_type"][
-                "enum"
-            ] = ["agent", "external"]
-        resolved.append(wait_tool)
+    # A model-authored wait must not monopolize a serialized public-group lane.
+    # Runtime-derived waits for unsettled Tool outcomes do not use this Tool and
+    # remain supported.
+    if allow_user_wait and _RUNTIME_WAIT_TOOL_NAME not in names:
+        resolved.append(deepcopy(_RUNTIME_WAIT_TOOL_DEFINITION))
     return resolved
 
 

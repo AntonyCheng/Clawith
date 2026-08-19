@@ -1760,13 +1760,7 @@ async def test_group_snapshot_adds_only_current_group_tools_and_platform_rules()
     assert "Dynamic context" in str(_runtime_data_message(calls[0][0]).content)
     assert prompt_calls
     assert set(prompt_calls[0][1]["allowed_tool_names"]) == tool_names
-    wait_tool = next(
-        tool for tool in calls[0][1]["tools"] if tool["function"]["name"] == "wait"
-    )
-    assert wait_tool["function"]["parameters"]["properties"]["waiting_type"]["enum"] == [
-        "agent",
-        "external",
-    ]
+    assert "wait" not in tool_names
     at_tool = next(
         tool for tool in calls[0][1]["tools"] if tool["function"]["name"] == "at"
     )
@@ -1863,7 +1857,10 @@ async def test_staged_group_at_is_preflighted_with_natural_final_response() -> N
     )
 
     async def complete(*args, **kwargs):
-        del args, kwargs
+        del args
+        assert "wait" not in {
+            tool["function"]["name"] for tool in kwargs["tools"]
+        }
         return LLMCompletionStep(
             content="My review is complete. @Target Agent please approve.",
             tool_calls=(),

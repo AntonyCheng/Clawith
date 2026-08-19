@@ -31,6 +31,7 @@ from app.services.agent_runtime.tool_result_store import (
     ToolResultStoreError,
 )
 from app.services.agent_runtime.verification import (
+    CompletionGateRuntimeVerifier,
     TaskCompletionGate,
     ToolLedgerRuntimeVerifier,
 )
@@ -1142,6 +1143,140 @@ async def test_completion_gate_treats_workspace_preservation_as_task_amendment()
             "runtime_reconciliation_action": "keep_workspace",
         }
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("candidate", "decision", "expected_outcome"),
+    (
+        (
+            "我还缺少会议日期。请问安排在哪一天？",
+            {
+                "verdict": "pass",
+                "missing_requirements": [],
+                "next_actions": [],
+                "evidence": ["one concrete public clarification"],
+            },
+            "pass",
+        ),
+        (
+            "日程已经创建，请告诉我会议日期。",
+            {
+                "verdict": "repair",
+                "missing_requirements": ["No event receipt proves creation"],
+                "next_actions": ["Do not claim the deferred write completed"],
+                "evidence": [],
+            },
+            "repair",
+        ),
+    ),
+)
+async def test_completion_gate_public_group_clarification_contract_is_bounded(
+    candidate,
+    decision,
+    expected_outcome,
+) -> None:
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    model_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    model = LLMModel(
+        id=model_id,
+        tenant_id=tenant_id,
+        provider="openai",
+        model="judge-model",
+        api_key_encrypted="unused",
+        label="Judge",
+        enabled=True,
+    )
+    captured: dict[str, object] = {}
+
+    async def completion(_model, messages, **_kwargs):
+        captured["system"] = messages[0].content
+        captured["payload"] = json.loads(messages[1].content)
+        return LLMCompletionStep(
+            content=json.dumps(decision),
+            tool_calls=(),
+            reasoning_content=None,
+            retry_instruction=None,
+            usage=TokenUsage(),
+        )
+
+    gate = TaskCompletionGate(
+        session_factory=_factory(_ScalarResult(model)),
+        completion=completion,
+    )
+    context = RuntimeContext(
+        tenant_id=str(tenant_id),
+        run_id=str(run_id),
+        command_id="command-group-gate",
+        executor=object(),  # type: ignore[arg-type]
+        goal="Create a calendar event after receiving the missing date",
+        model_id=str(model_id),
+        agent_id=str(agent_id),
+    )
+    state = _state(tenant_id, run_id)
+    state["snapshots"] = RunInputSnapshots(
+        session_context={"version": 0},
+        session_context_version=0,
+        recent_session_messages=(),
+        related_run_summaries=(),
+        initial_input={
+            "chat_session_type": "group",
+            "source_channel": "feishu",
+        },
+    )
+
+    result = await gate.verify(state, context, candidate)
+
+    assert result.outcome == expected_outcome
+    assert "asks one concrete" in str(captured["system"])
+    assert "does not permit bypassing confirmation" in str(captured["system"])
+    assert "side effects or treating an unsettled Tool outcome" in str(
+        captured["system"]
+    )
+    payload = captured["payload"]
+    assert isinstance(payload, dict)
+    assert payload["candidate_final_answer"] == candidate
+    assert payload["available_evidence"]["initial_input"]["chat_session_type"] == (
+        "group"
+    )
+
+
+@pytest.mark.asyncio
+async def test_completion_gate_never_bypasses_unsettled_public_group_tool() -> None:
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    started = _execution(tenant_id=tenant_id, run_id=run_id, status="started")
+    deterministic = ToolLedgerRuntimeVerifier(
+        session_factory=_factory(_ManyResult([started])),
+    )
+
+    class _NeverCalledCompletionGate:
+        async def verify(self, *_args, **_kwargs):
+            raise AssertionError("semantic completion gate must not run")
+
+    verifier = CompletionGateRuntimeVerifier(
+        deterministic=deterministic,
+        completion_gate=_NeverCalledCompletionGate(),  # type: ignore[arg-type]
+    )
+    state = _state(tenant_id, run_id)
+    state["snapshots"] = RunInputSnapshots(
+        session_context={"version": 0},
+        session_context_version=0,
+        recent_session_messages=(),
+        related_run_summaries=(),
+        initial_input={"chat_session_type": "group", "source_channel": "feishu"},
+    )
+
+    result = await verifier.verify(
+        state,
+        _context(tenant_id, run_id),
+        "请确认是否继续。",
+    )
+
+    assert result.outcome == "fail"
+    assert result.details["code"] == "unsettled_tool_execution"
 
 
 async def _true_reference(
