@@ -776,7 +776,7 @@ async def test_unknown_provider_failure_is_typed_for_langgraph_retry() -> None:
 
 
 @pytest.mark.asyncio
-async def test_invalid_summary_is_deterministic_and_never_committed() -> None:
+async def test_invalid_summary_uses_deterministic_degraded_checkpoint() -> None:
     state, context, tenant_id = _state(
         [_normal("old", "old " * 300), _normal("current")]
     )
@@ -790,17 +790,16 @@ async def test_invalid_summary_is_deterministic_and_never_committed() -> None:
             usage=TokenUsage(total_tokens=1),
         )
 
-    with pytest.raises(RunCompactorError) as raised:
-        await _service(
-            model=_model(tenant_id),
-            completion=complete,
-            effective_budget=1_000,
-            current_tokens=900,
-        ).compact_if_needed(state, context)
+    result = await _service(
+        model=_model(tenant_id),
+        completion=complete,
+        effective_budget=1_000,
+        current_tokens=900,
+    ).compact_if_needed(state, context)
 
-    assert raised.value.code == "empty_thread_compact_output"
-    assert "thread_summary" not in state
-    assert "summary_covered_through_message_id" not in state
+    assert result.compacted is True
+    assert result.thread_summary is not None
+    assert result.thread_summary["degraded"] is True
 
 
 @pytest.mark.asyncio
@@ -845,7 +844,7 @@ async def test_compact_request_output_is_capped_by_summary_budget() -> None:
 
     assert result.compacted is True
     assert observed_limits
-    assert set(observed_limits) == {4096}
+    assert set(observed_limits) == {10_922}
 
 
 @pytest.mark.asyncio
@@ -874,19 +873,15 @@ async def test_compact_request_output_respects_lower_model_limit() -> None:
 
 
 @pytest.mark.asyncio
-async def test_empty_and_length_outputs_are_repaired_without_prompt_growth() -> None:
+async def test_length_output_splits_batch_instead_of_repeating_same_prompt() -> None:
     state, context, tenant_id = _state(
-        [_normal("old", "old " * 300), _normal("current")]
+        [
+            _normal("old-1", "old one " * 200),
+            _normal("old-2", "old two " * 200),
+            _normal("current"),
+        ]
     )
     responses = [
-        LLMCompletionStep(
-            content="   ",
-            tool_calls=(),
-            reasoning_content=None,
-            retry_instruction=None,
-            usage=TokenUsage(total_tokens=1),
-            finish_reason="stop",
-        ),
         LLMCompletionStep(
             content="partial summary",
             tool_calls=(),
@@ -895,6 +890,7 @@ async def test_empty_and_length_outputs_are_repaired_without_prompt_growth() -> 
             usage=TokenUsage(total_tokens=1),
             finish_reason="length",
         ),
+        _step(),
         _step(),
     ]
     prompts: list[list] = []
@@ -912,23 +908,21 @@ async def test_empty_and_length_outputs_are_repaired_without_prompt_growth() -> 
 
     assert result.compacted is True
     assert len(prompts) == 3
-    assert [len(prompt) for prompt in prompts] == [2, 3, 3]
-    assert prompts[0] == prompts[1][:2] == prompts[2][:2]
-    assert prompts[1][-1].content != prompts[2][-1].content
+    assert prompts[0] != prompts[1]
+    assert prompts[0] != prompts[2]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("content", "finish_reason", "expected_code"),
+    ("content", "finish_reason"),
     [
-        ("   ", "stop", "empty_thread_compact_output"),
-        ("partial summary", "length", "thread_compact_output_truncated"),
+        ("   ", "stop"),
+        ("partial summary", "length"),
     ],
 )
-async def test_repairable_compact_output_exhaustion_is_deterministic(
+async def test_repairable_single_block_output_degrades_without_terminating_run(
     content: str,
     finish_reason: str,
-    expected_code: str,
 ) -> None:
     state, context, tenant_id = _state(
         [_normal("old", "old " * 300), _normal("current")]
@@ -947,19 +941,18 @@ async def test_repairable_compact_output_exhaustion_is_deterministic(
             finish_reason=finish_reason,
         )
 
-    with pytest.raises(RunCompactorError) as raised:
-        await _service(
-            model=_model(tenant_id),
-            completion=complete,
-            effective_budget=1_000,
-            current_tokens=900,
-        ).compact_if_needed(state, context)
+    result = await _service(
+        model=_model(tenant_id),
+        completion=complete,
+        effective_budget=1_000,
+        current_tokens=900,
+    ).compact_if_needed(state, context)
 
-    assert calls == 3
-    assert raised.value.code == expected_code
-    assert raised.value.is_deterministic_compact_error is True
-    assert "thread_summary" not in state
-    assert "summary_covered_through_message_id" not in state
+    assert calls == 1
+    assert result.compacted is True
+    assert result.thread_summary is not None
+    assert result.thread_summary["degraded"] is True
+    assert result.thread_summary["reason"] == "model_summary_incomplete"
 
 
 @pytest.mark.asyncio

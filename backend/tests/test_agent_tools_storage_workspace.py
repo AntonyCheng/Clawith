@@ -150,6 +150,27 @@ async def test_read_file_outcome_rejects_binary_spreadsheet(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_complete_skill_read_records_package_digest(monkeypatch):
+    agent_id = uuid.uuid4()
+    storage = MemoryStorageBackend({
+        f"{agent_id}/skills/budget/SKILL.md": b"---\nname: budget\n---\n",
+        f"{agent_id}/skills/budget/scripts/auth.py": b"authenticate()\n",
+    })
+    monkeypatch.setattr(agent_tools, "get_storage_backend", lambda: storage)
+
+    outcome = await agent_tools._read_file_outcome(
+        agent_id,
+        {"path": "skills/budget/SKILL.md"},
+        tenant_id=None,
+    )
+
+    activation = outcome.metadata["skill_activation"]
+    assert activation["name"] == "budget"
+    assert activation["file_count"] == 2
+    assert len(activation["package_digest"]) == 64
+
+
+@pytest.mark.asyncio
 async def test_temp_workspace_materializes_only_requested_paths(monkeypatch):
     agent_id = uuid.uuid4()
     storage = MemoryStorageBackend({
@@ -164,6 +185,41 @@ async def test_temp_workspace_materializes_only_requested_paths(monkeypatch):
         assert not (temp_ws.root / "workspace" / "other.md").exists()
     finally:
         temp_ws.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_default_materialization_reserves_capacity_for_complete_skills(monkeypatch):
+    agent_id = uuid.uuid4()
+    storage = MemoryStorageBackend({
+        f"{agent_id}/workspace/history.bin": b"w" * 8,
+        f"{agent_id}/skills/budget/SKILL.md": b"skill",
+        f"{agent_id}/skills/budget/scripts/auth.py": b"auth",
+    })
+    monkeypatch.setattr(agent_tools, "get_storage_backend", lambda: storage)
+    monkeypatch.setattr(agent_tools, "TOOL_MATERIALIZE_MAX_TOTAL_BYTES", 10)
+
+    temp_ws = await agent_tools._prepare_temp_workspace(agent_id)
+    try:
+        assert (temp_ws.root / "skills/budget/SKILL.md").read_bytes() == b"skill"
+        assert (temp_ws.root / "skills/budget/scripts/auth.py").read_bytes() == b"auth"
+    finally:
+        temp_ws.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_temp_workspace_rejects_partial_skill_snapshot(monkeypatch):
+    agent_id = uuid.uuid4()
+    storage = MemoryStorageBackend({
+        f"{agent_id}/skills/budget/SKILL.md": b"instructions",
+        f"{agent_id}/skills/budget/scripts/auth.py": b"auth",
+    })
+    monkeypatch.setattr(agent_tools, "get_storage_backend", lambda: storage)
+
+    with pytest.raises(agent_tools.SkillSnapshotIncompleteError):
+        await agent_tools._prepare_temp_workspace(
+            agent_id,
+            max_file_bytes=5,
+        )
 
 
 def test_temp_workspace_materialization_limits_are_50_and_500_mib():

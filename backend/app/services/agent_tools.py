@@ -162,7 +162,7 @@ _FEISHU_APPROVAL_IMAGE_MEDIA_TYPES = {
     ".png": "image/png",
     ".webp": "image/webp",
 }
-TEMP_WORKSPACE_DEFAULT_PATHS = ["workspace", "memory", "skills", "focus.md", "soul.md", "HEARTBEAT.md"]
+TEMP_WORKSPACE_DEFAULT_PATHS = ["skills", "memory", "workspace", "focus.md", "soul.md", "HEARTBEAT.md"]
 MAX_EXEC_STDOUT_CAPTURE_BYTES = 1_000_000
 MAX_EXEC_STDERR_CAPTURE_BYTES = 500_000
 EMAIL_IMAP_DEADLINE_SECONDS = 30.0
@@ -1682,6 +1682,10 @@ class TempWorkspaceManifestEntry:
     size: int
 
 
+class SkillSnapshotIncompleteError(RuntimeError):
+    """The Run sandbox cannot safely execute a partially materialized Skill tree."""
+
+
 @dataclass
 class TempWorkspace:
     temp_dir: tempfile.TemporaryDirectory
@@ -1735,7 +1739,7 @@ async def _prepare_temp_workspace(
         (temp_ws / folder).mkdir(parents=True, exist_ok=True)
 
     storage = get_storage_backend()
-    budget = {"total": 0}
+    budget = {"total": 0, "skipped": []}
     selected = TEMP_WORKSPACE_DEFAULT_PATHS if paths is None else [path for path in paths if path]
     manifest: dict[str, TempWorkspaceManifestEntry] = {}
     for rel_path in selected:
@@ -1750,6 +1754,17 @@ async def _prepare_temp_workspace(
             budget,
             manifest,
             max_file_bytes=max_file_bytes,
+        )
+    skipped_skills = [
+        path
+        for path in budget["skipped"]
+        if path == "skills" or path.startswith("skills/")
+    ]
+    if skipped_skills:
+        tmp.cleanup()
+        preview = ", ".join(skipped_skills[:5])
+        raise SkillSnapshotIncompleteError(
+            f"Skill snapshot is incomplete because materialization limits skipped: {preview}"
         )
     return TempWorkspace(
         temp_dir=tmp,
@@ -1783,6 +1798,7 @@ async def _materialize_storage_path_with_budget(
                 max_file_bytes,
                 "per_file_limit",
             )
+            budget.setdefault("skipped", []).append(rel_path)
             return
         if budget["total"] + version.size > TOOL_MATERIALIZE_MAX_TOTAL_BYTES:
             logger.warning(
@@ -1793,6 +1809,7 @@ async def _materialize_storage_path_with_budget(
                 TOOL_MATERIALIZE_MAX_TOTAL_BYTES,
                 "total_limit",
             )
+            budget.setdefault("skipped", []).append(rel_path)
             return
         target = (local_root / rel_path).resolve()
         if not target.is_relative_to(local_root.resolve()):
@@ -2470,7 +2487,6 @@ async def _execute_code_with_workspace_outcome(
         materialized_paths=policy.materialized_paths,
         publish_paths=policy.publish_paths,
     )
-
     async def prepare_workspace() -> TempWorkspace:
         workspace = await _prepare_temp_workspace(
             agent_id,
@@ -2676,6 +2692,8 @@ async def _execute_code_with_workspace_outcome(
                 artifact_refs=tuple(dict.fromkeys((*outcome.artifact_refs, *changed_refs))),
                 metadata=metadata,
             )
+    except SkillSnapshotIncompleteError as exc:
+        return _typed_failure(str(exc), "skill_snapshot_incomplete")
     except Exception as exc:
         if execution_started:
             return _typed_unknown(
@@ -3110,10 +3128,60 @@ async def _read_file_outcome(
             f"\n\n... [{len(lines) - end} more lines not shown, "
             f"lines {end + 1}-{len(lines)}]"
         )
+    metadata: dict[str, object] = {}
+    skill_match = re.fullmatch(
+        r"skills/([^/]+)/(?:SKILL|skill)\.md",
+        normalized,
+    )
+    if skill_match is not None and offset == 0 and end == len(lines):
+        skill_root_key = storage_key.rsplit("/", 1)[0]
+        package_digest, file_count = await _storage_tree_digest(
+            storage,
+            skill_root_key,
+        )
+        metadata["skill_activation"] = {
+            "name": skill_match.group(1),
+            "main_path": normalized,
+            "package_digest": package_digest,
+            "file_count": file_count,
+        }
     return _typed_success(
         f"📄 {path} (lines {offset + 1 if lines else 0}-{end} of {len(lines)})\n"
-        f"{selected}"
+        f"{selected}",
+        metadata=metadata,
     )
+
+
+async def _storage_tree_digest(storage, root_key: str) -> tuple[str, int]:
+    """Hash one Storage directory by relative path and exact file bytes."""
+    records: list[tuple[str, bytes]] = []
+
+    async def visit(key: str) -> None:
+        if await storage.is_file(key):
+            records.append((key.removeprefix(root_key).lstrip("/"), await storage.read_bytes(key)))
+            return
+        if await storage.is_dir(key):
+            for entry in await storage.list_dir(key):
+                await visit(entry.key)
+
+    await visit(root_key)
+    hasher = hashlib.sha256()
+    for relative_path, data in sorted(records):
+        if _skill_runtime_data_path(relative_path):
+            continue
+        hasher.update(relative_path.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(hashlib.sha256(data).digest())
+        hasher.update(b"\0")
+    immutable_count = sum(
+        1 for relative_path, _data in records if not _skill_runtime_data_path(relative_path)
+    )
+    return hasher.hexdigest(), immutable_count
+
+
+def _skill_runtime_data_path(relative_path: str) -> bool:
+    first = relative_path.replace("\\", "/").lstrip("/").split("/", 1)[0]
+    return first in {"data", "reports", "workspace", ".cache", ".progress"}
 
 
 async def _write_file_outcome(

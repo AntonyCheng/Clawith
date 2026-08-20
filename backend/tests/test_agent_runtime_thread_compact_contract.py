@@ -153,7 +153,7 @@ def test_compact_summary_uses_versioned_markdown_without_a_tool_protocol() -> No
     ("effective_budget", "expected_summary", "expected_recent"),
     [
         (10_000, 2_500, 2_500),
-        (32_000, 4_096, 8_000),
+        (32_000, 8_000, 8_000),
         (100, 25, 25),
     ],
 )

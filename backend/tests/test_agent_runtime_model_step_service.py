@@ -1,6 +1,7 @@
 """Runtime model-step adapter tests."""
 
 import base64
+import hashlib
 import json
 import uuid
 from contextlib import asynccontextmanager
@@ -12,18 +13,22 @@ import pytest
 from langchain_core.messages import convert_to_messages
 
 from app.models.agent import Agent
+from app.models.agent_tool_execution import AgentToolExecution
 from app.models.llm import LLMModel
 from app.services.agent_runtime.context_builder import RuntimeContextBuild
+from app.services.agent_runtime import model_step_service
 from app.services.agent_runtime.group_handoff import GroupAgentHandoffError, GroupAgentHandoffIntent
 from app.services.agent_runtime.model_step_service import (
     RuntimeModelCallError,
     RuntimeModelStepService,
     _group_mention_mismatches,
+    _complete_skill_read,
     _message_token_counter,
     _provider_tools,
     _prompt_messages,
     _runtime_workset_entry,
     _safe_provider_failure_message,
+    _skill_body_from_read_result,
     _tool_repair_reset_reason,
     _visible_mention_names,
 )
@@ -45,6 +50,37 @@ _TINY_PNG_BASE64 = (
     "x8AAusB9Wl2ZQAAAABJRU5ErkJggg=="
 )
 _TINY_PNG_DATA_URL = f"data:image/png;base64,{_TINY_PNG_BASE64}"
+
+
+def test_complete_main_skill_read_activates_only_a_full_zero_offset_result() -> None:
+    execution = type(
+        "Execution",
+        (),
+        {
+            "tool_name": "read_file",
+            "status": "succeeded",
+            "sanitized_arguments": {"path": "skills/budget/SKILL.md"},
+            "result_summary": "📄 skills/budget/SKILL.md (lines 1-703 of 703)\n     1\t---",
+        },
+    )()
+
+    assert _complete_skill_read(execution) == ("budget", "skills/budget/SKILL.md")
+    execution.sanitized_arguments = {
+        "path": "skills/budget/SKILL.md",
+        "offset": 72,
+    }
+    assert _complete_skill_read(execution) is None
+
+
+def test_skill_body_removes_read_file_rendering_without_dropping_middle_lines() -> None:
+    content = (
+        "📄 skills/budget/SKILL.md (lines 1-3 of 3)\n"
+        "     1\tfirst\n"
+        "     2\tmiddle\n"
+        "     3\tlast"
+    )
+
+    assert _skill_body_from_read_result(content) == "first\nmiddle\nlast"
 
 
 def test_runtime_binding_is_checkpointed_but_not_sent_to_provider() -> None:
@@ -505,6 +541,77 @@ def _service(
         model_retry_base_delay_seconds=0,
         model_retry_jitter_ratio=0,
     )
+
+
+@pytest.mark.asyncio
+async def test_active_skill_prompt_reloads_modified_storage_content(monkeypatch) -> None:
+    tenant_id = uuid.uuid4()
+    model = _model(tenant_id)
+    agent = _agent(tenant_id)
+    state = _state(tenant_id, model, agent)
+    context = _context(state)
+
+    class Storage:
+        content = "first\nmiddle\nlast"
+        version = "1"
+
+        async def get_version(self, _key):
+            return type(
+                "Version",
+                (),
+                {"exists": True, "is_dir": False, "token": self.version},
+            )()
+
+        async def read_text(self, _key, **_kwargs):
+            return self.content
+
+    storage = Storage()
+    monkeypatch.setattr(model_step_service, "get_storage_backend", lambda: storage)
+    execution = AgentToolExecution(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        run_id=uuid.UUID(context.run_id),
+        tool_call_id="call-skill",
+        tool_name="read_file",
+        assistant_message_id="assistant-skill",
+        arguments_hash="hash",
+        sanitized_arguments={"path": "skills/budget/SKILL.md"},
+        effect="read",
+        retry_policy="safe",
+        status="succeeded",
+        result_summary=(
+            "📄 skills/budget/SKILL.md (lines 1-3 of 3)\n"
+            "     1\tfirst\n"
+            "     2\tmiddle\n"
+            "     3\tlast"
+        ),
+        result_metadata={"content_hash": "digest"},
+        started_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    async def completion(*_args, **_kwargs):
+        raise AssertionError("completion is not used while rebuilding Skill context")
+
+    service = _service(
+        model,
+        agent,
+        _ContextBuilder(_build()),
+        completion,
+    )
+    prompt = await service._active_skill_prompt(context, [execution])
+
+    assert "Do not read the main SKILL.md again" in prompt
+    assert "first\nmiddle\nlast" in prompt
+    expected_digest = hashlib.sha256(b"first\nmiddle\nlast").hexdigest()
+    assert f'digest="{expected_digest}"' in prompt
+
+    storage.content = "first\nupdated\nlast"
+    storage.version = "2"
+    refreshed = await service._active_skill_prompt(context, [execution])
+
+    assert "first\nupdated\nlast" in refreshed
+    assert "first\nmiddle\nlast" not in refreshed
 
 
 def _failover_service(

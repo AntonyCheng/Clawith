@@ -157,7 +157,7 @@ _BUILTIN_TOOL_SOURCE = [
     {
         "name": "write_file",
         "display_name": "Write File",
-        "description": "Write or incrementally append UTF-8 text to a file in the workspace. Each call accepts at most 6000 content characters. For a longer generated file such as HTML, CSS, JavaScript, or markdown, call write_file once with mode=overwrite for the first chunk, then use one mode=append call per later model turn for each remaining chunk; never emit the whole file or multiple large chunks in one response. Before creating a new document under workspace/, first inspect the relevant directories with list_files, prefer an existing topical subfolder over the workspace root, and create a new subfolder when the content belongs to a new category. Avoid placing standalone document files directly in workspace/ root unless the user explicitly wants that. Can update memory/memory.md, create documents in workspace/, create skills in skills/.",
+        "description": "Write or incrementally append UTF-8 text to a file in the workspace. Each call accepts at most 6000 content characters. For a longer generated file such as HTML, CSS, JavaScript, or markdown, call write_file once with mode=overwrite for the first chunk, then use one mode=append call per later model turn for each remaining chunk; never emit the whole file or multiple large chunks in one response. Before creating a new document under workspace/, first inspect the relevant directories with list_files, prefer an existing topical subfolder over the workspace root, and create a new subfolder when the content belongs to a new category. Avoid placing standalone document files directly in workspace/ root unless the user explicitly wants that. Can update memory/memory.md, create documents in workspace/, and update skills in skills/ when the active workflow requires repair.",
         "category": "file",
         "icon": "✏️",
         "is_default": True,
@@ -229,7 +229,7 @@ _BUILTIN_TOOL_SOURCE = [
         "parameters_schema": {
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "File path to edit, e.g.: memory/memory.md, skills/my-skill/SKILL.md"},
+                "path": {"type": "string", "description": "File path to edit, e.g.: memory/memory.md, workspace/reports/report.md, or skills/my-skill/SKILL.md"},
                 "old_string": {"type": "string", "description": "Exact text to find and replace. Must match exactly including whitespace and newlines."},
                 "new_string": {"type": "string", "description": "Replacement text"},
                 "replace_all": {"type": "boolean", "description": "Replace all occurrences if true (default: false)"},

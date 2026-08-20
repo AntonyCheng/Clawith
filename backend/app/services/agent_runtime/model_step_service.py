@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import html
 import json
 import random
 import re
@@ -105,6 +106,7 @@ from app.services.llm.multimodal_content import (
 )
 from app.services.llm.single_step import LLMCompletionStep, complete_llm_once
 from app.services.llm.utils import get_max_tokens
+from app.services.storage import get_storage_backend, normalize_storage_key
 from app.services.vision_inject import compress_bytes_to_base64
 
 _ACTIVE_AGENT_STATUSES = frozenset({"creating", "running", "idle"})
@@ -114,6 +116,7 @@ _DEFAULT_MODEL_RETRY_ATTEMPTS = 3
 _DEFAULT_MODEL_RETRY_BASE_DELAY_SECONDS = 1.0
 _DEFAULT_MODEL_RETRY_MAX_DELAY_SECONDS = 8.0
 _DEFAULT_MODEL_RETRY_JITTER_RATIO = 0.2
+_SKILL_MAIN_PATH = re.compile(r"^skills/([^/]+)/(?:SKILL|skill)\.md$")
 _AGENTBAY_SCREENSHOT_TOOL_NAMES = frozenset(
     {
         "agentbay_browser_screenshot",
@@ -625,6 +628,38 @@ def _ledger(executions: Sequence[AgentToolExecution]) -> dict[str, JsonObject]:
             "request_ref": execution.request_ref,
         }
     return result
+
+
+def _complete_skill_read(execution: AgentToolExecution) -> tuple[str, str] | None:
+    """Return the activated Skill name/path for one complete main-file read."""
+    if execution.tool_name != "read_file" or execution.status != "succeeded":
+        return None
+    arguments = execution.sanitized_arguments
+    if not isinstance(arguments, Mapping):
+        return None
+    path = arguments.get("path")
+    offset = arguments.get("offset", 0)
+    if not isinstance(path, str) or offset not in {None, 0, "0"}:
+        return None
+    matched = _SKILL_MAIN_PATH.fullmatch(path.strip().replace("\\", "/"))
+    if matched is None:
+        return None
+    summary = execution.result_summary or ""
+    line_range = re.search(r"\(lines 1-(\d+) of (\d+)\)", summary)
+    if line_range is None or line_range.group(1) != line_range.group(2):
+        return None
+    return matched.group(1), path
+
+
+def _skill_body_from_read_result(content: str) -> str:
+    """Remove read_file's display header and line numbers from archived content."""
+    body: list[str] = []
+    for index, line in enumerate(content.splitlines()):
+        if index == 0 and line.startswith("📄 "):
+            continue
+        matched = re.match(r"^\s*\d+\t(.*)$", line)
+        body.append(matched.group(1) if matched else line)
+    return "\n".join(body).strip()
 
 
 def _prior_incomplete_tool_calls(
@@ -1319,6 +1354,7 @@ class RuntimeModelStepService:
         self._tool_result_store = tool_result_store or ToolResultStore(
             session_factory=session_factory
         )
+        self._active_skill_content_cache: dict[str, str] = {}
         self._model_retry_attempts = max(0, model_retry_attempts)
         self._model_retry_base_delay_seconds = max(
             0.0,
@@ -1338,7 +1374,7 @@ class RuntimeModelStepService:
         self,
         context: RuntimeContext,
         state: RuntimeGraphState,
-    ) -> tuple[LLMModel, Agent, dict[str, JsonObject]]:
+    ) -> tuple[LLMModel, Agent, dict[str, JsonObject], list[AgentToolExecution]]:
         try:
             tenant_id = uuid.UUID(context.tenant_id)
             model_id = uuid.UUID(context.model_id)
@@ -1370,6 +1406,9 @@ class RuntimeModelStepService:
                 select(AgentToolExecution).where(
                     AgentToolExecution.tenant_id == tenant_id,
                     AgentToolExecution.run_id == run_id,
+                ).order_by(
+                    AgentToolExecution.started_at,
+                    AgentToolExecution.id,
                 )
             )
             executions = list(ledger_result.scalars().all())
@@ -1432,7 +1471,81 @@ class RuntimeModelStepService:
                     "cancelled_before_execution": True,
                     "result_summary": "Cancelled before tool execution started.",
                 }
-        return model, agent, ledger
+        return model, agent, ledger, executions
+
+    async def _active_skill_prompt(
+        self,
+        context: RuntimeContext,
+        executions: Sequence[AgentToolExecution],
+    ) -> str:
+        """Rebuild exact Run-scoped Skill instructions from settled read receipts."""
+        selected: dict[str, tuple[str, AgentToolExecution]] = {}
+        for execution in executions:
+            activation = _complete_skill_read(execution)
+            if activation is None:
+                continue
+            name, path = activation
+            selected.setdefault(name, (path, execution))
+        if not selected:
+            return ""
+
+        tenant_id = uuid.UUID(context.tenant_id)
+        run_id = uuid.UUID(context.run_id)
+        sections = [
+            "# Active Skill Instructions",
+            "",
+            "These exact instructions are pinned for the current Run. Do not read the main SKILL.md again.",
+        ]
+        storage = get_storage_backend()
+        for name, (path, execution) in selected.items():
+            storage_key = normalize_storage_key(f"{context.agent_id}/{path}")
+            current_version = await storage.get_version(storage_key)
+            cache_key = (
+                f"storage:{storage_key}:{current_version.token}"
+                if current_version.exists and not current_version.is_dir
+                else execution.result_ref or f"inline:{execution.id}"
+            )
+            body = self._active_skill_content_cache.get(cache_key, "")
+            if not body:
+                if current_version.exists and not current_version.is_dir:
+                    content = await storage.read_text(
+                        storage_key,
+                        encoding="utf-8",
+                        errors="replace",
+                    )
+                else:
+                    content = execution.result_summary or ""
+                    if isinstance(execution.result_ref, str) and execution.result_ref.startswith(
+                        "tool-result://"
+                    ):
+                        envelope = await self._tool_result_store.resolve(
+                            execution.result_ref,
+                            tenant_id=tenant_id,
+                            run_id=run_id,
+                        )
+                        content = envelope.content
+                body = _skill_body_from_read_result(content)
+                if body:
+                    self._active_skill_content_cache[cache_key] = body
+            if not body:
+                raise ContextBuildError(
+                    "active_skill_content_unavailable",
+                    f"Active Skill instructions are unavailable: {path}",
+                )
+            digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+            sections.extend(
+                [
+                    "",
+                    (
+                        f'<skill name="{html.escape(name, quote=True)}" '
+                        f'path="{html.escape(path, quote=True)}" '
+                        f'digest="{html.escape(str(digest or "unknown"), quote=True)}">'
+                    ),
+                    body,
+                    "</skill>",
+                ]
+            )
+        return "\n".join(sections)
 
     async def _fallback_model(
         self,
@@ -1451,7 +1564,7 @@ class RuntimeModelStepService:
         context: RuntimeContext,
     ) -> RunCompactInputs:
         """Profile the exact business request shape used by the Compact node."""
-        model, agent, ledger = await self._load(context, state)
+        model, agent, ledger, executions = await self._load(context, state)
         is_native_group = _is_group_agent_run(state)
         allow_user_wait = not _is_public_group_chat_run(state)
         application_tools = (
@@ -1485,6 +1598,9 @@ class RuntimeModelStepService:
             state,
             allowed_names,
         )
+        active_skill_prompt = await self._active_skill_prompt(context, executions)
+        if active_skill_prompt:
+            static_prompt = f"{static_prompt}\n\n{active_skill_prompt}"
         build = await self._context_builder.build(
             state,
             context,
@@ -1802,7 +1918,7 @@ class RuntimeModelStepService:
         context: RuntimeContext,
     ) -> ModelStepResult:
         try:
-            model, agent, ledger = await self._load(context, state)
+            model, agent, ledger, executions = await self._load(context, state)
             is_native_group = _is_group_agent_run(state)
             allow_user_wait = not _is_public_group_chat_run(state)
             application_tools = (
@@ -1837,6 +1953,9 @@ class RuntimeModelStepService:
                 state,
                 allowed_names,
             )
+            active_skill_prompt = await self._active_skill_prompt(context, executions)
+            if active_skill_prompt:
+                static_prompt = f"{static_prompt}\n\n{active_skill_prompt}"
             prepared = await self._prepare_messages(
                 state=state,
                 context=context,
@@ -1928,6 +2047,10 @@ class RuntimeModelStepService:
                     state,
                     fallback_allowed_names,
                 )
+                if active_skill_prompt:
+                    fallback_static_prompt = (
+                        f"{fallback_static_prompt}\n\n{active_skill_prompt}"
+                    )
                 fallback_prepared = await self._prepare_messages(
                     state=state,
                     context=context,

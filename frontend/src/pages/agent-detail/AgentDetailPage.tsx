@@ -4432,8 +4432,7 @@ export default function AgentDetailPage() {
             attachedFiles.forEach(file => {
                 filesDisplay += `[Attachment: ${file.name}] `;
                 const wsPath = file.path || '';
-                const codePath = wsPath.replace(/^workspace\//, '');
-                const fileLoc = wsPath ? `\nFile location: ${wsPath} (for read_file/read_document/send_email tools)\nIn execute_code, use relative path: "${codePath}" (working directory is workspace/)\n` : '';
+                const fileLoc = wsPath ? `\nFile location: ${wsPath} (for read_file/read_document/send_email tools)\nIn execute_code, use the same Agent-root-relative path: "${wsPath}". The sandbox working directory is "/".\n` : '';
 
                 if (file.imageUrl && supportsVision) {
                     filesPrompt += `[image_data:${file.imageUrl}]\n`;
