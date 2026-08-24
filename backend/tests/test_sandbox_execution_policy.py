@@ -7,6 +7,7 @@ import pytest
 
 from app.services import agent_tools
 from app.services.agent_runtime.tool_execution import ToolExecutionOutcome
+from app.services.workspace_reconciliation import CandidateChange
 from app.services.sandbox.config import SandboxConfig
 from app.services.sandbox.base import ExecutionResult
 from app.services.sandbox import execution_lease
@@ -572,3 +573,170 @@ async def test_isolated_execution_uses_replacement_publication(
     assert conflict_modes == ["overwrite", "overwrite"]
     assert prepare_count == 1
     assert cleanup_count == 1
+
+
+@pytest.mark.asyncio
+async def test_workspace_publication_retries_candidate_and_resolves_by_hash(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    tenant_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    persist_attempts = 0
+
+    class Lease:
+        ownership_lost = False
+
+        async def start_heartbeat(self):
+            return None
+
+        async def ensure_publication_window(self, _seconds):
+            return True
+
+        async def release(self):
+            return None
+
+    class ReconciliationService:
+        async def persist_candidate(self, _scope, _changes):
+            nonlocal persist_attempts
+            persist_attempts += 1
+            if persist_attempts < 3:
+                raise OSError("temporary storage failure")
+            return SimpleNamespace(candidate_ref="candidate/manifest.json")
+
+        async def verify_current(self, _scope, _candidate_ref):
+            return SimpleNamespace(
+                status="applied",
+                counts={"applied": 1, "not_saved": 0, "conflict": 0, "unverified": 0},
+            )
+
+        async def discard_candidate(self, _scope, _candidate_ref):
+            return None
+
+    async def resolve_scope(**_kwargs):
+        return SandboxExecutionScope(tenant_id, agent_id, session_id)
+
+    async def acquire(*_args, **_kwargs):
+        return Lease()
+
+    async def prepare(*_args, **_kwargs):
+        return SimpleNamespace(root=tmp_path, cleanup=lambda: None)
+
+    async def execute(*_args, **_kwargs):
+        return ToolExecutionOutcome("succeeded", "code completed", None)
+
+    async def flush(*_args, **_kwargs):
+        raise TimeoutError("publication timed out")
+
+    async def candidate_changes(_workspace):
+        return [CandidateChange.create("workspace/result.txt", b"result")]
+
+    async def tool_config(*_args):
+        return {}
+
+    monkeypatch.setattr(agent_tools, "_get_tool_config", tool_config)
+    monkeypatch.setattr(agent_tools, "_resolve_sandbox_execution_scope", resolve_scope)
+    monkeypatch.setattr(SandboxExecutionLeaseStore, "acquire", acquire)
+    monkeypatch.setattr(agent_tools, "_prepare_temp_workspace", prepare)
+    monkeypatch.setattr(agent_tools, "_execute_code_outcome", execute)
+    monkeypatch.setattr(agent_tools, "flush_temp_workspace", flush)
+    monkeypatch.setattr(agent_tools, "_workspace_candidate_changes", candidate_changes)
+    monkeypatch.setattr(agent_tools, "WorkspaceReconciliationService", lambda _storage: ReconciliationService())
+    monkeypatch.setattr("app.config.get_sandbox_config", lambda: SandboxConfig())
+
+    outcome = await agent_tools._execute_code_with_workspace_outcome(
+        agent_id=agent_id,
+        tenant_id=str(tenant_id),
+        session_id=str(session_id),
+        arguments={"language": "python", "code": "print(1)"},
+        tool_name="execute_code",
+        runtime_run_id=str(uuid.uuid4()),
+        runtime_execution_id=str(uuid.uuid4()),
+    )
+
+    assert persist_attempts == 3
+    assert outcome.status == "succeeded"
+    assert outcome.error_code is None
+    assert outcome.metadata["workspace_resolution_status"] == "applied"
+
+
+@pytest.mark.asyncio
+async def test_workspace_candidate_failure_is_terminal_and_never_publishes(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    tenant_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    persist_attempts = 0
+    flush_attempts = 0
+
+    class Lease:
+        ownership_lost = False
+
+        async def start_heartbeat(self):
+            return None
+
+        async def ensure_publication_window(self, _seconds):
+            return True
+
+        async def release(self):
+            return None
+
+    class ReconciliationService:
+        async def persist_candidate(self, _scope, _changes):
+            nonlocal persist_attempts
+            persist_attempts += 1
+            raise OSError("storage unavailable")
+
+    async def resolve_scope(**_kwargs):
+        return SandboxExecutionScope(tenant_id, agent_id, session_id)
+
+    async def acquire(*_args, **_kwargs):
+        return Lease()
+
+    async def prepare(*_args, **_kwargs):
+        return SimpleNamespace(root=tmp_path, cleanup=lambda: None)
+
+    async def execute(*_args, **_kwargs):
+        return ToolExecutionOutcome("succeeded", "code completed", None)
+
+    async def flush(*_args, **_kwargs):
+        nonlocal flush_attempts
+        flush_attempts += 1
+        return {"updated": [], "deleted": [], "conflicted": [], "skipped": []}
+
+    async def candidate_changes(_workspace):
+        return [CandidateChange.create("workspace/result.txt", b"result")]
+
+    async def tool_config(*_args):
+        return {}
+
+    monkeypatch.setattr(agent_tools, "_get_tool_config", tool_config)
+    monkeypatch.setattr(agent_tools, "_resolve_sandbox_execution_scope", resolve_scope)
+    monkeypatch.setattr(SandboxExecutionLeaseStore, "acquire", acquire)
+    monkeypatch.setattr(agent_tools, "_prepare_temp_workspace", prepare)
+    monkeypatch.setattr(agent_tools, "_execute_code_outcome", execute)
+    monkeypatch.setattr(agent_tools, "flush_temp_workspace", flush)
+    monkeypatch.setattr(agent_tools, "_workspace_candidate_changes", candidate_changes)
+    monkeypatch.setattr(agent_tools, "WorkspaceReconciliationService", lambda _storage: ReconciliationService())
+    monkeypatch.setattr("app.config.get_sandbox_config", lambda: SandboxConfig())
+
+    outcome = await agent_tools._execute_code_with_workspace_outcome(
+        agent_id=agent_id,
+        tenant_id=str(tenant_id),
+        session_id=str(session_id),
+        arguments={"language": "python", "code": "print(1)"},
+        tool_name="execute_code",
+        runtime_run_id=str(uuid.uuid4()),
+        runtime_execution_id=str(uuid.uuid4()),
+    )
+
+    assert persist_attempts == 3
+    assert flush_attempts == 0
+    assert outcome.status == "failed"
+    assert outcome.error_code == "workspace_candidate_persist_failed"
+    assert outcome.retryable is False
+    assert outcome.model_action == "continue"
+    assert outcome.safe_remediation is not None

@@ -646,9 +646,10 @@ async def test_sync_failure_after_generation_is_unknown_without_regeneration(
     )
 
     assert isinstance(outcome, ToolExecutionOutcome)
-    assert outcome.status == "unknown"
-    assert outcome.error_code == "workspace_sync_outcome_unknown"
+    assert outcome.status == "failed"
+    assert outcome.error_code == "workspace_publication_unverifiable"
     assert outcome.retryable is False
+    assert outcome.model_action == "continue"
     assert calls["post"] == 1
     assert calls["flush"] == 1
 

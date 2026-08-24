@@ -197,7 +197,7 @@ async def test_runtime_state_returns_exact_waiting_lane_holder() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_state_exposes_unknown_write_and_blocks_plain_resume() -> None:
+async def test_runtime_state_never_blocks_on_legacy_workspace_unknown() -> None:
     agent, user, session, run = _records()
     reader = SimpleNamespace(get_run_state=AsyncMock(return_value=_view(run)))
     execution = AgentToolExecution(
@@ -244,12 +244,8 @@ async def test_runtime_state_exposes_unknown_write_and_blocks_plain_resume() -> 
         )
 
     assert response.active_run is not None
-    assert response.active_run.can_resume is False
-    assert len(response.active_run.pending_tool_reconciliations) == 1
-    pending = response.active_run.pending_tool_reconciliations[0]
-    assert pending.execution_id == str(execution.id)
-    assert pending.tool_name == "write_file"
-    assert pending.can_reconcile is True
+    assert response.active_run.can_resume is True
+    assert response.active_run.pending_tool_reconciliations == []
 
 
 @pytest.mark.asyncio

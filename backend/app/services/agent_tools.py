@@ -2341,13 +2341,13 @@ async def _run_with_temp_workspace_outcome(
                 conflict_mode="fail",
             )
         except Exception as exc:
-            return _typed_unknown(
-                f"Local execution completed but workspace sync is unknown: {type(exc).__name__}.",
-                "workspace_sync_outcome_unknown",
+            return _typed_workspace_publication_failure(
+                f"Local execution completed but Workspace publication could not be verified: {type(exc).__name__}.",
+                "workspace_publication_unverifiable",
             )
         if flush_result["conflicted"]:
             conflict_list = ", ".join(flush_result["conflicted"][:5])
-            return _typed_unknown(
+            return _typed_workspace_publication_failure(
                 f"Local execution completed but workspace sync conflicted for: {conflict_list}",
                 "workspace_sync_conflict",
             )
@@ -2511,23 +2511,67 @@ async def _execute_code_with_workspace_outcome(
                 nonlocal candidate_ref
                 if candidate_ref is not None or reconciliation_scope is None:
                     return candidate_ref
-                changes = await _workspace_candidate_changes(temp_workspace)
-                if not changes:
+                last_error: Exception | None = None
+                for attempt, delay in enumerate((0.0, 0.1, 0.5), start=1):
+                    if delay:
+                        await asyncio.sleep(delay)
+                    try:
+                        changes = await _workspace_candidate_changes(temp_workspace)
+                        if not changes:
+                            return None
+                        manifest = await reconciliation_service.persist_candidate(
+                            reconciliation_scope,
+                            changes,
+                        )
+                        candidate_ref = manifest.candidate_ref
+                        return candidate_ref
+                    except Exception as exc:
+                        last_error = exc
+                        logger.warning(
+                            "[WorkspaceCandidatePersistRetry] run_id={} execution_id={} "
+                            "attempt={} error={}",
+                            reconciliation_scope.run_id,
+                            reconciliation_scope.execution_id,
+                            attempt,
+                            type(exc).__name__,
+                        )
+                raise RuntimeError("workspace candidate persistence failed") from last_error
+
+            async def verify_candidate():
+                if reconciliation_scope is None or candidate_ref is None:
                     return None
-                manifest = await reconciliation_service.persist_candidate(
-                    reconciliation_scope,
-                    changes,
-                )
-                candidate_ref = manifest.candidate_ref
-                return candidate_ref
+                for attempt, delay in enumerate((0.0, 0.1, 0.5), start=1):
+                    if delay:
+                        await asyncio.sleep(delay)
+                    try:
+                        return await reconciliation_service.verify_current(
+                            reconciliation_scope,
+                            candidate_ref,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "[WorkspaceCandidateVerifyRetry] run_id={} execution_id={} "
+                            "attempt={} error={}",
+                            reconciliation_scope.run_id,
+                            reconciliation_scope.execution_id,
+                            attempt,
+                            type(exc).__name__,
+                        )
+                return None
 
             async def reconciliation_metadata() -> dict[str, object]:
                 if reconciliation_scope is None or candidate_ref is None:
                     return {}
-                verification = await reconciliation_service.verify_current(
-                    reconciliation_scope,
-                    candidate_ref,
-                )
+                verification = await verify_candidate()
+                if verification is None:
+                    return {
+                        "workspace_candidate_ref": candidate_ref,
+                        "workspace_resolution_status": "unavailable",
+                        "workspace_saved_count": 0,
+                        "workspace_pending_count": 0,
+                        "workspace_conflicted_count": 0,
+                        "workspace_unverified_count": 1,
+                    }
                 return {
                     "workspace_candidate_ref": candidate_ref,
                     "workspace_resolution_status": verification.status,
@@ -2544,35 +2588,63 @@ async def _execute_code_with_workspace_outcome(
                 """Resolve known publication facts without replaying code."""
                 if reconciliation_scope is None or candidate_ref is None:
                     return None
-                if original_outcome.status == "unknown":
-                    # A gateway-owned backend currently collapses code and
-                    # publication status into one unknown result. Verifying
-                    # files alone cannot prove the process exit status.
-                    return None
-                verification = await reconciliation_service.verify_current(
-                    reconciliation_scope,
-                    candidate_ref,
-                )
-                if verification.status in {"not_saved", "mixed"}:
+                if (
+                    original_outcome.status == "unknown"
+                    and original_outcome.error_code != "workspace_sync_outcome_unknown"
+                ):
+                    return _typed_workspace_publication_failure(
+                        "Sandbox execution could not be verified and was not replayed.",
+                        "sandbox_execution_unverifiable",
+                        metadata=await reconciliation_metadata(),
+                    )
+                verification = await verify_candidate()
+                if verification is None:
+                    return _typed_workspace_publication_failure(
+                        "Code completed but Workspace publication could not be verified. "
+                        "The saved candidate was retained for automatic recovery.",
+                        "workspace_publication_unverifiable",
+                        metadata=await reconciliation_metadata(),
+                    )
+                if verification.status in {"not_saved", "mixed"} and not (
+                    verification.counts["conflict"] or verification.counts["unverified"]
+                ):
                     application = await reconciliation_service.apply_candidate(
                         reconciliation_scope,
                         candidate_ref,
                         authorized=True,
+                        require_base_match=True,
                     )
                     if application.status not in {"applied", "already_applied"}:
-                        return None
-                    verification = await reconciliation_service.verify_current(
-                        reconciliation_scope,
-                        candidate_ref,
+                        return _typed_workspace_publication_failure(
+                            "Workspace changed before the Agent result could be published. "
+                            "The current Workspace was preserved.",
+                            "workspace_sync_conflict",
+                            metadata=await reconciliation_metadata(),
+                        )
+                    verification = await verify_candidate()
+                if verification is None or verification.status == "unverified":
+                    return _typed_workspace_publication_failure(
+                        "Code completed but Workspace publication could not be verified. "
+                        "The saved candidate was retained for automatic recovery.",
+                        "workspace_publication_unverifiable",
+                        metadata=await reconciliation_metadata(),
                     )
                 if verification.status != "applied":
-                    return None
+                    return _typed_workspace_publication_failure(
+                        "Workspace changed before the Agent result could be published. "
+                        "The current Workspace was preserved.",
+                        "workspace_sync_conflict",
+                        metadata=_workspace_verification_metadata(candidate_ref, verification),
+                    )
                 await reconciliation_service.discard_candidate(
                     reconciliation_scope,
                     candidate_ref,
                 )
                 return replace(
                     original_outcome,
+                    status="succeeded",
+                    error_code=None,
+                    retryable=False,
                     metadata={
                         **original_outcome.metadata,
                         "workspace_publication": flush_result,
@@ -2615,7 +2687,7 @@ async def _execute_code_with_workspace_outcome(
                 runtime_code_timeout_seconds=runtime_code_timeout_seconds,
             )
             if lease is not None and lease.ownership_lost:
-                return _typed_unknown(
+                return _typed_workspace_publication_failure(
                     "Code may have run after the Session execution lease was lost.",
                     "sandbox_execution_lease_lost",
                 )
@@ -2635,6 +2707,11 @@ async def _execute_code_with_workspace_outcome(
                     recovered = await recover_publication(outcome, flush_result)
                     if recovered is not None:
                         return recovered
+                    return _typed_workspace_publication_failure(
+                        "Code completed but Workspace publication could not be verified.",
+                        "workspace_publication_unverifiable",
+                        metadata=candidate_metadata,
+                    )
                 if outcome.status == "succeeded" and reconciliation_scope is not None and candidate_ref is not None:
                     await reconciliation_service.discard_candidate(reconciliation_scope, candidate_ref)
                     candidate_metadata = {}
@@ -2644,12 +2721,18 @@ async def _execute_code_with_workspace_outcome(
                     metadata={**outcome.metadata, "workspace_publication": flush_result, **candidate_metadata},
                 )
             if lease is not None and not await lease.ensure_publication_window(120):
-                return _typed_unknown(
+                return _typed_workspace_publication_failure(
                     "Code ran but publication ownership could not be verified.",
                     "sandbox_execution_lease_lost",
                 )
             try:
                 await ensure_candidate()
+            except Exception as exc:
+                return _typed_workspace_publication_failure(
+                    f"Code completed but its Workspace result could not be staged: {type(exc).__name__}.",
+                    "workspace_candidate_persist_failed",
+                )
+            try:
                 flush_result = await asyncio.wait_for(
                     flush_temp_workspace(
                         temp_workspace,
@@ -2665,9 +2748,9 @@ async def _execute_code_with_workspace_outcome(
                 )
                 if recovered is not None:
                     return recovered
-                return _typed_unknown(
-                    f"Local execution completed but workspace sync is unknown: {type(exc).__name__}.",
-                    "workspace_sync_outcome_unknown",
+                return _typed_workspace_publication_failure(
+                    f"Code completed but Workspace publication failed: {type(exc).__name__}.",
+                    "workspace_publication_failed",
                     metadata=candidate_metadata,
                 )
             candidate_metadata = await reconciliation_metadata()
@@ -2676,7 +2759,7 @@ async def _execute_code_with_workspace_outcome(
                 recovered = await recover_publication(outcome, flush_result)
                 if recovered is not None:
                     return recovered
-                return _typed_unknown(
+                return _typed_workspace_publication_failure(
                     "Local execution completed but workspace sync conflicted.",
                     "workspace_sync_conflict",
                     metadata=metadata,
@@ -2696,9 +2779,9 @@ async def _execute_code_with_workspace_outcome(
         return _typed_failure(str(exc), "skill_snapshot_incomplete")
     except Exception as exc:
         if execution_started:
-            return _typed_unknown(
+            return _typed_workspace_publication_failure(
                 f"Sandbox execution outcome is unknown after {type(exc).__name__}.",
-                "sandbox_execution_outcome_unknown",
+                "sandbox_execution_unverifiable",
             )
         return _typed_failure(
             f"Sandbox execution could not start: {type(exc).__name__}.",
@@ -2875,6 +2958,29 @@ def _typed_failure(
         result_ref=result_ref,
         error_code=error_code,
         retryable=retryable,
+        metadata=metadata or {},
+    )
+
+
+def _typed_workspace_publication_failure(
+    summary: str,
+    error_code: str,
+    *,
+    metadata: dict | None = None,
+) -> ToolExecutionOutcome:
+    """Fail publication without replaying code or pausing the Run for a user verdict."""
+    return ToolExecutionOutcome(
+        status="failed",
+        result_summary=summary,
+        result_ref=None,
+        error_code=error_code,
+        retryable=False,
+        model_action="continue",
+        side_effect_state="unknown",
+        safe_remediation=(
+            "Explain that Workspace persistence could not be confirmed, identify the affected "
+            "path when available, and finish the reply without retrying the code."
+        ),
         metadata=metadata or {},
     )
 
@@ -12023,9 +12129,9 @@ async def _execute_code_outcome(
                 "(Agent-relative; use this exact path with file tools)."
             )
         if result.error and result.error.startswith("sandbox_publication_unknown:"):
-            return _typed_unknown(
+            return _typed_workspace_publication_failure(
                 "Code ran but Sandbox publication could not be proven.",
-                "workspace_sync_outcome_unknown",
+                "workspace_publication_unverifiable",
                 metadata=output_metadata,
             )
         if result.success and result.exit_code == 0:

@@ -533,7 +533,18 @@ async def get_session_runtime_state(
             )
             .order_by(AgentToolExecution.started_at, AgentToolExecution.id)
         )
-        pending_reconciliations = list(reconciliation_result.scalars().all())
+        unknown_executions = list(reconciliation_result.scalars().all())
+        pending_reconciliations = []
+        for execution in unknown_executions:
+            metadata = (
+                execution.result_metadata
+                if isinstance(execution.result_metadata, dict)
+                else {}
+            )
+            error_code = metadata.get("error_code")
+            if isinstance(error_code, str) and error_code.startswith("workspace_"):
+                continue
+            pending_reconciliations.append(execution)
     else:
         resume_inflight = False
         pending_reconciliations = []
