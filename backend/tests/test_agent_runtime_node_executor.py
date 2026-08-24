@@ -1692,6 +1692,29 @@ async def test_verification_repairs_are_bounded() -> None:
 
 
 @pytest.mark.asyncio
+async def test_verification_integrity_failure_does_not_reenter_model() -> None:
+    run_id = uuid.uuid4()
+    model = ModelService(ModelStepResult(intent="finish", finish_content="done"))
+    verifier = Verifier(
+        VerificationResult(
+            outcome="fail",
+            reason="an artifact/evidence reference is not readable",
+            details={"code": "tool_reference_unreadable"},
+        )
+    )
+    executor = _executor(model, verifier=verifier, max_verification_repairs=10)
+
+    result = await _invoke(run_id, executor)
+
+    lifecycle = result["lifecycle"]
+    assert lifecycle["status"] == "failed"
+    assert lifecycle["reason"] == "an artifact/evidence reference is not readable"
+    assert lifecycle.get("verification_attempt_count", 0) == 0
+    assert model.calls == 1
+    assert verifier.calls == ["done"]
+
+
+@pytest.mark.asyncio
 async def test_task_completion_gate_exhaustion_delivers_latest_candidate() -> None:
     run_id = uuid.uuid4()
     model = ModelService(

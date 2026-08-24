@@ -1010,7 +1010,7 @@ class ToolLedgerRuntimeVerifier:
                         )
                         continue
                     return VerificationResult(
-                        outcome="repair",
+                        outcome="fail",
                         reason="an artifact/evidence reference is not readable",
                         details={
                             "code": "tool_reference_unreadable",

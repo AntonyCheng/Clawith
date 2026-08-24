@@ -636,17 +636,17 @@ class SubprocessBackend(BaseSandboxBackend):
                     continue
                 except OSError:
                     continue
-            if file_path.suffix.lower() in banned_suffixes:
-                logger.warning(
-                    f"[Sandbox Gateway] Blocked banned file extension: {rel_path}"
-                )
-                continue
             if target_file is not None:
                 try:
                     if file_path.read_bytes() == target_file.read_bytes():
                         continue
                 except OSError:
                     pass
+            if file_path.suffix.lower() in banned_suffixes:
+                logger.warning(
+                    f"[Sandbox Gateway] Blocked banned file extension: {rel_path}"
+                )
+                continue
             publication_candidates[rel_path] = file_path
 
         deletion_candidates = {
