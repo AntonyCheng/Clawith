@@ -475,14 +475,12 @@ test('workspace reconciliation keeps decisions in the composer and passive statu
   assert.doesNotMatch(agentDetailSource, /analysis-tool-reconciliation__actions/);
 });
 
-test('loaded Tool rows cannot be hidden behind a stale zero session count', () => {
+test('analysis cards count only Tool rows from their own user turn', () => {
+  assert.doesNotMatch(agentDetailSource, /totalToolCount/);
+  assert.doesNotMatch(agentDetailSource, /activeSession\?\.tool_call_count/);
   assert.match(
     agentDetailSource,
-    /Math\.max\(totalToolCount \?\? 0, toolItems\.length\)/,
-  );
-  assert.match(
-    agentDetailSource,
-    /toolCallsTotal', \{ count: resolvedToolCount \}/,
+    /toolCallsTotal', \{ count: toolItems\.length \}/,
   );
 });
 

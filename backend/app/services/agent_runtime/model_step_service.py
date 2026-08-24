@@ -396,6 +396,11 @@ def _is_group_agent_run(state: RuntimeGraphState) -> bool:
     )
 
 
+def _is_onboarding_run(state: RuntimeGraphState) -> bool:
+    target_phase = state["snapshots"].initial_input.get("onboarding_target_phase")
+    return isinstance(target_phase, str) and bool(target_phase.strip())
+
+
 def _is_public_group_chat_run(state: RuntimeGraphState) -> bool:
     initial_input = state["snapshots"].initial_input
     if _is_group_agent_run(state):
@@ -1898,7 +1903,7 @@ class RuntimeModelStepService:
         context: RuntimeContext,
     ) -> LLMCompletionStep:
         """Retry only transient provider failures before model failover."""
-        total_attempts = self._model_retry_attempts + 1
+        total_attempts = 1 if _is_onboarding_run(state) else self._model_retry_attempts + 1
         for attempt in range(1, total_attempts + 1):
             writer = self._answer_stream_writer(
                 state=state,
@@ -1997,7 +2002,8 @@ class RuntimeModelStepService:
         try:
             model, agent, ledger, executions = await self._load(context, state)
             is_native_group = _is_group_agent_run(state)
-            allow_user_wait = not _is_public_group_chat_run(state)
+            onboarding_run = _is_onboarding_run(state)
+            allow_user_wait = not _is_public_group_chat_run(state) and not onboarding_run
             application_tools = (
                 with_group_runtime_tools(
                     await self._tool_provider(agent.id),
@@ -2068,6 +2074,11 @@ class RuntimeModelStepService:
                 )
             except Exception as primary_error:
                 primary_classification = classify_error(primary_error)
+                if onboarding_run:
+                    raise RuntimeModelCallError(
+                        "onboarding_model_call_failed",
+                        _safe_provider_failure_message(primary_error),
+                    ) from primary_error
                 if not is_retryable_classification(primary_classification):
                     logger.error(
                         "[RuntimeModelFailure] run_id={} agent_id={} stage=primary "
@@ -2195,6 +2206,11 @@ class RuntimeModelStepService:
                 allow_user_wait=allow_user_wait,
                 allow_group_handoff=is_native_group,
             )
+            if onboarding_run and result.repair_instruction is not None:
+                result = _error(
+                    "onboarding_model_output_invalid",
+                    "The onboarding model response was incomplete or invalid.",
+                )
             reset_reason = _tool_repair_reset_reason(state)
             if reset_reason is not None:
                 result = replace(result, repair_reset_reason=reset_reason)
