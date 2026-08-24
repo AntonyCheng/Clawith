@@ -1219,7 +1219,7 @@ function describeToolResolution(
 }
 
 function AnalysisCard({
-    items, t, expanded, onToggle, isGroupRunning, chatActive, sessionId, totalToolCount,
+    items, t, expanded, onToggle, isGroupRunning, chatActive, sessionId,
     reconciliationsByToolCallId,
 }: {
     items: AnalysisItem[];
@@ -1231,7 +1231,6 @@ function AnalysisCard({
     /** True while the chat is actively streaming/waiting (any turn in flight) */
     chatActive?: boolean;
     sessionId?: string | null;
-    totalToolCount?: number;
     reconciliationsByToolCallId: Map<string, ToolReconciliation>;
 }) {
     // propose_experience_draft is a human-facing proposal, not a reasoning step —
@@ -1246,11 +1245,10 @@ function AnalysisCard({
     const stopped = hasRunningTool && chatActive === false;
     const isRunning = !stopped && (hasRunningTool || (!hasTools && isGroupRunning));
     const runningTool = [...toolItems].reverse().find(tc => tc.status === 'running') ?? null;
-    const resolvedToolCount = Math.max(totalToolCount ?? 0, toolItems.length);
     const headerTitle = isRunning && runningTool
         ? getToolMeta(runningTool).title
-        : totalToolCount != null
-            ? t('agent.chat.toolCallsTotal', { count: resolvedToolCount })
+        : hasTools
+            ? t('agent.chat.toolCallsTotal', { count: toolItems.length })
             : describeAnalysis(items, t);
 
     return (
@@ -7115,9 +7113,6 @@ export default function AgentDetailPage() {
                                                     }
                                                     flushGroup(); // flush any trailing group
 
-                                                    const analysisGroupCount = grouped.filter(entry => entry.type === 'analysis_group').length;
-
-
                                                     return grouped.map((entry, entryIdx) => {
                                                         const previousEntry = grouped[entryIdx - 1];
                                                         const hideAssistantAvatar = entry.type === 'msg'
@@ -7147,11 +7142,6 @@ export default function AgentDetailPage() {
                                                                         isGroupRunning={groupIsRunning}
                                                                         chatActive={isWaiting || isStreaming}
                                                                         sessionId={activeSessionIdRef.current}
-                                                                        totalToolCount={
-                                                                            analysisGroupCount === 1 && !(isWaiting || isStreaming)
-                                                                                ? activeSession?.tool_call_count
-                                                                                : undefined
-                                                                        }
                                                                         reconciliationsByToolCallId={selectedReconciliationsByToolCallId}
                                                                     />
                                                                 </div>

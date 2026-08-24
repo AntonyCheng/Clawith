@@ -34,11 +34,10 @@ test('replayed tool packets keep one row by stable tool call id', () => {
   assert.match(source, /toolCallId: m\.toolCallId/);
 });
 
-test('settled single-turn tool totals come from session metadata instead of loaded pages', () => {
-  assert.match(source, /totalToolCount\?: number/);
-  assert.match(source, /activeSession\?\.tool_call_count/);
-  assert.match(source, /analysisGroupCount === 1/);
-  assert.match(source, /agent\.chat\.toolCallsTotal/);
+test('settled tool totals belong to the current user turn', () => {
+  assert.doesNotMatch(source, /totalToolCount\?: number/);
+  assert.doesNotMatch(source, /activeSession\?\.tool_call_count/);
+  assert.match(source, /toolCallsTotal', \{ count: toolItems\.length \}/);
 });
 
 test('an authoritative active run keeps a thinking indicator visible after reload', () => {

@@ -747,6 +747,19 @@ class CompletionGateRuntimeVerifier:
         deterministic = await self._deterministic.verify(state, context, candidate)
         if deterministic.outcome != "pass":
             return deterministic
+        onboarding_target_phase = state["snapshots"].initial_input.get(
+            "onboarding_target_phase"
+        )
+        if isinstance(onboarding_target_phase, str) and onboarding_target_phase.strip():
+            return VerificationResult(
+                outcome="pass",
+                details={
+                    "code": "onboarding_deterministic_checks_passed",
+                    "deterministic": dict(deterministic.details),
+                    "artifact_refs": deterministic.details.get("artifact_refs", []),
+                    "evidence_refs": deterministic.details.get("evidence_refs", []),
+                },
+            )
         semantic = await self._completion_gate.verify(state, context, candidate)
         if semantic.outcome != "pass":
             return VerificationResult(

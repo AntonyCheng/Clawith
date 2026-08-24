@@ -1279,6 +1279,43 @@ async def test_completion_gate_never_bypasses_unsettled_public_group_tool() -> N
     assert result.details["code"] == "unsettled_tool_execution"
 
 
+@pytest.mark.asyncio
+async def test_onboarding_skips_semantic_completion_repairs_after_deterministic_pass() -> None:
+    tenant_id = uuid.uuid4()
+    run_id = uuid.uuid4()
+    deterministic = ToolLedgerRuntimeVerifier(
+        session_factory=_factory(_ManyResult([])),
+    )
+
+    class _NeverCalledCompletionGate:
+        async def verify(self, *_args, **_kwargs):
+            raise AssertionError("onboarding must not enter semantic completion repair")
+
+    verifier = CompletionGateRuntimeVerifier(
+        deterministic=deterministic,
+        completion_gate=_NeverCalledCompletionGate(),  # type: ignore[arg-type]
+    )
+    state = _state(tenant_id, run_id)
+    state["snapshots"] = RunInputSnapshots(
+        session_context={"version": 0},
+        session_context_version=0,
+        recent_session_messages=(),
+        related_run_summaries=(),
+        initial_input={"onboarding_target_phase": "greeted"},
+    )
+
+    result = await verifier.verify(
+        state,
+        _context(tenant_id, run_id),
+        "Welcome to Clawith.",
+    )
+
+    assert result.outcome == "pass"
+    assert result.details["code"] == "onboarding_deterministic_checks_passed"
+    assert result.details["artifact_refs"] == []
+    assert result.details["evidence_refs"] == []
+
+
 async def _true_reference(
     ref: str,
     tenant_id: uuid.UUID,
