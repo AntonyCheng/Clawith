@@ -327,6 +327,31 @@ async def test_sandbox_output_sanitization(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_sandbox_does_not_report_unchanged_skill_scripts_as_blocked(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    staging = tmp_path / "staging"
+    target = tmp_path / "target"
+    script_path = Path("skills/skill-creator/scripts/package_skill.py")
+    for root in (staging, target):
+        path = root / script_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("print('package')", encoding="utf-8")
+
+    warnings: list[str] = []
+    monkeypatch.setattr(subprocess_backend.logger, "warning", warnings.append)
+
+    await SubprocessBackend(SandboxConfig())._verify_and_merge_outputs(
+        staging,
+        target,
+    )
+
+    assert warnings == []
+    assert (target / script_path).read_text(encoding="utf-8") == "print('package')"
+
+
+@pytest.mark.asyncio
 async def test_sandbox_quota_ignores_unchanged_materialized_files(
     tmp_path: Path,
 ) -> None:

@@ -516,7 +516,7 @@ async def test_production_verifier_and_finalizer_propagate_only_read_back_refs()
 
 
 @pytest.mark.asyncio
-async def test_production_verifier_repairs_an_unreadable_current_run_reference() -> None:
+async def test_production_verifier_fails_fast_on_an_unreadable_current_run_reference() -> None:
     tenant_id = uuid.uuid4()
     run_id = uuid.uuid4()
     agent_id = uuid.uuid4()
@@ -553,7 +553,7 @@ async def test_production_verifier_repairs_an_unreadable_current_run_reference()
         context,
         "done",
     )
-    assert result.outcome == "repair"
+    assert result.outcome == "fail"
     assert result.details == {
         "code": "tool_reference_unreadable",
         "reference": reference,
