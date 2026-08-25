@@ -57,3 +57,4 @@ backend/tests/test_agent_runtime_benchmark.py
 # Local-only deployment & backups (this fork)
 deploy-local/
 frontend-local-bak/.export-venv
+deploy-local-upgrade/

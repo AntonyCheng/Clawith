@@ -36,7 +36,7 @@ export interface FileBrowserApi {
     write: (path: string, content: string) => Promise<any>;
     delete: (path: string) => Promise<any>;
     upload?: (file: File, path: string, onProgress?: (pct: number) => void) => Promise<any>;
-    downloadUrl?: (path: string) => string;
+    downloadUrl?: (path: string, options?: { inline?: boolean }) => string;
 }
 
 export interface FileBrowserProps {

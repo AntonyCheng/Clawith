@@ -2148,10 +2148,14 @@ export default function AgentDetailPage() {
         currentUser?.role === 'agent_admin' ||
         isAgentOwner;
     type SessionRuntimeKey = string;
+    // v1.11.4 Runtime 协议：waiting_user 会话的续跑凭据（run_id + correlation_id）。
+    // done 包带 runtime_status=waiting_user 时记录，用户回复时随消息发回以续跑挂起的 Run。
+    type SessionActiveRunHint = { runId: string; correlationId: string };
     const wsMapRef = useRef<Record<SessionRuntimeKey, WebSocket>>({});
     const reconnectTimerRef = useRef<Record<SessionRuntimeKey, ReturnType<typeof setTimeout> | null>>({});
     const reconnectDisabledRef = useRef<Record<SessionRuntimeKey, boolean>>({});
     const sessionUiStateRef = useRef<Record<SessionRuntimeKey, { isWaiting: boolean; isStreaming: boolean }>>({});
+    const sessionActiveRunRef = useRef<Record<SessionRuntimeKey, SessionActiveRunHint | null>>({});
     const activeSessionIdRef = useRef<string | null>(null);
     const currentAgentIdRef = useRef<string | undefined>(id);
     const sessionMsgAbortRef = useRef<AbortController | null>(null);
@@ -2942,6 +2946,27 @@ export default function AgentDetailPage() {
         };
         ws.onmessage = (e) => {
             const d = JSON.parse(e.data);
+            // v1.11.4 Runtime 状态通知（排队/取消中等）——本地无对应 UI，
+            // 仅保持会话等待态不被误清，不渲染。
+            if (d.type === 'runtime_status') {
+                if (d.status === 'queued' || d.status === 'cancelling') {
+                    setSessionUiState(key, { isWaiting: true, isStreaming: false });
+                }
+                return;
+            }
+            // Agent 调用 wait 工具中途提问：记录续跑凭据，done 正常渲染提问内容，
+            // 用户回复时由 sendMessage 附带 correlation_id 续跑挂起的 Run。
+            if (d.type === 'done' && d.runtime_status === 'waiting_user' && d.run_id && d.correlation_id) {
+                sessionActiveRunRef.current[key] = {
+                    runId: String(d.run_id),
+                    correlationId: String(d.correlation_id),
+                };
+                setSessionUiState(key, { isWaiting: true, isStreaming: false });
+            } else if (d.type === 'done' || d.type === 'error' || d.type === 'quota_exceeded') {
+                if (!(d.type === 'done' && d.runtime_status === 'waiting_user')) {
+                    sessionActiveRunRef.current[key] = null;
+                }
+            }
             // Onboarding lock fired (or trigger was rejected because the pair
             // was already onboarded). Either way, invalidate the cached agent
             // record so the kickoff effect stops thinking a new session needs
@@ -3243,7 +3268,17 @@ export default function AgentDetailPage() {
             display_content: payload.userMsg,
             file_name: payload.fileName,
             model_id: payload.modelId,
+            // v1.11.4：若该会话有 waiting_user 的挂起 Run（Agent 中途提问），
+            // 回复需携带 run_id + correlation_id 才能续跑而不是新开一轮。
+            ...(sessionActiveRunRef.current[runtimeKey]
+                ? {
+                    run_id: sessionActiveRunRef.current[runtimeKey]!.runId,
+                    correlation_id: sessionActiveRunRef.current[runtimeKey]!.correlationId,
+                }
+                : {}),
         }));
+        // 回复已发出，本轮等待态凭据消费完毕，避免下一条普通消息误续跑。
+        sessionActiveRunRef.current[runtimeKey] = null;
     };
 
     useEffect(() => {

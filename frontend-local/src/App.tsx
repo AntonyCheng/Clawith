@@ -13,6 +13,9 @@ const Onboarding = lazy(() => import('./pages/Onboarding'));
 const Layout = lazy(() => import('./pages/Layout'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Plaza = lazy(() => import('./pages/Plaza'));
+// v1.11 新增：经验广场（与本地 Plaza 并存）与群聊
+const Experience = lazy(() => import('./pages/Experience'));
+const GroupsPage = lazy(() => import('./pages/groups/GroupsPage'));
 const AgentDetail = lazy(() => import('./pages/AgentDetail'));
 const AgentCreate = lazy(() => import('./pages/AgentCreate'));
 const Messages = lazy(() => import('./pages/Messages'));
@@ -285,6 +288,10 @@ export default function App() {
                     <Route index element={<Navigate to="/plaza" replace />} />
                     <Route path="dashboard" element={<Dashboard />} />
                     <Route path="plaza" element={<Plaza />} />
+                    <Route path="experience" element={<Experience />} />
+                    <Route path="groups" element={<GroupsPage />} />
+                    <Route path="groups/:groupId" element={<GroupsPage />} />
+                    <Route path="groups/:groupId/:sessionId" element={<GroupsPage />} />
                     <Route path="agents/new" element={<AgentCreate />} />
                     <Route path="agents/:id" element={<Navigate to="chat" replace />} />
                     <Route path="agents/:id/chat" element={<AgentDetail />} />

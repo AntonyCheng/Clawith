@@ -30,6 +30,8 @@ import {
     IconChevronRight,
     IconCheck,
     IconChevronDown,
+    IconBook2,
+    IconUsers,
 } from '@tabler/icons-react';
 import { useAppStore } from '../stores';
 import TalentMarketModal from '../components/TalentMarketModal';
@@ -1155,6 +1157,19 @@ export default function Layout() {
                                 <IconBuildingMonument size={14} stroke={1.5} />
                             </span>
                             <span className="sidebar-item-text">{t('nav.plaza', 'Plaza')}</span>
+                        </NavLink>
+                        {/* v1.11 新增：经验广场 / 群聊 */}
+                        <NavLink key="experience" to="/experience" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
+                            <span className="sidebar-item-icon" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                <IconBook2 size={14} stroke={1.5} />
+                            </span>
+                            <span className="sidebar-item-text">{t('nav.experience', '经验广场')}</span>
+                        </NavLink>
+                        <NavLink key="groups" to="/groups" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
+                            <span className="sidebar-item-icon" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                <IconUsers size={14} stroke={1.5} />
+                            </span>
+                            <span className="sidebar-item-text">{t('nav.groups', '群聊')}</span>
                         </NavLink>
                         <NavLink key="dashboard" to="/dashboard" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
                             <span className="sidebar-item-icon" style={{ display: 'flex' }}>{SidebarIcons.home}</span>

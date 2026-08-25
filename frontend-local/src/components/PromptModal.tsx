@@ -5,11 +5,13 @@ interface PromptModalProps {
     open: boolean;
     title: string;
     placeholder?: string;
+    /** v1.11 群聊：允许留空确认（如"会话名称可留空"场景）。默认 false 维持旧行为。 */
+    allowEmpty?: boolean;
     onConfirm: (value: string) => void;
     onCancel: () => void;
 }
 
-export default function PromptModal({ open, title, placeholder, onConfirm, onCancel }: PromptModalProps) {
+export default function PromptModal({ open, title, placeholder, allowEmpty = false, onConfirm, onCancel }: PromptModalProps) {
     const { t } = useTranslation();
     const [value, setValue] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -20,6 +22,8 @@ export default function PromptModal({ open, title, placeholder, onConfirm, onCan
             setTimeout(() => inputRef.current?.focus(), 100);
         }
     }, [open]);
+
+    const canConfirm = allowEmpty || Boolean(value.trim());
 
     if (!open) return null;
 
@@ -42,15 +46,15 @@ export default function PromptModal({ open, title, placeholder, onConfirm, onCan
                     onChange={e => setValue(e.target.value)}
                     placeholder={placeholder || ''}
                     onKeyDown={e => {
-                        if (e.key === 'Enter' && value.trim()) onConfirm(value.trim());
+                        if (e.key === 'Enter' && canConfirm) onConfirm(value.trim());
                         if (e.key === 'Escape') onCancel();
                     }}
                     style={{ width: '100%', marginBottom: '16px' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                     <button className="btn btn-secondary" onClick={onCancel}>{t('common.confirmActions.cancelLabel')}</button>
-                    <button className="btn btn-primary" onClick={() => { if (value.trim()) onConfirm(value.trim()); }}
-                        disabled={!value.trim()}>{t('common.confirmActions.confirmLabel')}</button>
+                    <button className="btn btn-primary" onClick={() => { if (canConfirm) onConfirm(value.trim()); }}
+                        disabled={!canConfirm}>{t('common.confirmActions.confirmLabel')}</button>
                 </div>
             </div>
         </div>

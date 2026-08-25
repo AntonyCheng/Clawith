@@ -226,13 +226,13 @@ def _custom_human_authorized_condition(source: AgentModel):
             UserModel.tenant_id == source.tenant_id,
             UserModel.is_active == True,  # noqa: E712
             UserModel.role.in_(["platform_admin", "org_admin"]),
-        ),
+        ).correlate(OrgMember),
         exists().where(
             AgentPermission.agent_id == source.id,
             AgentPermission.scope_type == "user",
             AgentPermission.scope_id == OrgMember.user_id,
             AgentPermission.access_level.in_(["use", "manage"]),
-        ),
+        ).correlate(OrgMember),
     )
 
 
