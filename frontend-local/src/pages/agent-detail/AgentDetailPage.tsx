@@ -53,6 +53,8 @@ import {
 import { useDropZone } from '../../hooks/useDropZone';
 import ApprovalsTab from './tabs/ApprovalsTab';
 import { AGENT_DETAIL_TABS } from './agentDetailTabs';
+import { sessionActiveRunFromResponse } from './sessionRuntimeState';
+import { loadDirectHistoryTurn } from '../../services/directHistoryPagination';
 import MindTab from './tabs/MindTab';
 import SettingsTab from './tabs/SettingsTab';
 import SkillsTab from './tabs/SkillsTab';
@@ -2149,13 +2151,41 @@ export default function AgentDetailPage() {
         isAgentOwner;
     type SessionRuntimeKey = string;
     // v1.11.4 Runtime 协议：waiting_user 会话的续跑凭据（run_id + correlation_id）。
-    // done 包带 runtime_status=waiting_user 时记录，用户回复时随消息发回以续跑挂起的 Run。
+    // done 包带 runtime_status=waiting_user 时记录，用户回复时随消息发回以续跑挂起的 Run；
+    // 会话挂载时经 /runtime-state 查询恢复（刷新页面后凭据不丢）。
     type SessionActiveRunHint = { runId: string; correlationId: string };
     const wsMapRef = useRef<Record<SessionRuntimeKey, WebSocket>>({});
     const reconnectTimerRef = useRef<Record<SessionRuntimeKey, ReturnType<typeof setTimeout> | null>>({});
     const reconnectDisabledRef = useRef<Record<SessionRuntimeKey, boolean>>({});
     const sessionUiStateRef = useRef<Record<SessionRuntimeKey, { isWaiting: boolean; isStreaming: boolean }>>({});
     const sessionActiveRunRef = useRef<Record<SessionRuntimeKey, SessionActiveRunHint | null>>({});
+
+    // 查询会话的 Runtime 状态：若存在 waiting_user 的挂起 Run，恢复续跑凭据。
+    const fetchSessionRuntimeState = async (agentId: string, sessionId: string) => {
+        const runtimeKey = buildSessionRuntimeKey(agentId, sessionId);
+        try {
+            const tkn = localStorage.getItem('token');
+            const response = await fetch(
+                `/api/agents/${agentId}/sessions/${sessionId}/runtime-state`,
+                { headers: { Authorization: `Bearer ${tkn}` } },
+            );
+            if (!response.ok) return null;
+            const payload = await response.json();
+            const run = sessionActiveRunFromResponse(payload);
+            if (run && run.status === 'waiting_user' && run.runId && run.correlationId) {
+                sessionActiveRunRef.current[runtimeKey] = {
+                    runId: run.runId,
+                    correlationId: run.correlationId,
+                };
+                setSessionUiState(runtimeKey, { isWaiting: true, isStreaming: false });
+            } else {
+                sessionActiveRunRef.current[runtimeKey] = null;
+            }
+            return run;
+        } catch {
+            return null;
+        }
+    };
     const activeSessionIdRef = useRef<string | null>(null);
     const currentAgentIdRef = useRef<string | undefined>(id);
     const sessionMsgAbortRef = useRef<AbortController | null>(null);
@@ -2398,8 +2428,9 @@ export default function AgentDetailPage() {
                 ...(m.id && { id: m.id }),
             }));
 
-            // Set the oldest message timestamp for cursor-based pagination
-            const oldestTimestamp = msgs.length > 0 ? msgs[0].created_at : null;
+            // Set the oldest message cursor for pagination. Use the backend's compound
+            // `<created_at>|<id>` cursor so a batch of equal-timestamp messages can be paged past.
+            const oldestTimestamp = msgs.length > 0 ? (msgs[0].cursor ?? msgs[0].created_at) : null;
 
             if (writable) {
                 setChatMessages(preParsed);
@@ -2414,6 +2445,9 @@ export default function AgentDetailPage() {
             // immediately in local state so unread badges clear without waiting for the next poll.
             clearUnreadForSession(String(sess.id));
             queryClient.invalidateQueries({ queryKey: ['agents'] });
+            // v1.11.4：恢复该会话可能存在的 waiting_user 挂起 Run 续跑凭据
+            //（页面刷新/重进会话后内存凭据丢失的场景）。
+            if (writable) void fetchSessionRuntimeState(targetAgentId, String(sess.id));
         } catch (err: any) {
             if (err?.name === 'AbortError') return;
             console.error('Failed to load session messages:', err);
@@ -3432,18 +3466,27 @@ export default function AgentDetailPage() {
         setHistoryLoadingMore(true);
         try {
             const tkn = localStorage.getItem('token');
-            const res = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(historyOldestTimestamp)}`, {
-                headers: { Authorization: `Bearer ${tkn}` },
+            // v1.11.4 复合游标分页：按完整视觉回合加载（工具回合被页边界截断时
+            // 自动续拉到用户消息边界），并回传后端复合游标避免等时间戳消息重复。
+            const page = await loadDirectHistoryTurn({
+                before: historyOldestTimestamp,
+                pageSize: HISTORY_PAGE_SIZE,
+                completeToolTurn: historyMsgs[0]?.role === 'tool_call',
+                fetchPage: async (before) => {
+                    const response = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(before)}`, {
+                        headers: { Authorization: `Bearer ${tkn}` },
+                    });
+                    if (!response.ok) throw new Error(`History request failed with ${response.status}`);
+                    return response.json();
+                },
             });
-            if (!res.ok) return;
-            const msgs = await res.json();
             // Validate session is still active after async fetch
             if (activeSession?.id !== sess.id) return;
-            if (msgs.length === 0) {
+            if (page.rows.length === 0) {
                 setHistoryHasMore(false);
                 return;
             }
-            const preParsed = msgs.map((m: any) => parseChatMsg({
+            const preParsed = page.rows.map((m: any) => parseChatMsg({
                 role: m.role, content: m.content || '',
                 ...(m.toolName && { toolName: m.toolName, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
                 ...(m.thinking && { thinking: m.thinking }),
@@ -3454,9 +3497,9 @@ export default function AgentDetailPage() {
             const el = historyContainerRef.current;
             const oldScrollHeight = el?.scrollHeight ?? 0;
             setHistoryMsgs(prev => [...preParsed, ...prev]);
-            // Update the oldest timestamp (first message in the new batch, since messages are in chronological order)
-            setHistoryOldestTimestamp(msgs[0].created_at);
-            setHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
+            // Update the oldest cursor (first message in the new batch, since messages are in chronological order)
+            setHistoryOldestTimestamp(page.oldestCursor);
+            setHistoryHasMore(page.hasMore);
             // Restore scroll position after new messages are prepended
             requestAnimationFrame(() => {
                 if (el) {
@@ -3469,7 +3512,7 @@ export default function AgentDetailPage() {
         } finally {
             setHistoryLoadingMore(false);
         }
-    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp]);
+    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp, historyMsgs]);
 
     const loadMoreChatHistoryMessages = useCallback(async () => {
         if (chatHistoryLoadingMore || !chatHistoryHasMore || !activeSession || !id || !chatOldestTimestamp) return;
@@ -3478,18 +3521,26 @@ export default function AgentDetailPage() {
         setChatHistoryLoadingMore(true);
         try {
             const tkn = localStorage.getItem('token');
-            const res = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(chatOldestTimestamp)}`, {
-                headers: { Authorization: `Bearer ${tkn}` },
+            // v1.11.4 复合游标分页：同 loadMoreHistoryMessages，按完整回合加载。
+            const page = await loadDirectHistoryTurn({
+                before: chatOldestTimestamp,
+                pageSize: HISTORY_PAGE_SIZE,
+                completeToolTurn: chatMessages[0]?.role === 'tool_call',
+                fetchPage: async (before) => {
+                    const response = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(before)}`, {
+                        headers: { Authorization: `Bearer ${tkn}` },
+                    });
+                    if (!response.ok) throw new Error(`History request failed with ${response.status}`);
+                    return response.json();
+                },
             });
-            if (!res.ok) return;
-            const msgs = await res.json();
             // Validate session is still active after async fetch
             if (activeSession?.id !== sess.id) return;
-            if (msgs.length === 0) {
+            if (page.rows.length === 0) {
                 setChatHistoryHasMore(false);
                 return;
             }
-            const preParsed = msgs.map((m: any) => parseChatMsg({
+            const preParsed = page.rows.map((m: any) => parseChatMsg({
                 role: m.role, content: m.content || '',
                 ...(m.toolName && { toolName: m.toolName, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
                 ...(m.thinking && { thinking: m.thinking }),
@@ -3500,9 +3551,9 @@ export default function AgentDetailPage() {
             const el = chatContainerRef.current;
             const oldScrollHeight = el?.scrollHeight ?? 0;
             setChatMessages(prev => [...preParsed, ...prev]);
-            // Update the oldest timestamp (first message in the new batch, since messages are in chronological order)
-            setChatOldestTimestamp(msgs[0].created_at);
-            setChatHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
+            // Update the oldest cursor (first message in the new batch, since messages are in chronological order)
+            setChatOldestTimestamp(page.oldestCursor);
+            setChatHistoryHasMore(page.hasMore);
             // Restore scroll position after new messages are prepended
             requestAnimationFrame(() => {
                 if (el) {
@@ -3515,7 +3566,7 @@ export default function AgentDetailPage() {
         } finally {
             setChatHistoryLoadingMore(false);
         }
-    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp]);
+    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp, chatMessages]);
 
     const handleHistoryScroll = () => {
         const el = historyContainerRef.current;
