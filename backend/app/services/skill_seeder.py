@@ -985,14 +985,14 @@ async def seed_skills():
 
     # Populate skill-creator files at runtime
     for s in BUILTIN_SKILLS:
-        if s["folder_name"] == "skill-creator" and not s["files"]:
+        if s["folder_name"] in ("skill-creator", "技能创建") and not s["files"]:
             s["files"] = get_skill_creator_files()
         elif s["folder_name"] == "content-research-writer" and not s["files"]:
             # Load from downloaded file
             crw_file = _files_dir / "content_research_writer__SKILL.md"
             if crw_file.exists():
                 s["files"] = [{"path": "SKILL.md", "content": crw_file.read_text(encoding="utf-8")}]
-        elif s["folder_name"] == "mcp-installer" and not s["files"]:
+        elif s["folder_name"] in ("mcp-installer", "MCP工具安装") and not s["files"]:
             mcp_file = _template_skills_dir / "mcp-installer" / "SKILL.md"
             if mcp_file.exists():
                 s["files"] = [{"path": "SKILL.md", "content": mcp_file.read_text(encoding="utf-8")}]

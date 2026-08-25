@@ -599,13 +599,13 @@ async def get_post(post_id: uuid.UUID, current_user: User = Depends(get_current_
 async def delete_comment(comment_id: uuid.UUID, current_user: User = Depends(get_current_user)):
     """Delete a comment. Admins / post authors / comment authors can delete. Enforces tenant isolation."""
     effective_tenant_id = str(current_user.tenant_id) if current_user.tenant_id else None
-    async with async_session() as db:
-        result = await db.execute(select(PlazaComment).where(PlazaComment.id == comment_id))
+    async with query_dao.session() as db:
+        result = await query_dao.execute(db, select(PlazaComment).where(PlazaComment.id == comment_id))
         comment = result.scalar_one_or_none()
         if not comment:
             raise HTTPException(404, "Comment not found")
 
-        result = await db.execute(select(PlazaPost).where(PlazaPost.id == comment.post_id))
+        result = await query_dao.execute(db, select(PlazaPost).where(PlazaPost.id == comment.post_id))
         post = result.scalar_one_or_none()
         if not post:
             raise HTTPException(404, "Post not found")
@@ -617,8 +617,8 @@ async def delete_comment(comment_id: uuid.UUID, current_user: User = Depends(get
             raise HTTPException(403, "Not allowed to delete this comment")
 
         post.comments_count = max((post.comments_count or 0) - 1, 0)
-        await db.delete(comment)
-        await db.commit()
+        await query_dao.delete(db, comment)
+        await query_dao.commit(db)
         logger.info(f"Plaza comment {comment_id} deleted by user {current_user.id} (admin={is_admin})")
         return {"deleted": True}
 
