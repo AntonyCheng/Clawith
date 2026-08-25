@@ -1,6 +1,5 @@
 """Microsoft Teams Bot Channel API routes."""
 
-import hashlib
 import hmac
 import json
 import os
@@ -9,7 +8,8 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from jose import JWTError, jwk, jwt
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,19 +17,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.permissions import check_agent_access, is_agent_creator
 from app.core.security import get_current_user
-from app.database import async_session as _async_session, get_db
+from app.database import get_db
 from app.models.agent import Agent as AgentModel
-from app.models.audit import ChatMessage
 from app.models.channel_config import ChannelConfig
 from app.models.user import User
 from app.schemas.schemas import ChannelConfigOut
+from app.services.agent_runtime.channel_chat import (
+    channel_message_id,
+    enqueue_channel_chat_runtime,
+)
 from app.services.channel_session import find_or_create_channel_session
-from app.api.feishu import _call_llm_with_config, _load_agent_and_model
-from app.services.agent_tools import channel_file_sender as _cfs_s
-from app.core.security import hash_password as _hp
-from pathlib import Path as _Path
-import asyncio as _asyncio
-import random as _random
+
+from app.api.feishu import _load_agent_and_model
 
 settings = get_settings()
 
@@ -39,6 +38,52 @@ TEAMS_MSG_LIMIT = 28000  # Teams message char limit (approx 28KB)
 
 # In-memory cache for OAuth tokens
 _teams_tokens: dict[str, dict] = {}  # agent_id -> {access_token, expires_at}
+
+_BOT_FRAMEWORK_OPENID_CONFIG = "https://login.botframework.com/v1/.well-known/openidconfiguration"
+_BOT_FRAMEWORK_ISSUER = "https://api.botframework.com"
+
+
+async def _validate_teams_callback(
+    authorization: str | None,
+    activity: dict,
+    config: ChannelConfig,
+) -> bool:
+    """Verify a Bot Framework JWT and bind its serviceUrl to the activity."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return False
+    token = authorization[7:].strip()
+    app_id = (config.app_id or "").strip()
+    service_url = str(activity.get("serviceUrl") or "")
+    if not token or not app_id or not service_url:
+        return False
+    try:
+        header = jwt.get_unverified_header(token)
+        algorithm = header.get("alg")
+        key_id = header.get("kid")
+        if not algorithm or algorithm == "none" or not key_id:
+            return False
+        async with httpx.AsyncClient(timeout=10) as client:
+            metadata_response = await client.get(_BOT_FRAMEWORK_OPENID_CONFIG)
+            metadata_response.raise_for_status()
+            metadata = metadata_response.json()
+            jwks_response = await client.get(metadata["jwks_uri"])
+            jwks_response.raise_for_status()
+            keys = jwks_response.json().get("keys", [])
+        key_data = next((item for item in keys if item.get("kid") == key_id), None)
+        if not key_data:
+            return False
+        claims = jwt.decode(
+            token,
+            jwk.construct(key_data, algorithm),
+            algorithms=[algorithm],
+            audience=app_id,
+            issuer=_BOT_FRAMEWORK_ISSUER,
+            options={"leeway": 300},
+        )
+        claimed_service_url = str(claims.get("serviceurl") or claims.get("serviceUrl") or "")
+        return bool(claimed_service_url) and hmac.compare_digest(claimed_service_url, service_url)
+    except (JWTError, KeyError, TypeError, ValueError, httpx.HTTPError):
+        return False
 
 
 async def _get_teams_access_token(config: ChannelConfig) -> str | None:
@@ -77,7 +122,7 @@ async def _get_teams_access_token(config: ChannelConfig) -> str | None:
             await credential.close()
             return token.token
         except ImportError:
-            logger.error(f"Teams: azure-identity package not installed. Install it with: pip install azure-identity")
+            logger.error("Teams: azure-identity package not installed. Install it with: pip install azure-identity")
             return None
         except Exception as e:
             logger.exception(f"Teams: Failed to get access token via managed identity for agent {agent_id}: {e}")
@@ -109,7 +154,7 @@ async def _get_teams_access_token(config: ChannelConfig) -> str | None:
                     error_description = error_json.get("error_description", "No description")
                     error_code = error_json.get("error", "unknown")
                     logger.error(f"Teams: OAuth token request failed for agent {agent_id}: status={resp.status_code}, error={error_code}, description={error_description}")
-                except:
+                except Exception:
                     logger.error(f"Teams: OAuth token request failed for agent {agent_id}: status={resp.status_code}, response={error_body[:500]}")
                 logger.error(f"Teams: Token URL={token_url}, tenant_id={tenant_id}, client_id={app_id[:20]}...")
                 return None
@@ -131,7 +176,7 @@ async def _get_teams_access_token(config: ChannelConfig) -> str | None:
                 error_description = error_json.get("error_description", "No description")
                 error_code = error_json.get("error", "unknown")
                 logger.error(f"Teams: OAuth token HTTP error for agent {agent_id}: status={e.response.status_code}, error={error_code}, description={error_description}")
-        except:
+        except Exception:
             logger.error(f"Teams: OAuth token HTTP error for agent {agent_id}: status={e.response.status_code if hasattr(e, 'response') and e.response else 'unknown'}, response={error_body[:500]}")
         logger.error(f"Teams: Token URL={token_url}, tenant_id={tenant_id}, client_id={app_id[:20]}...")
         return None
@@ -195,7 +240,7 @@ async def _send_teams_message_single_chunk(access_token: str, service_url: str, 
                     error_description = error_json.get("error", {}).get("message", error_json.get("message", "No description"))
                     error_code = error_json.get("error", {}).get("code", "unknown")
                     logger.error(f"Teams: Failed to send message: status={resp.status_code}, error={error_code}, description={error_description}")
-                except:
+                except Exception:
                     logger.error(f"Teams: Failed to send message: status={resp.status_code}, response={error_body[:500]}")
                 logger.error(f"Teams: POST URL={post_url}, conversation_id={conversation_id}, service_url={service_url}")
             resp.raise_for_status()
@@ -208,7 +253,7 @@ async def _send_teams_message_single_chunk(access_token: str, service_url: str, 
                 error_description = error_json.get("error", {}).get("message", error_json.get("message", "No description"))
                 error_code = error_json.get("error", {}).get("code", "unknown")
                 logger.error(f"Teams: HTTP error sending message: status={e.response.status_code}, error={error_code}, description={error_description}")
-        except:
+        except Exception:
             logger.error(f"Teams: HTTP error sending message: status={e.response.status_code if hasattr(e, 'response') and e.response else 'unknown'}, response={error_body[:500]}")
         logger.error(f"Teams: POST URL={post_url}, conversation_id={conversation_id}, service_url={service_url}")
         raise
@@ -233,9 +278,12 @@ async def configure_teams_channel(
     tenant_id = data.get("tenant_id", "").strip()  # Optional: for single-tenant apps
     use_managed_identity = data.get("use_managed_identity", False)  # Optional: use Azure Managed Identity
     
-    # Validate: either managed identity OR app_id + app_secret required
-    if not use_managed_identity and (not app_id or not app_secret):
-        raise HTTPException(status_code=422, detail="Either use_managed_identity must be enabled, or app_id and app_secret are required")
+    # The App ID is required to verify the incoming Bot Framework JWT audience.
+    if not app_id or (not use_managed_identity and not app_secret):
+        raise HTTPException(
+            status_code=422,
+            detail="app_id is required; app_secret is required unless managed identity is enabled",
+        )
 
     result = await db.execute(
         select(ChannelConfig).where(
@@ -245,7 +293,7 @@ async def configure_teams_channel(
     )
     existing = result.scalar_one_or_none()
     if existing:
-        existing.app_id = app_id if not use_managed_identity else existing.app_id
+        existing.app_id = app_id
         existing.app_secret = app_secret if not use_managed_identity else existing.app_secret
         existing.is_configured = True
         # Store tenant_id and use_managed_identity in extra_config
@@ -269,7 +317,7 @@ async def configure_teams_channel(
     config = ChannelConfig(
         agent_id=agent_id,
         channel_type="microsoft_teams",
-        app_id=app_id if not use_managed_identity else None,
+        app_id=app_id,
         app_secret=app_secret if not use_managed_identity else None,
         is_configured=True,
         extra_config=extra_config,
@@ -384,11 +432,19 @@ async def teams_event_webhook(
             logger.warning(f"Teams: Webhook received for unconfigured agent {agent_id}")
             return Response(status_code=404)
 
-        # Extract serviceUrl from the activity for sending replies
+        if not await _validate_teams_callback(
+            request.headers.get("authorization"), activity, config
+        ):
+            logger.warning("Teams: Rejected unauthenticated callback for agent {}", agent_id)
+            return Response(status_code=401)
+
+        # This value is now authenticated by the JWT serviceUrl claim above.
         service_url = activity.get("serviceUrl")
         if service_url:
             if config.extra_config.get("service_url") != service_url:
-                config.extra_config["service_url"] = service_url
+                updated_extra_config = dict(config.extra_config or {})
+                updated_extra_config["service_url"] = service_url
+                config.extra_config = updated_extra_config
                 config.is_connected = True
                 await db.flush()
                 await db.commit()
@@ -435,8 +491,8 @@ async def teams_event_webhook(
         # Load agent (must happen before user resolution for tenant_id)
         agent_r = await db.execute(select(AgentModel).where(AgentModel.id == agent_id))
         agent_obj = agent_r.scalar_one_or_none()
-        from app.models.agent import DEFAULT_CONTEXT_WINDOW_SIZE
-        ctx_size = (agent_obj.context_window_size or DEFAULT_CONTEXT_WINDOW_SIZE) if agent_obj else DEFAULT_CONTEXT_WINDOW_SIZE
+        if agent_obj is None:
+            return Response(status_code=404)
 
         # Find-or-create platform user for this Teams sender via unified service
         from app.services.channel_user_service import channel_user_service
@@ -469,116 +525,32 @@ async def teams_event_webhook(
             first_message_title=user_text,
             is_group=_is_group_teams,
             group_name=activity.get("conversation", {}).get("name") or (f"Teams Group {conversation_id[:8]}" if _is_group_teams else None),
+            created_by_user_id=platform_user_id,
         )
-        session_conv_id = str(sess.id)
-        history_r = await db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.agent_id == agent_id, ChatMessage.conversation_id == session_conv_id)
-            .order_by(ChatMessage.created_at.desc())
-            .limit(ctx_size)
+        _, model, _ = await _load_agent_and_model(db, agent_id)
+        await enqueue_channel_chat_runtime(
+            db,
+            agent=agent_obj,
+            user=platform_user,
+            session=sess,
+            model=model,
+            content=user_text,
+            source_channel="microsoft_teams",
+            channel_delivery_target={
+                "conversation_id": conversation_id,
+                "reply_to_id": reply_to_id,
+                "bot_account": dict(activity.get("recipient") or {}),
+                "recipient": dict(activity.get("from") or {}),
+            },
+            message_id=channel_message_id(
+                agent_id,
+                "microsoft_teams",
+                activity_id,
+            ),
         )
-        from app.services.llm.utils import convert_chat_messages_to_llm_format as _conv
-        history = _conv(reversed(history_r.scalars().all()))
-
-        # Save user message
-        db.add(ChatMessage(agent_id=agent_id, user_id=platform_user_id, role="user", content=user_text, conversation_id=session_conv_id))
-        sess.last_message_at = datetime.now(timezone.utc)
-
-        # Pre-load agent/model for LLM call before releasing DB connection
-        _agent_model, _llm_model, _fallback_model = await _load_agent_and_model(db, agent_id)
 
         await db.commit()
-        # ── Phase 1 complete: release connection before slow LLM call ──
         await db.close()
-
-        # Set channel_file_sender contextvar for agent → user file delivery
-        async def _teams_file_sender(file_path, msg: str = ""):
-            _fp = _Path(file_path)
-            use_mi = config.extra_config.get("use_managed_identity", False)
-            has_creds = (config.app_id and config.app_secret) or use_mi
-            if not has_creds or not conversation_id:
-                return
-            # For simplicity, just send file info as text for now
-            file_msg_activity = {
-                "type": "message",
-                "conversation": {"id": conversation_id},
-                "replyToId": reply_to_id,
-                "text": f"Agent sent file: {_fp.name} (Note: file content not directly supported yet, but I can tell you about it: {msg})",
-            }
-            await _send_teams_message(config, conversation_id, file_msg_activity)
-
-        _cfs_s_token = _cfs_s.set(_teams_file_sender)
-
-        # Call LLM (no DB session needed)
-        try:
-            reply_text = await _call_llm_with_config(
-                _agent_model, _llm_model, _fallback_model,
-                agent_id,
-                user_text,
-                history=history,
-                user_id=platform_user_id,
-                session_id=session_conv_id,
-            )
-            logger.info(f"Teams: LLM reply generated: {reply_text[:80]}")
-        except Exception as e:
-            logger.exception(f"Teams: Failed to call LLM for agent {agent_id}: {e}")
-            reply_text = "Sorry, I encountered an error processing your message."
-        finally:
-            _cfs_s.reset(_cfs_s_token)
-
-        # Save reply (new short transaction)
-        try:
-            async with _async_session() as _save_db:
-                _save_db.add(ChatMessage(agent_id=agent_id, user_id=platform_user_id, role="assistant", content=reply_text, conversation_id=session_conv_id))
-                from app.models.chat_session import ChatSession
-                _sess_r = await _save_db.execute(
-                    select(ChatSession).where(ChatSession.id == uuid.UUID(session_conv_id))
-                )
-                _sess_fresh = _sess_r.scalar_one_or_none()
-                if _sess_fresh:
-                    _sess_fresh.last_message_at = datetime.now(timezone.utc)
-                await _save_db.commit()
-            logger.info(f"Teams: Saved reply to database for conversation {conversation_id}")
-        except Exception as e:
-            logger.exception(f"Teams: Failed to save reply to database: {e}")
-
-        # Send to Teams
-        use_managed_identity = config.extra_config.get("use_managed_identity", False)
-        has_credentials = (config.app_id and config.app_secret) or use_managed_identity
-        if has_credentials and conversation_id:
-            try:
-                # Get bot's channel account ID from the incoming activity's recipient field
-                # The recipient in the incoming message is the bot itself
-                bot_channel_account = activity.get("recipient", {})
-                if not bot_channel_account.get("id"):
-                    # Fallback: use app_id if recipient not available
-                    if config.app_id:
-                        bot_channel_account = {"id": config.app_id}
-                    else:
-                        logger.error(f"Teams: Cannot determine bot channel account ID - no recipient in activity and no app_id configured")
-                        raise ValueError("Cannot determine bot channel account ID")
-                
-                # Get the user (sender) from the incoming activity's from field
-                user_account = activity.get("from", {})
-                if not user_account.get("id"):
-                    user_account = {"id": sender_id, "name": sender_name}
-                
-                reply_activity = {
-                    "type": "message",
-                    "from": bot_channel_account,  # Required: Bot's channel account ID (from incoming activity's recipient)
-                    "conversation": {"id": conversation_id},
-                    "recipient": user_account,  # The user who sent the message (from incoming activity's from)
-                    "replyToId": reply_to_id,  # Reply to the specific incoming message
-                    "text": reply_text,
-                }
-                logger.info(f"Teams: Attempting to send reply to conversation {conversation_id}, from={bot_channel_account.get('id')}, recipient={user_account.get('id')}")
-                await _send_teams_message(config, conversation_id, reply_activity)
-                logger.info(f"Teams: Successfully sent reply to Teams")
-            except Exception as e:
-                logger.exception(f"Teams: Failed to send message to Teams: {e}")
-        else:
-            use_mi = config.extra_config.get("use_managed_identity", False)
-            logger.warning(f"Teams: Cannot send reply - missing credentials (managed_identity={use_mi}, app_id={bool(config.app_id)}, app_secret={bool(config.app_secret)}), conversation_id={bool(conversation_id)}")
 
         return {"ok": True}
     except Exception as e:

@@ -3,26 +3,28 @@
 import uuid
 from loguru import logger
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import String, cast, select, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_user
+from app.core.permissions import can_manage_agent
 from app.database import get_db
 from app.models.tool import Tool, AgentTool
 from app.models.user import User
 from app.services.tool_config import (
-    SENSITIVE_FIELD_KEYS,
-    delete_tenant_tool_config,
     decrypt_sensitive_fields,
     encrypt_sensitive_fields,
     get_sensitive_keys,
-    get_tenant_tool_config,
     get_tool_company_config,
     mask_sensitive_fields,
     meaningful_config,
     set_tenant_tool_config,
+)
+from app.services.resource_discovery import (
+    _get_smithery_api_key,
+    get_smithery_connection_status,
 )
 
 router = APIRouter(prefix="/tools", tags=["tools"])
@@ -59,7 +61,7 @@ def _agent_visible_tool_clause(agent_tenant_id: uuid.UUID | None, assignments: d
     - explicitly assigned tools are always visible
     """
     clauses = [Tool.source == "builtin"]
-    admin_cond = (Tool.tenant_id == None)
+    admin_cond = Tool.tenant_id.is_(None)
     if agent_tenant_id:
         admin_cond = admin_cond | (Tool.tenant_id == agent_tenant_id)
     clauses.append((Tool.source == "admin") & admin_cond)
@@ -88,13 +90,85 @@ def _tool_record_visible_to_agent(
     return False
 
 
+def _smithery_authorization_provider(
+    tool: Tool,
+    assignment: AgentTool | None,
+) -> str | None:
+    if tool.type != "mcp" or not assignment:
+        return None
+    config = assignment.config or {}
+    if config.get("smithery_namespace") and config.get("smithery_connection_id"):
+        return "smithery"
+    return None
+
+
+async def _load_assigned_smithery_connection(
+    db: AsyncSession,
+    agent_id: uuid.UUID,
+    tool_id: uuid.UUID,
+) -> dict[str, str] | None:
+    assignment_r = await db.execute(
+        select(AgentTool).where(
+            AgentTool.agent_id == agent_id,
+            AgentTool.tool_id == tool_id,
+        )
+    )
+    assignment = assignment_r.scalar_one_or_none()
+    if not assignment:
+        return None
+
+    tool_r = await db.execute(select(Tool).where(Tool.id == tool_id))
+    tool = tool_r.scalar_one_or_none()
+    if not tool or _smithery_authorization_provider(tool, assignment) != "smithery":
+        return None
+
+    config = assignment.config or {}
+    namespace = str(config.get("smithery_namespace") or "").strip()
+    connection_id = str(config.get("smithery_connection_id") or "").strip()
+    if not namespace or not connection_id:
+        return None
+    return {"namespace": namespace, "connection_id": connection_id}
+
+
 def _resolve_target_tenant_id(current_user: User, tenant_id: str | None = None) -> uuid.UUID | None:
+    """Resolve a requested tenant and reject cross-tenant access by non-platform admins."""
     if tenant_id:
         try:
-            return uuid.UUID(tenant_id)
+            target_tenant_id = uuid.UUID(tenant_id)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid tenant_id format")
-    return current_user.tenant_id
+    else:
+        target_tenant_id = current_user.tenant_id
+
+    if target_tenant_id != current_user.tenant_id and current_user.role != "platform_admin":
+        raise HTTPException(status_code=403, detail="No access to this tenant")
+    return target_tenant_id
+
+
+def _require_tool_manager(current_user: User) -> None:
+    """Restrict tenant tool administration to organization and platform administrators."""
+    if current_user.role not in ("platform_admin", "org_admin"):
+        raise HTTPException(status_code=403, detail="Tool management permission required")
+
+
+async def _require_agent_tool_manager(
+    db: AsyncSession,
+    current_user: User,
+    agent_id: uuid.UUID,
+):
+    """Load an agent only when the caller may manage its configuration."""
+    agent = await _load_agent_for_tool_scope(db, agent_id)
+    if current_user.role == "platform_admin":
+        return agent
+    if not await can_manage_agent(db, current_user, agent):
+        raise HTTPException(status_code=403, detail="Agent manage permission required")
+    return agent
+
+
+def _require_tool_record_access(current_user: User, tool: Tool) -> None:
+    """Ensure a tenant administrator cannot mutate another tenant's tool record."""
+    if tool.tenant_id is not None:
+        _resolve_target_tenant_id(current_user, str(tool.tenant_id))
 
 
 def _get_sensitive_keys(config_schema: dict | None = None) -> set[str]:
@@ -157,6 +231,7 @@ async def list_tools(
     db: AsyncSession = Depends(get_db),
 ):
     """List platform tools scoped by tenant (builtin + tenant-specific)."""
+    _require_tool_manager(current_user)
     query = (
         select(Tool)
         .where(Tool.source.in_(["builtin", "admin"]))
@@ -166,7 +241,7 @@ async def list_tools(
     target_tenant_id = _resolve_target_tenant_id(current_user, tenant_id)
     if target_tenant_id:
         from sqlalchemy import or_ as _or
-        query = query.where(_or(Tool.tenant_id == None, Tool.tenant_id == target_tenant_id))
+        query = query.where(_or(Tool.tenant_id.is_(None), Tool.tenant_id == target_tenant_id))
     result = await db.execute(query)
     tools = result.scalars().all()
     response = []
@@ -187,7 +262,7 @@ async def list_tools(
             "enabled": t.enabled,
             "is_default": t.is_default,
             "source": t.source,
-            "config": company_config,
+            "config": mask_sensitive_fields(company_config, t.config_schema),
             "config_schema": t.config_schema or {},
             "created_at": t.created_at.isoformat() if t.created_at else None,
         })
@@ -206,6 +281,7 @@ async def create_tool(
     own tenant but can be overridden via data.tenant_id. This allows platform
     admins to import MCP tools while viewing another company's settings page.
     """
+    _require_tool_manager(current_user)
     # Resolve target tenant: explicit payload value takes priority so that
     # platform admins importing tools for another company work correctly.
     target_tenant_id = _resolve_target_tenant_id(current_user, data.tenant_id)
@@ -253,12 +329,16 @@ async def update_tools_bulk(
     db: AsyncSession = Depends(get_db),
 ):
     """Bulk update the enabled status of multiple tools."""
+    _require_tool_manager(current_user)
     tool_ids = [uuid.UUID(u.tool_id) for u in updates]
     result = await db.execute(select(Tool).where(Tool.id.in_(tool_ids)))
     tools_map = {str(t.id): t for t in result.scalars().all()}
     
     for update in updates:
         if update.tool_id in tools_map:
+            _require_tool_record_access(current_user, tools_map[update.tool_id])
+            if tools_map[update.tool_id].source == "builtin" and current_user.role != "platform_admin":
+                raise HTTPException(status_code=403, detail="Platform admin permission required")
             tools_map[update.tool_id].enabled = update.enabled
             
     await db.commit()
@@ -273,10 +353,12 @@ async def update_tool(
     db: AsyncSession = Depends(get_db),
 ):
     """Update a tool."""
+    _require_tool_manager(current_user)
     result = await db.execute(select(Tool).where(Tool.id == tool_id))
     tool = result.scalar_one_or_none()
     if not tool:
         raise HTTPException(status_code=404, detail="Tool not found")
+    _require_tool_record_access(current_user, tool)
 
     update_data = data.model_dump(exclude_unset=True)
     target_tenant_id = _resolve_target_tenant_id(current_user, update_data.pop("tenant_id", None))
@@ -289,6 +371,9 @@ async def update_tool(
             await set_tenant_tool_config(db, target_tenant_id, tool.name, config_value, tool.config_schema)
         else:
             update_data["config"] = _encrypt_sensitive_fields(config_value, tool.config_schema)
+
+    if tool.source == "builtin" and update_data and current_user.role != "platform_admin":
+        raise HTTPException(status_code=403, detail="Platform admin permission required")
 
     for field, value in update_data.items():
         setattr(tool, field, value)
@@ -303,10 +388,12 @@ async def delete_tool(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a tool (only non-builtin)."""
+    _require_tool_manager(current_user)
     result = await db.execute(select(Tool).where(Tool.id == tool_id))
     tool = result.scalar_one_or_none()
     if not tool:
         raise HTTPException(status_code=404, detail="Tool not found")
+    _require_tool_record_access(current_user, tool)
     if tool.type == "builtin":
         raise HTTPException(status_code=400, detail="Cannot delete builtin tools")
 
@@ -324,12 +411,11 @@ async def get_agent_tools(
     db: AsyncSession = Depends(get_db),
 ):
     """Get tools for a specific agent with their enabled status."""
-    from app.services.agent_tools import _agent_has_feishu
-    has_feishu = await _agent_has_feishu(agent_id)
-
     # Determine if this is a system agent (e.g. OKR Agent).
     # System agents can see all tools; regular agents cannot see okr_agent_only tools.
-    agent_obj = await _load_agent_for_tool_scope(db, agent_id)
+    agent_obj = await _require_agent_tool_manager(db, current_user, agent_id)
+    from app.services.agent_tools import _agent_has_feishu
+    has_feishu = await _agent_has_feishu(agent_id)
     is_system_agent = bool(agent_obj and agent_obj.is_system)
 
     # Agent-specific assignments
@@ -338,7 +424,7 @@ async def get_agent_tools(
     # All tools visible within this agent's tenant boundary
     all_tools_r = await db.execute(
         select(Tool)
-        .where(Tool.enabled == True, _agent_visible_tool_clause(agent_obj.tenant_id, assignments))
+        .where(Tool.enabled.is_(True), _agent_visible_tool_clause(agent_obj.tenant_id, assignments))
         .order_by(Tool.category, Tool.name)
     )
     all_tools = all_tools_r.scalars().all()
@@ -400,6 +486,7 @@ async def get_agent_tools(
             "is_default": t.is_default,
             "mcp_server_name": t.mcp_server_name,
             "mcp_server_url": t.mcp_server_url,
+            "mcp_authorization_provider": _smithery_authorization_provider(t, at),
             "source": t.source,
         })
     return result
@@ -413,7 +500,7 @@ async def update_agent_tools(
     db: AsyncSession = Depends(get_db),
 ):
     """Update tool assignments for an agent."""
-    agent_obj = await _load_agent_for_tool_scope(db, agent_id)
+    agent_obj = await _require_agent_tool_manager(db, current_user, agent_id)
     assignments = await _load_agent_tool_assignments(db, agent_id)
     for u in updates:
         tool_id = uuid.UUID(u.tool_id)
@@ -427,7 +514,7 @@ async def update_agent_tools(
         if not tool_obj:
             raise HTTPException(status_code=404, detail="Tool not found")
 
-        # System-category tools (e.g. finish) are protocol-level and
+        # System-category tools are protocol-level and
         # must always remain enabled — reject any attempt to disable them.
         if tool_obj.category == "system" and not u.enabled:
             continue
@@ -443,6 +530,83 @@ async def update_agent_tools(
             db.add(AgentTool(agent_id=agent_id, tool_id=tool_id, enabled=u.enabled))
     await db.commit()
     return {"ok": True}
+
+
+# ─── Smithery MCP Authorization Status ─────────────────────
+@router.get(
+    "/agents/{agent_id}/mcp-tools/{tool_id}/authorization-status",
+)
+async def get_mcp_authorization_status(
+    agent_id: uuid.UUID,
+    tool_id: uuid.UUID,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read one assigned Smithery connection for an authorized manager."""
+    response.headers["Cache-Control"] = "no-store"
+    no_store_headers = {"Cache-Control": "no-store"}
+
+    try:
+        await _require_agent_tool_manager(db, current_user, agent_id)
+
+        connection = await _load_assigned_smithery_connection(
+            db,
+            agent_id,
+            tool_id,
+        )
+        if not connection:
+            raise HTTPException(
+                status_code=404,
+                detail="Assigned Smithery tool not found",
+            )
+
+        api_key = await _get_smithery_api_key(agent_id)
+        if not api_key:
+            return {
+                "provider": "smithery",
+                "state": "unavailable",
+                "connected": False,
+            }
+
+        provider_status = await get_smithery_connection_status(
+            api_key,
+            connection["namespace"],
+            connection["connection_id"],
+        )
+        state = provider_status.get("state")
+        if state == "connected":
+            return {
+                "provider": "smithery",
+                "state": "connected",
+                "connected": True,
+            }
+        if state == "auth_required" and provider_status.get("authorization_url"):
+            return {
+                "provider": "smithery",
+                "state": "auth_required",
+                "connected": False,
+                "authorization_url": provider_status["authorization_url"],
+            }
+        return {
+            "provider": "smithery",
+            "state": "unavailable",
+            "connected": False,
+        }
+    except HTTPException as error:
+        raise HTTPException(
+            status_code=error.status_code,
+            detail=error.detail,
+            headers={**(error.headers or {}), **no_store_headers},
+        ) from error
+    except Exception:
+        # Fail closed without exposing Provider URLs, credentials, or internal
+        # exception details through an error response that a browser may cache.
+        raise HTTPException(
+            status_code=503,
+            detail="MCP authorization status unavailable",
+            headers=no_store_headers,
+        ) from None
 
 
 # ─── MCP Server Testing ────────────────────────────────────
@@ -464,6 +628,7 @@ async def test_mcp_connection(
     - URL-embedded key (e.g. ?tavilyApiKey=xxx) — include in server_url.
     - Bearer token — pass via api_key field; sent as Authorization header.
     """
+    _require_tool_manager(current_user)
     from app.services.mcp_client import MCPClient
 
     try:
@@ -501,15 +666,8 @@ async def update_mcp_server(
     2. URL query param (e.g. ?tavilyApiKey=xxx) — extracted from the URL
        and converted to Bearer by MCPClient automatically.
     """
-    # Resolve target tenant
-    target_tenant_id: uuid.UUID | None = None
-    if data.tenant_id:
-        try:
-            target_tenant_id = uuid.UUID(data.tenant_id)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid tenant_id format")
-    else:
-        target_tenant_id = current_user.tenant_id
+    _require_tool_manager(current_user)
+    target_tenant_id = _resolve_target_tenant_id(current_user, data.tenant_id)
 
     # Load all tools from this server under the target tenant
     result = await db.execute(
@@ -549,6 +707,7 @@ async def list_agent_installed_tools(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin endpoint: list user-installed tools scoped by tenant."""
+    _require_tool_manager(current_user)
     from app.models.agent import Agent
     query = (
         select(AgentTool, Tool, Agent)
@@ -558,7 +717,8 @@ async def list_agent_installed_tools(
         .order_by(AgentTool.created_at.desc())
     )
     # Scope by tenant: only show tools installed by agents in this tenant
-    tid = tenant_id or (str(current_user.tenant_id) if current_user.tenant_id else None)
+    target_tenant_id = _resolve_target_tenant_id(current_user, tenant_id)
+    tid = str(target_tenant_id) if target_tenant_id else None
     if tid:
         from app.models.agent import Agent as Ag
         # Some local/prod databases still have agents.tenant_id as varchar from
@@ -599,10 +759,12 @@ async def delete_agent_tool(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin: remove an agent-tool assignment. Also deletes the tool record if no other agents use it."""
+    _require_tool_manager(current_user)
     at_r = await db.execute(select(AgentTool).where(AgentTool.id == agent_tool_id))
     at = at_r.scalar_one_or_none()
     if not at:
         raise HTTPException(status_code=404, detail="Agent tool assignment not found")
+    await _require_agent_tool_manager(db, current_user, at.agent_id)
     tool_id = at.tool_id
     await db.delete(at)
     await db.flush()
@@ -635,11 +797,13 @@ async def get_agent_tool_config(
     Both configs are decrypted before returning. Global sensitive fields are
     masked so the frontend can show a key is configured without exposing it.
     """
+    agent = await _require_agent_tool_manager(db, current_user, agent_id)
     tool_r = await db.execute(select(Tool).where(Tool.id == tool_id))
     tool = tool_r.scalar_one_or_none()
-    if not tool:
+    if not tool or not _tool_record_visible_to_agent(
+        tool, agent.tenant_id, await _load_agent_tool_assignments(db, agent_id)
+    ):
         raise HTTPException(status_code=404, detail="Tool not found")
-    agent = await _load_agent_for_tool_scope(db, agent_id)
     at_r = await db.execute(
         select(AgentTool).where(AgentTool.agent_id == agent_id, AgentTool.tool_id == tool_id)
     )
@@ -656,7 +820,7 @@ async def get_agent_tool_config(
     # Merged: agent overrides take precedence over global defaults.
     # Use raw (non-masked) global as the base so the agent inherits actual values
     # at runtime, but the UI will show masked_global for display hints.
-    merged = {**raw_global, **(raw_agent or {})}
+    merged = {**masked_global, **(raw_agent or {})}
     return {
         "global_config": masked_global,
         "agent_config": raw_agent or {},
@@ -674,6 +838,7 @@ async def update_agent_tool_config(
     db: AsyncSession = Depends(get_db),
 ):
     """Save per-agent config override for a tool."""
+    agent = await _require_agent_tool_manager(db, current_user, agent_id)
     # Check permission: only platform_admin and org_admin can modify allow_network
     if "allow_network" in data.config:
         if current_user.role not in ("platform_admin", "org_admin"):
@@ -685,6 +850,10 @@ async def update_agent_tool_config(
     # Encrypt sensitive fields using the tool's config_schema for field type awareness
     tool_r2 = await db.execute(select(Tool).where(Tool.id == tool_id))
     tool_for_schema = tool_r2.scalar_one_or_none()
+    if not tool_for_schema or not _tool_record_visible_to_agent(
+        tool_for_schema, agent.tenant_id, await _load_agent_tool_assignments(db, agent_id)
+    ):
+        raise HTTPException(status_code=404, detail="Tool not found")
     encrypted_config = _encrypt_sensitive_fields(data.config, tool_for_schema.config_schema if tool_for_schema else None)
 
     at_r = await db.execute(
@@ -716,17 +885,16 @@ async def get_agent_tools_with_config(
     rather than Tool.config. We resolve those as part of the global config so
     the agent-level UI can show the inherited key hint.
     """
+    # Determine if this is a system agent (e.g. OKR Agent).
+    agent_obj2 = await _require_agent_tool_manager(db, current_user, agent_id)
     from app.services.agent_tools import _agent_has_feishu
     has_feishu = await _agent_has_feishu(agent_id)
-
-    # Determine if this is a system agent (e.g. OKR Agent).
-    agent_obj2 = await _load_agent_for_tool_scope(db, agent_id)
     is_system_agent2 = bool(agent_obj2 and agent_obj2.is_system)
 
     assignments = await _load_agent_tool_assignments(db, agent_id)
     all_tools_r = await db.execute(
         select(Tool)
-        .where(Tool.enabled == True, _agent_visible_tool_clause(agent_obj2.tenant_id, assignments))
+        .where(Tool.enabled.is_(True), _agent_visible_tool_clause(agent_obj2.tenant_id, assignments))
         .order_by(Tool.category, Tool.name)
     )
     all_tools = all_tools_r.scalars().all()
@@ -796,6 +964,7 @@ async def get_agent_tools_with_config(
             "is_default": t.is_default,
             "mcp_server_name": t.mcp_server_name,
             "mcp_server_url": t.mcp_server_url,
+            "mcp_authorization_provider": _smithery_authorization_provider(t, at),
             "config_schema": t.config_schema or {},
             "global_config": masked_global,
             "agent_config": raw_agent,
@@ -856,10 +1025,9 @@ async def get_category_config(
     Sensitive fields in global_config are masked for display.
     Company-level values always take precedence at runtime.
     """
-    from app.core.permissions import check_agent_access
     from app.models.channel_config import ChannelConfig
 
-    agent, _ = await check_agent_access(db, current_user, agent_id)
+    agent = await _require_agent_tool_manager(db, current_user, agent_id)
 
     # ── 1. Load company-level (global) config from Tool.config ──────────────
     # Find a tool in this category that actually has config data.
@@ -868,7 +1036,7 @@ async def get_category_config(
     all_cat_tools = await db.execute(
         select(Tool).where(
             Tool.category == category,
-            Tool.enabled == True,
+            Tool.enabled.is_(True),
             _agent_visible_tool_clause(agent.tenant_id, await _load_agent_tool_assignments(db, agent_id)),
         ).order_by((Tool.name != primary_tool_name) if primary_tool_name else Tool.name, Tool.name)
     )
@@ -910,7 +1078,7 @@ async def get_category_config(
     # ── 3. Build effective config ───────────────────────────────────────────
     # Priority: Agent config > Company config > Default
     # Agent can override company values by setting their own.
-    effective_config = {**raw_global, **raw_agent}
+    effective_config = {**masked_global, **raw_agent}
 
     return {
         "id": config_id,
@@ -934,10 +1102,10 @@ async def update_category_config(
     db: AsyncSession = Depends(get_db),
 ):
     """Update or create shared configuration for a tool category."""
-    from app.core.permissions import check_agent_access, is_agent_creator
+    from app.core.permissions import is_agent_creator
     from app.models.channel_config import ChannelConfig
 
-    agent, _ = await check_agent_access(db, current_user, agent_id)
+    agent = await _require_agent_tool_manager(db, current_user, agent_id)
     if not is_agent_creator(current_user, agent):
         raise HTTPException(status_code=403, detail="Only creator can configure category")
 
@@ -991,10 +1159,10 @@ async def delete_category_config(
     db: AsyncSession = Depends(get_db),
 ):
     """Remove shared configuration for a tool category."""
-    from app.core.permissions import check_agent_access, is_agent_creator
+    from app.core.permissions import is_agent_creator
     from app.models.channel_config import ChannelConfig
 
-    agent, _ = await check_agent_access(db, current_user, agent_id)
+    agent = await _require_agent_tool_manager(db, current_user, agent_id)
     if not is_agent_creator(current_user, agent):
         raise HTTPException(status_code=403, detail="Only creator can remove config")
 
@@ -1015,6 +1183,7 @@ async def test_category_config(
     db: AsyncSession = Depends(get_db),
 ):
     """Test connectivity for a tool category."""
+    await _require_agent_tool_manager(db, current_user, agent_id)
     if category == "atlassian":
         from app.api.atlassian import test_atlassian_channel
         return await test_atlassian_channel(agent_id, current_user, db)

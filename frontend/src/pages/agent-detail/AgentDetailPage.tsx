@@ -9,11 +9,13 @@ import { useToast } from '../../components/Toast/ToastProvider';
 import type { FileBrowserApi } from '../../components/FileBrowser';
 import FileBrowser from '../../components/FileBrowser';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
+import { DraftEditor as ExperienceDraftEditor, bodyExcerpt, type Draft as ExperienceDraft } from '../../components/ExperienceDraftEditor';
+import { EntryDrawer } from '../../components/ExperienceDetailDrawer';
 import PromptModal from '../../components/PromptModal';
 import { appendLiveCodeOutput, type LivePreviewState } from '../../components/AgentBayLivePanel';
 import AgentSidePanel, { SidePanelTab } from '../../components/AgentSidePanel';
 import type { WorkspaceActivity, WorkspaceLiveDraft } from '../../components/WorkspaceOperationPanel';
-import { activityApi, agentApi, channelApi, enterpriseApi, fileApi, focusApi, scheduleApi, skillApi, taskApi, tenantApi, triggerApi, uploadFileWithProgress } from '../../services/api';
+import { activityApi, agentApi, channelApi, enterpriseApi, experienceApi, fileApi, focusApi, scheduleApi, skillApi, taskApi, tenantApi, triggerApi, uploadFileWithProgress } from '../../services/api';
 import type { FocusApiItem } from '../../services/api';
 import ModelSwitcher from '../../components/ModelSwitcher';
 import { useAppStore } from '../../stores';
@@ -50,14 +52,44 @@ import {
     IconAlertTriangle,
 } from '@tabler/icons-react';
 import { useDropZone } from '../../hooks/useDropZone';
+import { useOlderHistoryGesture, usePrependScrollAnchor } from '../../hooks/useHistoryPaginationScroll';
+import { loadDirectHistoryTurn } from '../../services/directHistoryPagination';
 import ApprovalsTab from './tabs/ApprovalsTab';
 import { AGENT_DETAIL_TABS } from './agentDetailTabs';
 import MindTab from './tabs/MindTab';
 import SettingsTab from './tabs/SettingsTab';
 import SkillsTab from './tabs/SkillsTab';
 import ToolsTab from './tabs/ToolsTab';
+import AgentDirectory from './AgentDirectory';
 import { useAgentDetailRoute } from './hooks/useAgentDetailRoute';
+import {
+    activeRunForSession,
+    failClosedSessionActiveRun,
+    mergeSessionToolMessage,
+    mergeSessionToolMessages,
+    mergeInterruptedStreamMessage,
+    mergeTerminalAssistantMessage,
+    reduceSessionStreamChunk,
+    shouldPreserveInterruptedStream,
+    runtimeCompletionNeedsMessageRefresh,
+    runtimeTerminalPacketNeedsMessageRefresh,
+    sessionActiveRunFromResponse,
+    sessionRuntimeStateResponseIsValid,
+    type SessionActiveRun,
+    type ToolReconciliation,
+    toolReconciliationNeedsUserAction,
+    toolReconciliationsByCallId,
+    waitingSessionActiveRunHint,
+} from './sessionRuntimeState';
+import { belongsInOtherSessions } from './sessionVisibility';
+import { onboardingKickoffKey, shouldKickoffOnboarding } from './onboardingKickoff';
 import { fetchAuth } from './utils/fetchAuth';
+import {
+    formatRuntimeErrorDiagnostics,
+    normalizeRuntimeError,
+    runtimeErrorDisablesReconnect,
+    runtimeErrorMarksAgentExpired,
+} from '../../services/runtimeError';
 
 const WORKSPACE_TOOLS = new Set([
     'write_file',
@@ -362,6 +394,209 @@ function CopyMessageButton({ text }: { text: string }) {
     );
 }
 
+/** "沉淀为经验" — distill this message into a structured draft, then open review (P0-2). */
+function DistillButton({ text, sessionId }: { text: string; sessionId?: string | null }) {
+    const { id: agentId } = useParams<{ id: string }>();
+    const qc = useQueryClient();
+    const toast = useToast();
+    const [busy, setBusy] = React.useState(false);
+    const [draft, setDraft] = React.useState<ExperienceDraft | null>(null);
+    const handle = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!agentId || busy) return;
+        setBusy(true);
+        try {
+            // Distill only — nothing persists until the human confirms in the drawer below.
+            const f = await experienceApi.distill({ agent_id: agentId, content: text, session_id: sessionId || undefined });
+            setDraft({ ...f, origin_agent_id: agentId, origin_session_id: sessionId || null });
+        } catch (err) {
+            console.error('Distill failed', err);
+            toast.error('生成草稿失败，请重试');
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <>
+            <button
+                onClick={handle}
+                title={busy ? '正在提炼草稿…' : '沉淀为经验'}
+                disabled={busy}
+                style={{
+                    // No cursor:wait — that only rendered a spinner while the pointer happened to
+                    // rest on the button, so moving away made a running distill look dead.
+                    background: 'none', border: 'none', cursor: busy ? 'default' : 'pointer', padding: '2px',
+                    color: 'var(--text-tertiary)', opacity: busy ? 1 : 0.5, transition: 'opacity .15s, color .15s',
+                    display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', marginLeft: '6px', flexShrink: 0,
+                }}
+                onMouseEnter={e => { if (!busy) e.currentTarget.style.opacity = '1'; }}
+                onMouseLeave={e => { if (!busy) e.currentTarget.style.opacity = '0.5'; }}
+            >
+                {busy ? (
+                    // Same 13px footprint as the icon it replaces, so the message row doesn't shift.
+                    <svg className="distill-spinner" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <path d="M12 3a9 9 0 1 0 9 9" />
+                    </svg>
+                ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /><path d="M9 7h6M9 11h4" />
+                    </svg>
+                )}
+            </button>
+            {draft && (
+                <ExperienceDraftEditor
+                    draft={draft}
+                    docked
+                    autoExtractFailed={(draft as any).extracted === false}
+                    onClose={() => setDraft(null)}
+                    onSaved={() => { setDraft(null); qc.invalidateQueries({ queryKey: ['experience'] }); toast.success('沉淀成功'); }}
+                />
+            )}
+        </>
+    );
+}
+
+/** Renders a [[exp:<uuid>]] citation as a green inline pill: 「经验:<title 8>…」→ /plaza detail. */
+function ExperienceCitation({ id }: { id: string }) {
+    const qc = useQueryClient();
+    const {
+        data,
+        isPending: citationPending,
+        isError: citationError,
+    } = useQuery({ queryKey: ['exp-cite', id], queryFn: () => experienceApi.get(id), staleTime: 300000, retry: false });
+    // Opens the entry in a docked drawer over the conversation. Navigating to /plaza would
+    // tear the user out of the chat they're reading — the citation is a footnote, not an exit.
+    const [detail, setDetail] = React.useState(false);
+    const [editing, setEditing] = React.useState<ExperienceDraft | null>(null);
+    const title = data?.title || '';
+    const label = citationPending
+        ? '经验加载中'
+        : citationError
+            ? '经验已删除或不可访问'
+            : title
+                ? `经验:${title.slice(0, 8)}${title.length > 8 ? '…' : ''}`
+                : '经验（未命名）';
+    const unavailable = citationPending || citationError;
+    const refresh = () => {
+        qc.invalidateQueries({ queryKey: ['experience'] });
+        qc.invalidateQueries({ queryKey: ['exp-cite', id] });
+    };
+    return (
+        <>
+            <button
+                onClick={(e) => { e.stopPropagation(); if (data) setDetail(true); }}
+                title={citationError ? '该经验已删除、下架或你无权查看' : (title || label)}
+                disabled={!data}
+                style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 999,
+                    fontSize: 12, lineHeight: '18px',
+                    border: `1px solid ${unavailable ? 'var(--border-subtle)' : 'var(--success)'}`,
+                    color: unavailable ? 'var(--text-tertiary)' : 'var(--success)',
+                    background: unavailable ? 'var(--bg-tertiary)' : 'var(--success-subtle)',
+                    cursor: data ? 'pointer' : 'default', verticalAlign: 'middle', opacity: 1,
+                }}
+            >{label}</button>
+            {detail && (
+                <EntryDrawer
+                    entryId={id}
+                    docked
+                    onClose={() => setDetail(false)}
+                    onEdit={(entry) => { setDetail(false); setEditing(entry); }}
+                    onChanged={refresh}
+                />
+            )}
+            {editing && (
+                <ExperienceDraftEditor
+                    draft={editing}
+                    docked
+                    onClose={() => setEditing(null)}
+                    onSaved={() => { setEditing(null); refresh(); }}
+                    onDeleted={() => { setEditing(null); refresh(); }}
+                />
+            )}
+        </>
+    );
+}
+
+function ExperienceCitations({ ids }: { ids: string[] }) {
+    if (!ids.length) return null;
+    return (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+            {ids.map(id => <ExperienceCitation key={id} id={id} />)}
+        </div>
+    );
+}
+
+/**
+ * Renders a propose_experience_draft tool call as a review card. The agent writes
+ * nothing — clicking 编辑后沉淀为经验 opens the shared human-gated DraftEditor prefilled;
+ * a row is created only when the human confirms there.
+ */
+function ExperienceDraftCard({ args, sessionId }: { args: any; sessionId?: string | null }) {
+    const { id: agentId } = useParams<{ id: string }>();
+    const qc = useQueryClient();
+    const toast = useToast();
+    const [open, setOpen] = React.useState(false);
+    // tool args may arrive as an object or a JSON string.
+    const a = React.useMemo(() => {
+        if (args && typeof args === 'object') return args;
+        try { return JSON.parse(args || '{}'); } catch { return {}; }
+    }, [args]);
+    const toArr = (v: any) => Array.isArray(v) ? v : (typeof v === 'string' && v ? v.split(/[,，]/).map((s: string) => s.trim()).filter(Boolean) : []);
+    const prefill: ExperienceDraft = {
+        title: a.title || '', body: a.body || '', applicability: a.applicability || '', tags: toArr(a.tags),
+        origin_agent_id: agentId, origin_session_id: sessionId || null,
+    };
+    // The card is a summary — flatten the markdown body so section markers don't show up
+    // literally; the drawer renders it properly. `key` marks 适用与失效: required, and the
+    // part a reader's eye slides off.
+    const parts: { label: string; val: string; key?: boolean }[] = [
+        { label: '正文', val: bodyExcerpt(a.body) },
+        { label: '适用与失效', val: a.applicability, key: true },
+    ];
+    const tags = toArr(a.tags);
+    return (
+        <div className="exp-draft">
+            <div className="exp-draft-head">
+                <div className="exp-draft-head-l">
+                    <div className="exp-draft-tagrow">
+                        <span className="exp-draft-state">草稿</span>
+                    </div>
+                    <div className="exp-draft-title">{a.title || '未命名经验'}</div>
+                </div>
+                <div className="exp-draft-pending">待你确认 · 不自动入库</div>
+            </div>
+            <div className="exp-draft-divider" />
+            <div className="exp-draft-fields">
+                <div className="exp-draft-grid">
+                    {parts.map(p => (p.val ? (
+                        <React.Fragment key={p.label}>
+                            <div className={p.key ? 'exp-draft-lab-key' : 'exp-draft-lab'}>{p.label}</div>
+                            <div className="exp-draft-val">{p.val}</div>
+                        </React.Fragment>
+                    ) : null))}
+                </div>
+            </div>
+            {tags.length > 0 && (
+                <div className="exp-draft-tags">
+                    {tags.map((tg: string) => <span key={tg} className="exp-draft-tag">{tg}</span>)}
+                </div>
+            )}
+            <div className="exp-draft-foot">
+                <button className="exp-draft-btn" onClick={() => setOpen(true)}>编辑后沉淀为经验</button>
+            </div>
+            {open && (
+                <ExperienceDraftEditor
+                    draft={prefill}
+                    docked
+                    onClose={() => setOpen(false)}
+                    onSaved={() => { setOpen(false); qc.invalidateQueries({ queryKey: ['experience'] }); toast.success('沉淀成功'); }}
+                />
+            )}
+        </div>
+    );
+}
+
 type AccessUser = {
     id: string;
     name: string;
@@ -427,6 +662,7 @@ function AccessPermissionsPanel({
             body: JSON.stringify(payload),
         });
         queryClient.invalidateQueries({ queryKey: ['agent-permissions', agentId] });
+        queryClient.invalidateQueries({ queryKey: ['agent-directory', agentId] });
         queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
         queryClient.invalidateQueries({ queryKey: ['agents'] });
     };
@@ -448,13 +684,13 @@ function AccessPermissionsPanel({
             value: 'custom',
             icon: <IconLock size={14} stroke={1.8} />,
             label: isChinese ? '指定访问' : 'Custom',
-            desc: isChinese ? '指定可访问的平台用户；不可参与 Plaza。Agent 关系请在“关系”里配置。' : 'Choose platform users explicitly; Plaza is disabled. Agent relationships are configured in Relationships.',
+            desc: isChinese ? '指定成员和数字员工可见、可用；不可参与 Plaza。' : 'Only selected members and agents can see and use it; Plaza is disabled.',
         },
     ] as const;
 
     const accessLevels = [
         { val: 'use', label: <><IconEye size={13} stroke={1.8} /> {t('agent.settings.perm.useAccess', 'Use')}</>, desc: t('agent.settings.perm.useAccessDesc', 'Task, Chat, Tools, Skills, Workspace') },
-        { val: 'manage', label: <><IconSettings size={13} stroke={1.8} /> {t('agent.settings.perm.manageAccess', 'Manage')}</>, desc: t('agent.settings.perm.manageAccessDesc', 'Full access including Settings, Mind, Relationships') },
+        { val: 'manage', label: <><IconSettings size={13} stroke={1.8} /> {t('agent.settings.perm.manageAccess', 'Manage')}</>, desc: t('agent.settings.perm.manageAccessDesc', 'Full access including Settings, Mind, and Directory') },
     ];
 
     const setScope = async (scope: string) => {
@@ -807,7 +1043,7 @@ if (typeof document !== 'undefined' && !document.getElementById(_PULSE_STYLE_ID)
  */
 type AnalysisItem =
     | { type: 'thinking'; content: string }
-    | { type: 'tool'; name: string; args: any; status: 'running' | 'done'; result?: string };
+    | { type: 'tool'; toolCallId?: string; name: string; args: any; status: 'running' | 'done'; result?: string };
 
 type AnalysisToolMeta = {
     title: string;
@@ -951,8 +1187,40 @@ function describeAnalysis(items: AnalysisItem[], t: (k: string, opts?: any) => s
     return parts.join(', ');
 }
 
+function describeToolResolution(
+    reconciliation: ToolReconciliation,
+    t: (key: string, options?: any) => string,
+): string {
+    switch (reconciliation.resolutionStatus) {
+        case 'checking':
+            return t('agent.chat.workspaceChecking', '正在核验文件操作…');
+        case 'saved':
+            return reconciliation.savedCount
+                ? t('agent.chat.workspaceSavedCount', { count: reconciliation.savedCount, defaultValue: `Agent 的结果已保存（${reconciliation.savedCount} 个文件）` })
+                : t('agent.chat.workspaceSaved', 'Agent 的文件结果已保存');
+        case 'not_saved':
+            return t('agent.chat.workspaceNotSaved', '已保留源文件');
+        case 'partial': {
+            const saved = reconciliation.savedCount || 0;
+            const pending = reconciliation.pendingCount || 0;
+            return saved || pending
+                ? t('agent.chat.workspacePartialCount', { saved, pending, defaultValue: `已保存 ${saved} 个文件，仍有 ${pending} 个文件待核验` })
+                : t('agent.chat.workspacePartial', '部分文件已保存，仍有文件待核验');
+        }
+        case 'conflicted':
+            return reconciliation.conflictedCount
+                ? t('agent.chat.workspaceConflictCount', { count: reconciliation.conflictedCount, defaultValue: `${reconciliation.conflictedCount} 个文件内容有变化，等待处理` })
+                : t('agent.chat.workspaceConflictPending', '文件内容有变化，等待处理');
+        case 'unavailable':
+            return t('agent.chat.workspaceUnavailable', '暂时无法核验文件操作');
+        default:
+            return t('agent.chat.workspaceVerifying', '文件操作正在核验');
+    }
+}
+
 function AnalysisCard({
-    items, t, expanded, onToggle, isGroupRunning,
+    items, t, expanded, onToggle, isGroupRunning, chatActive, sessionId,
+    reconciliationsByToolCallId,
 }: {
     items: AnalysisItem[];
     t: (k: string, opts?: any) => string;
@@ -960,16 +1228,31 @@ function AnalysisCard({
     onToggle: () => void;
     /** True when parent isWaiting/isStreaming AND this is the last active group */
     isGroupRunning: boolean;
+    /** True while the chat is actively streaming/waiting (any turn in flight) */
+    chatActive?: boolean;
+    sessionId?: string | null;
+    reconciliationsByToolCallId: Map<string, ToolReconciliation>;
 }) {
+    // propose_experience_draft is a human-facing proposal, not a reasoning step —
+    // render it as an always-visible card outside the collapsible trace.
+    const proposeItems = items.filter(
+        (i): i is Extract<AnalysisItem, { type: 'tool' }> => i.type === 'tool' && (i as any).name === 'propose_experience_draft'
+    );
     const toolItems = items.filter(i => i.type === 'tool') as Extract<AnalysisItem, { type: 'tool' }>[];
     const hasTools = toolItems.length > 0;
     const hasRunningTool = toolItems.some(tc => tc.status === 'running');
-    const isRunning = hasRunningTool || (!hasTools && isGroupRunning);
+    // Stopped responding: a tool is still marked running but the chat is no longer streaming.
+    const stopped = hasRunningTool && chatActive === false;
+    const isRunning = !stopped && (hasRunningTool || (!hasTools && isGroupRunning));
     const runningTool = [...toolItems].reverse().find(tc => tc.status === 'running') ?? null;
-    const headerTitle = isRunning && runningTool ? getToolMeta(runningTool).title : describeAnalysis(items, t);
+    const headerTitle = isRunning && runningTool
+        ? getToolMeta(runningTool).title
+        : hasTools
+            ? t('agent.chat.toolCallsTotal', { count: toolItems.length })
+            : describeAnalysis(items, t);
 
     return (
-        <div className={`analysis-trace${expanded ? ' analysis-trace--open' : ''}${isRunning ? ' analysis-trace--running' : ''}`}>
+        <div className={`analysis-trace${expanded ? ' analysis-trace--open' : ''}${isRunning ? ' analysis-trace--running' : ''}${stopped ? ' analysis-trace--stopped' : ''}`}>
             <div className="analysis-trace-shell">
                 <button
                     className="analysis-trace-header"
@@ -989,10 +1272,14 @@ function AnalysisCard({
                         stroke={1.8}
                     />
                 </button>
+                {proposeItems.map((it, i) => (
+                    <ExperienceDraftCard key={`propose-${i}`} args={(it as any).args} sessionId={sessionId} />
+                ))}
                 {expanded && (
                     <div className="analysis-trace-body">
                         {items.map((item, idx) => {
                             const isLast = idx === items.length - 1;
+                            if (item.type === 'tool' && (item as any).name === 'propose_experience_draft') return null;
                             if (item.type === 'thinking') {
                                 const itemPreview = item.content.length > 360 ? item.content.slice(0, 360).trimEnd() + '...' : item.content;
                                 return (
@@ -1030,6 +1317,15 @@ function AnalysisCard({
                             const argsStr = tc.args && Object.keys(tc.args).length > 0
                                 ? JSON.stringify(tc.args, null, 2) : '';
                             const hasDetail = true;
+                            const reconciliation = tc.toolCallId
+                                ? reconciliationsByToolCallId.get(tc.toolCallId)
+                                : undefined;
+                            const needsUserAction = reconciliation
+                                ? toolReconciliationNeedsUserAction(reconciliation)
+                                : false;
+                            const statusText = reconciliation
+                                ? describeToolResolution(reconciliation, t)
+                                : null;
                             return (
                                 <div key={idx} className={`analysis-trace-row${running ? ' analysis-trace-row--running' : ''}`}>
                                     <div className="analysis-trace-node-wrap">
@@ -1093,6 +1389,12 @@ function AnalysisCard({
                                                 </span>
                                             )}
                                         </div>
+                                        {reconciliation?.resolutionStatus && !needsUserAction && (
+                                            <div className="analysis-tool-reconciliation__status">
+                                                <IconClock size={14} stroke={1.7} />
+                                                <span>{statusText}</span>
+                                            </div>
+                                        )}
                                         {hasDetail && (
                                             <details style={{ marginTop: '8px' }}>
                                                 <summary style={{
@@ -2010,9 +2312,8 @@ export default function AgentDetailPage() {
         setOverrideModelId(newModelId);
     }, []);
 
-    // Track onboarding kickoff per (agent, session) so the agent only greets
-    // once per session. The agent opens the conversation itself — no visible
-    // user message — by sending a tagged trigger the backend filters out.
+    // The visible guard is pair-scoped; durable deduplication is enforced by
+    // the backend so reconnects and other sessions cannot create another Run.
     const onboardingKickoffRef = useRef<Set<string>>(new Set());
     const [livePanelVisible, setLivePanelVisible] = useState(false);
     const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('workspace');
@@ -2146,12 +2447,84 @@ export default function AgentDetailPage() {
     const reconnectTimerRef = useRef<Record<SessionRuntimeKey, ReturnType<typeof setTimeout> | null>>({});
     const reconnectDisabledRef = useRef<Record<SessionRuntimeKey, boolean>>({});
     const sessionUiStateRef = useRef<Record<SessionRuntimeKey, { isWaiting: boolean; isStreaming: boolean }>>({});
+    const sessionActiveRunRef = useRef<Record<SessionRuntimeKey, SessionActiveRun | null>>({});
+    const sessionToolMessagesRef = useRef<Record<SessionRuntimeKey, ChatMsg[]>>({});
+    const runtimeEventCursorRef = useRef<Record<SessionRuntimeKey, string>>({});
+    const [activeRun, setActiveRun] = useState<SessionActiveRun | null>(null);
+    const selectedSessionActiveRun = activeRunForSession(activeRun, activeSession?.id);
+    const selectedReconciliationsByToolCallId = useMemo(
+        () => toolReconciliationsByCallId(selectedSessionActiveRun?.pendingToolReconciliations || []),
+        [selectedSessionActiveRun?.pendingToolReconciliations],
+    );
+    const [reconcilingExecutionId, setReconcilingExecutionId] = useState<string | null>(null);
+    const [messagesLoadedRuntimeKey, setMessagesLoadedRuntimeKey] = useState<string | null>(null);
+    const [runtimeStateLoadedRuntimeKey, setRuntimeStateLoadedRuntimeKey] = useState<string | null>(null);
     const activeSessionIdRef = useRef<string | null>(null);
     const currentAgentIdRef = useRef<string | undefined>(id);
     const sessionMsgAbortRef = useRef<AbortController | null>(null);
     const sessionLoadSeqRef = useRef(0);
+    const interruptedStreamMessagesRef = useRef<Record<string, ChatMsg>>({});
 
     const buildSessionRuntimeKey = (agentId: string, sessionId: string) => `${agentId}:${sessionId}`;
+
+    const refreshSessionMessages = async (
+        agentId: string,
+        sessionId: string,
+        discardSessionToolCacheOnSuccess = false,
+    ) => {
+        try {
+            const tkn = localStorage.getItem('token');
+            const response = await fetch(
+                `/api/agents/${agentId}/sessions/${sessionId}/messages?limit=${HISTORY_PAGE_SIZE}`,
+                { headers: { Authorization: `Bearer ${tkn}` } },
+            );
+            if (!response.ok) return;
+            const messages = await response.json();
+            if (
+                currentAgentIdRef.current !== agentId
+                || activeSessionIdRef.current !== sessionId
+            ) return;
+            const parsed = messages.map((message: any) => parseChatMsg({
+                role: message.role,
+                content: message.content || '',
+                ...(message.toolName && {
+                    toolName: message.toolName,
+                    toolCallId: message.toolCallId,
+                    toolArgs: message.toolArgs,
+                    toolStatus: message.toolStatus,
+                    toolResult: message.toolResult,
+                    toolThinking: message.toolThinking,
+                }),
+                ...(message.thinking && { thinking: message.thinking }),
+                ...(message.created_at && { timestamp: message.created_at }),
+                ...(message.id && { id: message.id }),
+                ...(message.runtime_error && {
+                    runtimeError: normalizeRuntimeError({ error: message.runtime_error }),
+                }),
+            }));
+            const runtimeKey = buildSessionRuntimeKey(agentId, sessionId);
+            setChatMessages(mergeSessionToolMessages(
+                mergeInterruptedStreamMessage(
+                    parsed,
+                    interruptedStreamMessagesRef.current[runtimeKey],
+                ),
+                sessionToolMessagesRef.current[runtimeKey] || [],
+            ));
+            if (discardSessionToolCacheOnSuccess) {
+                delete sessionToolMessagesRef.current[runtimeKey];
+            }
+            // Round-trip the backend's compound `<created_at>|<id>` cursor. A bare
+            // created_at cannot page past a batch of messages that share one timestamp
+            // (e.g. a burst of tool_call rows), so older messages would never load.
+            setChatOldestTimestamp(
+                messages.length > 0 ? (messages[0].cursor ?? messages[0].created_at) : null,
+            );
+            setChatHistoryHasMore(messages.length >= HISTORY_PAGE_SIZE);
+            setMessagesLoadedRuntimeKey(buildSessionRuntimeKey(agentId, sessionId));
+        } catch {
+            // Runtime-state polling will retry; keep the current local messages.
+        }
+    };
 
     const clearReconnectTimer = (key: SessionRuntimeKey) => {
         const timer = reconnectTimerRef.current[key];
@@ -2168,6 +2541,8 @@ export default function AgentDetailPage() {
         if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
         delete wsMapRef.current[key];
         delete sessionUiStateRef.current[key];
+        delete sessionActiveRunRef.current[key];
+        delete sessionToolMessagesRef.current[key];
     };
 
     const setSessionUiState = (key: SessionRuntimeKey, next: Partial<{ isWaiting: boolean; isStreaming: boolean }>) => {
@@ -2175,13 +2550,79 @@ export default function AgentDetailPage() {
         sessionUiStateRef.current[key] = { ...prev, ...next };
     };
 
+    const applySessionActiveRun = (
+        agentId: string,
+        sessionId: string,
+        next: SessionActiveRun | null,
+    ) => {
+        const key = buildSessionRuntimeKey(agentId, sessionId);
+        sessionActiveRunRef.current[key] = next;
+        if (
+            currentAgentIdRef.current === agentId
+            && activeSessionIdRef.current === sessionId
+        ) {
+            setActiveRun(next);
+        }
+    };
+
+    const fetchSessionRuntimeState = async (agentId: string, sessionId: string) => {
+        try {
+            const tkn = localStorage.getItem('token');
+            const response = await fetch(
+                `/api/agents/${agentId}/sessions/${sessionId}/runtime-state`,
+                { headers: { Authorization: `Bearer ${tkn}` } },
+            );
+            if (!response.ok) {
+                applySessionActiveRun(
+                    agentId,
+                    sessionId,
+                    failClosedSessionActiveRun(
+                        sessionActiveRunRef.current[buildSessionRuntimeKey(agentId, sessionId)] || null,
+                    ),
+                );
+                return null;
+            }
+            const payload = await response.json();
+            const next = sessionActiveRunFromResponse(payload);
+            if (!sessionRuntimeStateResponseIsValid(payload, next)) {
+                applySessionActiveRun(
+                    agentId,
+                    sessionId,
+                    failClosedSessionActiveRun(
+                        sessionActiveRunRef.current[buildSessionRuntimeKey(agentId, sessionId)] || null,
+                    ),
+                );
+                return null;
+            }
+            const previous = sessionActiveRunRef.current[
+                buildSessionRuntimeKey(agentId, sessionId)
+            ] || null;
+            applySessionActiveRun(agentId, sessionId, next);
+            if (runtimeCompletionNeedsMessageRefresh(previous, next)) {
+                void refreshSessionMessages(agentId, sessionId, true);
+            }
+            if (
+                currentAgentIdRef.current === agentId
+                && activeSessionIdRef.current === sessionId
+            ) {
+                setRuntimeStateLoadedRuntimeKey(buildSessionRuntimeKey(agentId, sessionId));
+            }
+            return next;
+        } catch {
+            applySessionActiveRun(
+                agentId,
+                sessionId,
+                failClosedSessionActiveRun(
+                    sessionActiveRunRef.current[buildSessionRuntimeKey(agentId, sessionId)] || null,
+                ),
+            );
+            return null;
+        }
+    };
+
     /** Normalize IDs — API/JSON may use number vs string; loose equality was breaking "own session" detection. */
     const sessionUserIdStr = (s: any) => (s?.user_id == null ? '' : String(s.user_id));
     const viewerUserIdStr = () => (currentUser?.id == null ? '' : String(currentUser.id));
-    const isAgentChatSession = (s: any) =>
-        String(s?.source_channel || '').toLowerCase() === 'agent' ||
-        String(s?.participant_type || '').toLowerCase() === 'agent';
-
     /** Ensure session shape from POST/list so P2P "mine" is never mistaken for read-only or agent thread. */
     const normalizeChatSession = (sess: any) => {
         if (!sess || typeof sess !== 'object') return sess;
@@ -2230,18 +2671,10 @@ export default function AgentDetailPage() {
 
     const isViewingOtherUsersSessions = canViewAllAgentChatSessions && chatScope === 'all';
 
-    /** Sessions in scope=all that are not the current viewer's own P2P rows (for admin「其他用户」tab).
-     *  Agent-to-agent sessions (source_channel === 'agent') store the creator's user_id, so we must
-     *  exempt them from the user_id check — otherwise they'd always be hidden. */
+    /** Sessions in scope=all that belong on the admin-facing "Other sessions" surface. */
     const otherUsersSessions = useMemo(() => {
         const vu = viewerUserIdStr();
-        return allSessions.filter((s: any) => {
-            // Always show agent-to-agent sessions in the "Other users" tab
-            if (isAgentChatSession(s)) return true;
-            const su = sessionUserIdStr(s);
-            if (vu && su === vu) return false;
-            return true;
-        });
+        return allSessions.filter((s: any) => belongsInOtherSessions(s, vu));
     }, [allSessions, currentUser?.id]);
 
     const othersListForPicker = otherUsersSessions;
@@ -2270,6 +2703,7 @@ export default function AgentDetailPage() {
         setWsConnected(false);
         setIsStreaming(false);
         setIsWaiting(false);
+        setActiveRun(null);
     };
 
     const onAdminTabMine = () => {
@@ -2342,6 +2776,7 @@ export default function AgentDetailPage() {
         if (!targetAgentId) return;
         const runtimeKey = buildSessionRuntimeKey(targetAgentId, String(sess.id));
         const runtimeState = sessionUiStateRef.current[runtimeKey] || { isWaiting: false, isStreaming: false };
+        const cachedActiveRun = sessionActiveRunRef.current[runtimeKey] || null;
         const writable = isWritableSession(sess, scopeOverride);
         activeSessionIdRef.current = sess.id;
         isFirstLoad.current = true;
@@ -2349,7 +2784,7 @@ export default function AgentDetailPage() {
         userPinnedAwayFromBottomRef.current = false;
         pendingLiveInitialScrollRef.current = writable;
         pendingHistoryInitialScrollRef.current = !writable;
-        setChatMessages([]);
+        setChatMessages(sessionToolMessagesRef.current[runtimeKey] || []);
         setChatOldestTimestamp(null);
         setChatHistoryHasMore(true);
         setChatHistoryLoadingMore(false);
@@ -2359,10 +2794,14 @@ export default function AgentDetailPage() {
         setHistoryLoadingMore(false);
         setIsStreaming(runtimeState.isStreaming);
         setIsWaiting(runtimeState.isWaiting);
+        setActiveRun(cachedActiveRun);
+        setMessagesLoadedRuntimeKey(null);
+        setRuntimeStateLoadedRuntimeKey(null);
         setActiveSession(sess);
         setAgentExpired(false);
         syncActiveSocketState(sess, targetAgentId);
         if (writable) scheduleComposerFocus();
+        if (writable) void fetchSessionRuntimeState(targetAgentId, String(sess.id));
 
         // Abort any pending message load and increment sequence
         sessionMsgAbortRef.current?.abort();
@@ -2382,19 +2821,27 @@ export default function AgentDetailPage() {
             if (activeSessionIdRef.current !== sess.id) return;
             const preParsed = msgs.map((m: any) => parseChatMsg({
                 role: m.role, content: m.content || '',
-                ...(m.toolName && { toolName: m.toolName, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
+                ...(m.toolName && { toolName: m.toolName, toolCallId: m.toolCallId, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
                 ...(m.thinking && { thinking: m.thinking }),
                 ...(m.created_at && { timestamp: m.created_at }),
                 ...(m.id && { id: m.id }),
+                ...(m.runtime_error && {
+                    runtimeError: normalizeRuntimeError({ error: m.runtime_error }),
+                }),
             }));
 
-            // Set the oldest message timestamp for cursor-based pagination
-            const oldestTimestamp = msgs.length > 0 ? msgs[0].created_at : null;
+            // Set the oldest message cursor for pagination. Use the backend's compound
+            // `<created_at>|<id>` cursor so a batch of equal-timestamp messages can be paged past.
+            const oldestTimestamp = msgs.length > 0 ? (msgs[0].cursor ?? msgs[0].created_at) : null;
 
             if (writable) {
-                setChatMessages(preParsed);
+                setChatMessages(mergeSessionToolMessages(
+                    preParsed,
+                    sessionToolMessagesRef.current[runtimeKey] || [],
+                ));
                 setChatOldestTimestamp(oldestTimestamp);
                 setChatHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
+                setMessagesLoadedRuntimeKey(runtimeKey);
             } else {
                 setHistoryMsgs(preParsed);
                 setHistoryOldestTimestamp(oldestTimestamp);
@@ -2502,47 +2949,10 @@ export default function AgentDetailPage() {
         } catch (e: any) { toast.error(t('common.error.saveFailed', '保存失败'), { details: String(e?.message || e) }); }
         setExpirySaving(false);
     };
-    interface ChatMsg { role: 'user' | 'assistant' | 'tool_call'; content: string; fileName?: string; toolName?: string; toolCallId?: string; toolArgs?: any; toolStatus?: 'running' | 'done'; toolResult?: string; toolThinking?: string; thinking?: string; imageUrl?: string; timestamp?: string; }
+    interface ChatMsg { id?: string; role: 'user' | 'assistant' | 'tool_call'; content: string; fileName?: string; toolName?: string; toolCallId?: string; toolArgs?: any; toolStatus?: 'running' | 'done'; toolResult?: string; toolThinking?: string; thinking?: string; imageUrl?: string; timestamp?: string; runtimeError?: ReturnType<typeof normalizeRuntimeError>; _streaming?: boolean; _streamRunId?: string; _streamAttemptId?: string; _streamSequence?: number; }
     const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
-    const getToolTargetKey = (args: any): string => {
-        if (!args) return '';
-        const parsed = typeof args === 'string'
-            ? (() => {
-                try { return JSON.parse(args); } catch { return null; }
-            })()
-            : args;
-        if (!parsed || typeof parsed !== 'object') return '';
-        const value = parsed.path
-            || parsed.file_path
-            || parsed.output_path
-            || parsed.target_path
-            || parsed.filename
-            || parsed.url
-            || parsed.query
-            || parsed.name
-            || '';
-        return typeof value === 'string' ? value.trim() : '';
-    };
     const upsertToolCallMessage = (toolMsg: ChatMsg) => {
-        setChatMessages(prev => {
-            const incomingTarget = getToolTargetKey(toolMsg.toolArgs);
-            const sameTool = (msg: ChatMsg) => (
-                msg.role === 'tool_call'
-                && msg.toolName === toolMsg.toolName
-                && msg.toolStatus === 'running'
-                && (
-                    (!!toolMsg.toolCallId && !!msg.toolCallId && msg.toolCallId === toolMsg.toolCallId)
-                    || (!!incomingTarget && getToolTargetKey(msg.toolArgs) === incomingTarget)
-                    || (!toolMsg.toolCallId && !incomingTarget)
-                )
-            );
-            const runningIdx = [...prev].reverse().findIndex(sameTool);
-            if (runningIdx >= 0) {
-                const idx = prev.length - 1 - runningIdx;
-                return [...prev.slice(0, idx), { ...prev[idx], ...toolMsg }, ...prev.slice(idx + 1)];
-            }
-            return [...prev, toolMsg];
-        });
+        setChatMessages((previous) => mergeSessionToolMessage(previous, toolMsg));
     };
     // Transient info banner (e.g. fallback model switch notification)
     const [chatInfoMsg, setChatInfoMsg] = useState<string | null>(null);
@@ -2574,6 +2984,20 @@ export default function AgentDetailPage() {
     const [wsConnected, setWsConnected] = useState(false);
     const [isWaiting, setIsWaiting] = useState(false);
     const [isStreaming, setIsStreaming] = useState(false);
+    // Runtime state is authoritative across reloads, while thinking/chunk events are
+    // transient. Keep a visible placeholder until replay supplies a richer progress
+    // row so refreshing an active Direct Chat never makes the Run look idle.
+    const lastChatMessage = chatMessages[chatMessages.length - 1] as (ChatMsg & { _streaming?: boolean }) | undefined;
+    const hasVisibleLiveProgress = Boolean(
+        (lastChatMessage?.role === 'assistant' && lastChatMessage._streaming)
+        || (lastChatMessage?.role === 'tool_call' && lastChatMessage.toolStatus === 'running'),
+    );
+    const showDirectRunThinking = isWaiting || Boolean(
+        selectedSessionActiveRun
+        && ['queued', 'running'].includes(selectedSessionActiveRun.status)
+        && !isStreaming
+        && !hasVisibleLiveProgress
+    );
     const [chatUploadDrafts, setChatUploadDrafts] = useState<{ id: string; name: string; percent: number; previewUrl?: string; sizeBytes: number }[]>([]);
     const chatUploadAbortRef = useRef<Map<string, () => void>>(new Map());
     type AttachedFileRef = { name: string; text: string; path?: string; imageUrl?: string; source?: 'upload' | 'workspace_auto' };
@@ -2584,6 +3008,8 @@ export default function AgentDetailPage() {
         fileName: string;
         imageUrl?: string;
         modelId?: string | null;
+        resumeRunId?: string;
+        resumeCorrelationId?: string;
     };
     const [attachedFiles, setAttachedFiles] = useState<AttachedFileRef[]>([]);
     const dismissedWorkspaceRefPath = useRef<string | null>(null);
@@ -2592,6 +3018,7 @@ export default function AgentDetailPage() {
 
     const chatEndRef = useRef<HTMLDivElement>(null);
     const chatContainerRef = useRef<HTMLDivElement>(null);
+    const chatHistorySentinelRef = useRef<HTMLDivElement>(null);
     const chatInputRef = useRef<HTMLTextAreaElement>(null);
     const chatInputAreaRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2792,8 +3219,18 @@ export default function AgentDetailPage() {
             const qMatch = msg.content.match(/\nQuestion: ([\s\S]+)$/);
             parsed = { ...msg, fileName, content: qMatch ? qMatch[1].trim() : '' };
         }
-        // If file is an image and no imageUrl yet, build download URL for preview
-        if (parsed.fileName && !parsed.imageUrl && id) {
+        // A multi-image message stores all names in the legacy file_name field.
+        // Never turn that comma-joined label into one invalid download path;
+        // ChatMessageItem renders each persisted image_data marker instead.
+        const inlineImageMarkerCount = (
+            parsed.content.match(/\[image_data:data:image\//g) || []
+        ).length;
+        if (
+            parsed.fileName
+            && !parsed.imageUrl
+            && inlineImageMarkerCount <= 1
+            && id
+        ) {
             const ext = parsed.fileName.split('.').pop()?.toLowerCase() || '';
             if (IMAGE_EXTS.includes(ext)) {
                 parsed.imageUrl = `/api/agents/${id}/files/download?path=workspace/uploads/${encodeURIComponent(parsed.fileName)}&token=${token}`;
@@ -2820,6 +3257,9 @@ export default function AgentDetailPage() {
         setHistoryMsgs([]);
         setIsStreaming(false);
         setIsWaiting(false);
+        setActiveRun(null);
+        setMessagesLoadedRuntimeKey(null);
+        setRuntimeStateLoadedRuntimeKey(null);
         setWsConnected(false);
         wsRef.current = null;
         setWorkspaceLockedPath(null);
@@ -2851,6 +3291,9 @@ export default function AgentDetailPage() {
         setWsConnected(false);
         setIsStreaming(false);
         setIsWaiting(false);
+        setActiveRun(null);
+        setMessagesLoadedRuntimeKey(null);
+        setRuntimeStateLoadedRuntimeKey(null);
         setSessionsLoading(false);
         setAllSessionsLoading(false);
         Object.keys(reconnectDisabledRef.current).forEach((k) => {
@@ -2861,6 +3304,9 @@ export default function AgentDetailPage() {
             if (ws && ws.readyState !== WebSocket.CLOSED) ws.close();
         });
         wsMapRef.current = {};
+        sessionActiveRunRef.current = {};
+        sessionToolMessagesRef.current = {};
+        interruptedStreamMessagesRef.current = {};
         wsRef.current = null;
     }, [currentUser?.id, token]);
 
@@ -2903,6 +3349,15 @@ export default function AgentDetailPage() {
                 wsRef.current = ws;
                 setWsConnected(true);
             }
+            void fetchSessionRuntimeState(agentId, sessionId).then((active) => {
+                if (!active?.canCancel || ws.readyState !== WebSocket.OPEN) return;
+                const cursor = runtimeEventCursorRef.current[`${key}:${active.runId}`];
+                ws.send(JSON.stringify({
+                    type: 'attach_run',
+                    run_id: active.runId,
+                    ...(cursor ? { cursor } : {}),
+                }));
+            });
             if (pendingChatSendRef.current?.runtimeKey === key) {
                 const pending = pendingChatSendRef.current;
                 pendingChatSendRef.current = null;
@@ -2936,15 +3391,44 @@ export default function AgentDetailPage() {
         };
         ws.onmessage = (e) => {
             const d = JSON.parse(e.data);
-            // Onboarding lock fired (or trigger was rejected because the pair
-            // was already onboarded). Either way, invalidate the cached agent
-            // record so the kickoff effect stops thinking a new session needs
-            // onboarding. Fire early and unconditionally — the event is cheap.
-            if (d.type === 'onboarded') {
-                queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+            const positionedAnswerChunk = d.type === 'chunk'
+                && typeof d.attempt_id === 'string'
+                && Number.isInteger(d.sequence);
+            if (!positionedAnswerChunk && typeof d.event_cursor === 'string' && d.event_cursor && d.run_id) {
+                runtimeEventCursorRef.current[`${key}:${String(d.run_id)}`] = d.event_cursor;
+            }
+            // A completed or already-running pair-scoped onboarding attempt
+            // releases the local waiting indicator and refreshes Runtime truth.
+            if (d.type === 'onboarded' || d.type === 'onboarding_pending') {
+                setSessionUiState(key, { isWaiting: false, isStreaming: false });
+                const isActiveRuntime = currentAgentIdRef.current === agentId && activeSessionIdRef.current === sessionId;
+                if (isActiveRuntime) {
+                    setIsWaiting(false);
+                    setIsStreaming(false);
+                }
+                void fetchSessionRuntimeState(agentId, sessionId);
+                if (d.type === 'onboarded') {
+                    queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+                }
                 return;
             }
             const isActiveRuntime = currentAgentIdRef.current === agentId && activeSessionIdRef.current === sessionId;
+            const streamedToolMessage: ChatMsg | null = d.type === 'tool_call' ? {
+                role: 'tool_call',
+                content: '',
+                toolName: d.name,
+                toolCallId: String(d.call_id || d.id || d.index || ''),
+                toolArgs: d.args,
+                toolStatus: d.status,
+                toolResult: d.result,
+                toolThinking: d.reasoning_content,
+            } : null;
+            if (streamedToolMessage) {
+                sessionToolMessagesRef.current[key] = mergeSessionToolMessage(
+                    sessionToolMessagesRef.current[key] || [],
+                    streamedToolMessage,
+                );
+            }
             if (['thinking', 'chunk', 'workspace_draft', 'tool_call', 'done', 'error', 'quota_exceeded'].includes(d.type)) {
                 const nextStreaming = ['thinking', 'chunk', 'workspace_draft', 'tool_call'].includes(d.type);
                 const endStreaming = ['done', 'error', 'quota_exceeded'].includes(d.type);
@@ -2953,12 +3437,30 @@ export default function AgentDetailPage() {
                     isStreaming: endStreaming ? false : nextStreaming,
                 });
             }
+            if (d.type === 'runtime_status') {
+                // A queued Run is not the Session lane holder. Re-read the
+                // authoritative holder instead of promoting an event locally.
+                void fetchSessionRuntimeState(agentId, sessionId);
+                return;
+            }
+            if (d.type === 'done' && d.runtime_status === 'waiting_user' && d.run_id && d.correlation_id) {
+                applySessionActiveRun(agentId, sessionId, waitingSessionActiveRunHint({
+                    runId: String(d.run_id),
+                    sessionId,
+                    correlationId: String(d.correlation_id),
+                    current: sessionActiveRunRef.current[key] || null,
+                }));
+                void fetchSessionRuntimeState(agentId, sessionId);
+            }
             if (!isActiveRuntime) {
                 if (['done', 'error', 'quota_exceeded', 'trigger_notification'].includes(d.type)) {
                     fetchMySessions(true, agentId);
                     queryClient.invalidateQueries({ queryKey: ['agents'] });
                 }
-                if (['done', 'error', 'quota_exceeded'].includes(d.type)) {
+                if (
+                    ['done', 'error', 'quota_exceeded'].includes(d.type)
+                    && d.runtime_status !== 'waiting_user'
+                ) {
                     closeSessionSocket(key, true);
                 }
                 return;
@@ -2973,6 +3475,7 @@ export default function AgentDetailPage() {
             // Capture session_id from the 'connected' message for Take Control
             if (d.type === 'connected' && d.session_id) {
                 if (isActiveRuntime) setWsSessionId(d.session_id);
+                void fetchSessionRuntimeState(agentId, sessionId);
                 return;
             }
 
@@ -3113,16 +3616,7 @@ export default function AgentDetailPage() {
                         collapseSidebarsForLivePanel();
                     }
                 }
-                upsertToolCallMessage({
-                    role: 'tool_call',
-                    content: '',
-                    toolName: d.name,
-                    toolCallId: String(d.call_id || d.id || d.index || ''),
-                    toolArgs: d.args,
-                    toolStatus: d.status,
-                    toolResult: d.result,
-                    toolThinking: d.reasoning_content,
-                });
+                if (streamedToolMessage) upsertToolCallMessage(streamedToolMessage);
                 if (d.status === 'done') {
                     const currentSessionId = activeSessionIdRef.current ? String(activeSessionIdRef.current) : '';
                     if (currentSessionId) clearUnreadForSession(currentSessionId);
@@ -3131,10 +3625,52 @@ export default function AgentDetailPage() {
             } else if (d.type === 'chunk') {
                 setChatMessages(prev => {
                     const last = prev[prev.length - 1];
-                    if (last && last.role === 'assistant' && (last as any)._streaming) return [...prev.slice(0, -1), { ...last, content: last.content + d.content } as any];
-                    return [...prev, { role: 'assistant', content: d.content, _streaming: true } as any];
+                    const current = last?.role === 'assistant' && last._streaming ? {
+                        content: last.content,
+                        runId: last._streamRunId,
+                        attemptId: last._streamAttemptId,
+                        sequence: last._streamSequence,
+                    } : null;
+                    const next = reduceSessionStreamChunk(current, d);
+                    if (next === null) return prev;
+                    if (current && next === current) return prev;
+                    if (typeof d.event_cursor === 'string' && d.event_cursor && d.run_id) {
+                        runtimeEventCursorRef.current[`${key}:${String(d.run_id)}`] = d.event_cursor;
+                    }
+                    const streamedAssistant: ChatMsg = {
+                        ...(current ? last : {}),
+                        role: 'assistant',
+                        content: next.content,
+                        _streaming: true,
+                        _streamRunId: next.runId,
+                        _streamAttemptId: next.attemptId,
+                        _streamSequence: next.sequence,
+                    };
+                    return current
+                        ? [...prev.slice(0, -1), streamedAssistant]
+                        : [...prev, streamedAssistant];
                 });
             } else if (d.type === 'done') {
+                const shouldRefreshCanonicalMessages = runtimeTerminalPacketNeedsMessageRefresh(d.runtime_status);
+                const preserveInterrupted = shouldPreserveInterruptedStream(
+                    d.runtime_status,
+                    d.delivery_error,
+                );
+                if (!preserveInterrupted) {
+                    delete interruptedStreamMessagesRef.current[key];
+                }
+                if (shouldRefreshCanonicalMessages) {
+                    const existingRun = sessionActiveRunRef.current[key];
+                    if (existingRun && d.run_id && existingRun.runId === String(d.run_id)) {
+                        applySessionActiveRun(agentId, sessionId, {
+                            ...existingRun,
+                            status: String(d.runtime_status),
+                            canResume: false,
+                            canCancel: false,
+                        });
+                    }
+                    void fetchSessionRuntimeState(agentId, sessionId);
+                }
                 // Add end marker to code output if there was any code activity
                 setLiveState(prev => {
                     if (prev.code?.output) {
@@ -3146,8 +3682,39 @@ export default function AgentDetailPage() {
                 setChatMessages(prev => {
                     const last = prev[prev.length - 1];
                     const thinking = (last && last.role === 'assistant' && (last as any)._streaming) ? last.thinking : undefined;
-                    if (last && last.role === 'assistant' && (last as any)._streaming) return [...prev.slice(0, -1), parseChatMsg({ role: 'assistant', content: d.content, thinking, timestamp: new Date().toISOString() })];
-                    return [...prev, parseChatMsg({ role: d.role, content: d.content, timestamp: new Date().toISOString() })];
+                    const runtimeError = d.error || d.delivery_error || d.runtime_status === 'failed'
+                        ? normalizeRuntimeError(d)
+                        : null;
+                    const terminalMessage = parseChatMsg({
+                        ...(d.message_id && { id: String(d.message_id) }),
+                        role: 'assistant',
+                        content: d.content,
+                        ...(runtimeError && { runtimeError }),
+                        thinking,
+                        timestamp: new Date().toISOString(),
+                    });
+                    if (last && last.role === 'assistant' && last._streaming) {
+                        if (preserveInterrupted) {
+                            const interrupted = {
+                                ...last,
+                                _streaming: false,
+                                ...(runtimeError && { runtimeError }),
+                            };
+                            interruptedStreamMessagesRef.current[key] = interrupted;
+                            return [
+                                ...prev.slice(0, -1),
+                                interrupted,
+                                terminalMessage,
+                            ];
+                        }
+                        return [...prev.slice(0, -1), terminalMessage];
+                    }
+                    // Runtime-state polling can observe the committed terminal
+                    // message before its websocket `done` packet arrives. In
+                    // that ordering, refreshSessionMessages already installed
+                    // the canonical row, so appending the packet would render
+                    // the same answer twice until the next page reload.
+                    return mergeTerminalAssistantMessage(prev, terminalMessage);
                 });
                 const currentSessionId = activeSessionIdRef.current ? String(activeSessionIdRef.current) : '';
                 if (currentSessionId) clearUnreadForSession(currentSessionId);
@@ -3156,23 +3723,25 @@ export default function AgentDetailPage() {
                     fetchAllSessions();
                 }
                 queryClient.invalidateQueries({ queryKey: ['agents'] });
+                // The terminal packet carries only the final assistant message. Tool calls are
+                // projected into ChatMessage rows during delivery settlement, so always reload
+                // the canonical page after a terminal packet even though the local run was
+                // already marked terminal above.
+                if (shouldRefreshCanonicalMessages) {
+                    void refreshSessionMessages(agentId, sessionId, true);
+                }
             } else if (d.type === 'error' || d.type === 'quota_exceeded') {
-                const msg = d.content || d.detail || d.message || 'Request denied';
-                const isNoModelError = msg.includes('no LLM model') || msg.includes('No model');
-                if (isNoModelError) {
+                const runtimeError = normalizeRuntimeError(d);
+                if (runtimeErrorDisablesReconnect(runtimeError)) {
                     reconnectDisabledRef.current[key] = true;
-                    return;
                 }
                 setChatMessages(prev => {
                     const last = prev[prev.length - 1];
-                    const warningText = `Warning: ${msg}`;
+                    const warningText = `Warning: ${runtimeError.message}`;
                     if (last && last.role === 'assistant' && last.content === warningText) return prev;
-                    return [...prev, parseChatMsg({ role: 'assistant', content: warningText })];
+                    return [...prev, parseChatMsg({ role: 'assistant', content: warningText, runtimeError })];
                 });
-                if (msg.includes('expired') || msg.includes('Setup failed')) {
-                    reconnectDisabledRef.current[key] = true;
-                    if (msg.includes('expired')) setAgentExpired(true);
-                }
+                if (runtimeErrorMarksAgentExpired(runtimeError)) setAgentExpired(true);
             } else if (d.type === 'trigger_notification') {
                 const targetSessionId = d.session_id ? String(d.session_id) : '';
                 const currentSessionId = activeSessionIdRef.current ? String(activeSessionIdRef.current) : '';
@@ -3222,22 +3791,131 @@ export default function AgentDetailPage() {
     };
 
     const dispatchChatMessage = (socket: WebSocket, runtimeKey: SessionRuntimeKey, payload: PendingChatMessage) => {
-        setIsWaiting(true);
-        setIsStreaming(false);
+        const [runtimeAgentId, runtimeSessionId] = runtimeKey.split(':');
+        const isActiveRuntime = (
+            currentAgentIdRef.current === runtimeAgentId
+            && activeSessionIdRef.current === runtimeSessionId
+        );
+        // An interrupted partial belongs only to the Run that produced it. A
+        // later non-streaming Run must never inherit it during canonical refresh.
+        delete interruptedStreamMessagesRef.current[runtimeKey];
         setSessionUiState(runtimeKey, { isWaiting: true, isStreaming: false });
-        setChatMessages(prev => [...prev, parseChatMsg({
-            role: 'user',
-            content: payload.userMsg,
-            fileName: payload.fileName,
-            imageUrl: payload.imageUrl,
-            timestamp: new Date().toISOString()
-        })]);
+        if (payload.resumeRunId) {
+            const current = sessionActiveRunRef.current[runtimeKey];
+            if (current?.runId === payload.resumeRunId) {
+                const next = { ...current, canResume: false };
+                sessionActiveRunRef.current[runtimeKey] = next;
+                if (isActiveRuntime) setActiveRun(next);
+            }
+        }
+        if (isActiveRuntime) {
+            setIsWaiting(true);
+            setIsStreaming(false);
+            setChatMessages(prev => [...prev, parseChatMsg({
+                role: 'user',
+                content: payload.userMsg,
+                fileName: payload.fileName,
+                imageUrl: payload.imageUrl,
+                timestamp: new Date().toISOString()
+            })]);
+        }
         socket.send(JSON.stringify({
             content: payload.contentForLLM,
             display_content: payload.userMsg,
             file_name: payload.fileName,
             model_id: payload.modelId,
+            ...(payload.resumeRunId ? { run_id: payload.resumeRunId } : {}),
+            ...(payload.resumeCorrelationId ? { correlation_id: payload.resumeCorrelationId } : {}),
         }));
+        window.setTimeout(() => {
+            void fetchSessionRuntimeState(runtimeAgentId, runtimeSessionId);
+        }, 250);
+        window.setTimeout(() => {
+            void fetchSessionRuntimeState(runtimeAgentId, runtimeSessionId);
+        }, 1000);
+    };
+
+    const handleToolReconciliation = async (
+        reconciliation: ToolReconciliation,
+        outcome: 'applied' | 'not_applied',
+        allAccept = false,
+    ) => {
+        if (!id || !activeSession?.id || !selectedSessionActiveRun?.correlationId) return;
+        const correlationId = selectedSessionActiveRun.correlationId;
+        const applied = outcome === 'applied';
+        const confirmation = reconciliation.workspaceResolution
+            ? applied
+                ? t('agent.chat.useAgentResultConfirm', '使用 Agent 的结果覆盖工作区中的源文件？')
+                : t('agent.chat.keepSourceFileConfirm', '保留工作区中的源文件，放弃 Agent 的文件结果？')
+            : applied
+                ? t('agent.chat.reconcileAppliedConfirm', '确认该操作已经生效，并且不得重复执行？')
+                : t('agent.chat.reconcileNotAppliedConfirm', '确认该操作没有生效，可以让 Agent 重新决定是否重试？');
+        if (!window.confirm(confirmation)) return;
+
+        const run = selectedSessionActiveRun;
+        const sessionId = String(activeSession.id);
+        const runtimeKey = buildSessionRuntimeKey(id, sessionId);
+        setReconcilingExecutionId(reconciliation.executionId);
+        try {
+            const response = await fetch(
+                `/api/agents/${id}/sessions/${sessionId}/runs/${run.runId}/tool-executions/${reconciliation.executionId}/reconcile`,
+                {
+                    method: 'POST',
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token')}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        outcome,
+                        correlation_id: correlationId,
+                        note: applied
+                            ? 'User confirmed in Direct Chat that the operation took effect.'
+                            : 'User confirmed in Direct Chat that the operation did not take effect.',
+                        all_accept: allAccept,
+                    }),
+                },
+            );
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}));
+                throw new Error(body?.detail || `HTTP ${response.status}`);
+            }
+
+            if (reconciliation.workspaceResolution) {
+                await fetchSessionRuntimeState(id, sessionId);
+                return;
+            }
+
+            const userMsg = reconciliation.workspaceResolution
+                ? applied
+                    ? t('agent.chat.useAgentResultMessage', '使用 Agent 的文件结果继续，不要重新执行原工具。')
+                    : t('agent.chat.keepSourceFileMessage', '保留工作区中的源文件继续，不要重新执行原工具。')
+                : applied
+                    ? t('agent.chat.reconcileAppliedMessage', '我确认这次工具操作已经生效，请继续，且不要重复执行该操作。')
+                    : t('agent.chat.reconcileNotAppliedMessage', '我确认这次工具操作没有生效，请消费失败结果后继续，并重新决定是否需要新的工具调用。');
+            const pending: PendingChatMessage = {
+                runtimeKey,
+                contentForLLM: userMsg,
+                userMsg,
+                fileName: '',
+                modelId: effectiveChatModelId,
+                resumeRunId: run.runId,
+                resumeCorrelationId: correlationId,
+            };
+            const socket = wsMapRef.current[runtimeKey];
+            if (socket?.readyState === WebSocket.OPEN) {
+                dispatchChatMessage(socket, runtimeKey, pending);
+            } else {
+                pendingChatSendRef.current = pending;
+                if (token) ensureSessionSocket(activeSession, id, token);
+            }
+        } catch (error) {
+            toast.error(t('agent.chat.reconcileFailed', '工具结果确认失败'), {
+                details: error instanceof Error ? error.message : String(error),
+            });
+            void fetchSessionRuntimeState(id, sessionId);
+        } finally {
+            setReconcilingExecutionId(null);
+        }
     };
 
     useEffect(() => {
@@ -3254,6 +3932,21 @@ export default function AgentDetailPage() {
         ensureSessionSocket(activeSession, id, token);
         syncActiveSocketState(activeSession, id);
     }, [id, token, activeTab, activeSession?.id, chatScope, canViewAllAgentChatSessions]);
+
+    useEffect(() => {
+        if (
+            !id
+            || !activeSession?.id
+            || activeTab !== 'chat'
+            || !isWritableSession(activeSession)
+            || !selectedSessionActiveRun
+        ) return;
+        const sessionId = String(activeSession.id);
+        const timer = window.setInterval(() => {
+            void fetchSessionRuntimeState(id, sessionId);
+        }, 1500);
+        return () => window.clearInterval(timer);
+    }, [id, activeTab, activeSession?.id, selectedSessionActiveRun?.runId, selectedSessionActiveRun?.status]);
 
     const handleWorkspacePathDeleted = useCallback((path: string) => {
         let removedName = '';
@@ -3301,6 +3994,7 @@ export default function AgentDetailPage() {
                 if (ws.readyState !== WebSocket.CLOSED) ws.close();
             });
             wsMapRef.current = {};
+            sessionToolMessagesRef.current = {};
             wsRef.current = null;
         };
     }, []);
@@ -3319,6 +4013,16 @@ export default function AgentDetailPage() {
     const [chatScrollBtnBottom, setChatScrollBtnBottom] = useState(96);
     // Read-only history scroll-to-bottom
     const historyContainerRef = useRef<HTMLDivElement>(null);
+    const historyPrependAnchor = usePrependScrollAnchor({
+        containerRef: historyContainerRef,
+        itemCount: historyMsgs.length,
+        scopeKey: activeSession?.id,
+    });
+    const chatPrependAnchor = usePrependScrollAnchor({
+        containerRef: chatContainerRef,
+        itemCount: chatMessages.length,
+        scopeKey: activeSession?.id,
+    });
     const [showHistoryScrollBtn, setShowHistoryScrollBtn] = useState(false);
     const scheduleComposerFocus = useCallback(() => {
         let attempts = 0;
@@ -3349,6 +4053,7 @@ export default function AgentDetailPage() {
         setShowScrollBtn(true);
     }, [cancelLiveAutoFollow]);
     const scheduleLiveScrollToBottom = useCallback(() => {
+        if (chatPrependAnchor.isPrependingRef.current) return;
         if (userPinnedAwayFromBottomRef.current) return;
         cancelLiveAutoFollow();
         const jobId = liveScrollJobRef.current;
@@ -3367,7 +4072,7 @@ export default function AgentDetailPage() {
             window.setTimeout(scroll, 80),
             window.setTimeout(scroll, 220),
         ];
-    }, [cancelLiveAutoFollow]);
+    }, [cancelLiveAutoFollow, chatPrependAnchor.isPrependingRef]);
     useEffect(() => {
         return () => cancelLiveAutoFollow();
     }, [cancelLiveAutoFollow]);
@@ -3391,44 +4096,46 @@ export default function AgentDetailPage() {
         setHistoryLoadingMore(true);
         try {
             const tkn = localStorage.getItem('token');
-            const res = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(historyOldestTimestamp)}`, {
-                headers: { Authorization: `Bearer ${tkn}` },
+            const page = await loadDirectHistoryTurn({
+                before: historyOldestTimestamp,
+                pageSize: HISTORY_PAGE_SIZE,
+                completeToolTurn: historyMsgs[0]?.role === 'tool_call',
+                fetchPage: async (before) => {
+                    const response = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(before)}`, {
+                        headers: { Authorization: `Bearer ${tkn}` },
+                    });
+                    if (!response.ok) throw new Error(`History request failed with ${response.status}`);
+                    return response.json();
+                },
             });
-            if (!res.ok) return;
-            const msgs = await res.json();
-            // Validate session is still active after async fetch
-            if (activeSession?.id !== sess.id) return;
-            if (msgs.length === 0) {
+            if (
+                currentAgentIdRef.current !== targetAgentId
+                || activeSessionIdRef.current !== String(sess.id)
+            ) return;
+            if (page.rows.length === 0) {
                 setHistoryHasMore(false);
                 return;
             }
-            const preParsed = msgs.map((m: any) => parseChatMsg({
+            const preParsed = page.rows.map((m: any) => parseChatMsg({
                 role: m.role, content: m.content || '',
-                ...(m.toolName && { toolName: m.toolName, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
+                ...(m.toolName && { toolName: m.toolName, toolCallId: m.toolCallId, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
                 ...(m.thinking && { thinking: m.thinking }),
                 ...(m.created_at && { timestamp: m.created_at }),
                 ...(m.id && { id: m.id }),
+                ...(m.runtime_error && {
+                    runtimeError: normalizeRuntimeError({ error: m.runtime_error }),
+                }),
             }));
-            // Save current scroll position
-            const el = historyContainerRef.current;
-            const oldScrollHeight = el?.scrollHeight ?? 0;
+            historyPrependAnchor.captureAnchor();
             setHistoryMsgs(prev => [...preParsed, ...prev]);
-            // Update the oldest timestamp (first message in the new batch, since messages are in chronological order)
-            setHistoryOldestTimestamp(msgs[0].created_at);
-            setHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
-            // Restore scroll position after new messages are prepended
-            requestAnimationFrame(() => {
-                if (el) {
-                    const newScrollHeight = el.scrollHeight;
-                    el.scrollTop = newScrollHeight - oldScrollHeight;
-                }
-            });
+            setHistoryOldestTimestamp(page.oldestCursor);
+            setHistoryHasMore(page.hasMore);
         } catch (err: any) {
             console.error('Failed to load more history messages:', err);
         } finally {
             setHistoryLoadingMore(false);
         }
-    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp]);
+    }, [historyLoadingMore, historyHasMore, activeSession, id, historyOldestTimestamp, historyMsgs, historyPrependAnchor.captureAnchor]);
 
     const loadMoreChatHistoryMessages = useCallback(async () => {
         if (chatHistoryLoadingMore || !chatHistoryHasMore || !activeSession || !id || !chatOldestTimestamp) return;
@@ -3437,54 +4144,65 @@ export default function AgentDetailPage() {
         setChatHistoryLoadingMore(true);
         try {
             const tkn = localStorage.getItem('token');
-            const res = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(chatOldestTimestamp)}`, {
-                headers: { Authorization: `Bearer ${tkn}` },
+            const page = await loadDirectHistoryTurn({
+                before: chatOldestTimestamp,
+                pageSize: HISTORY_PAGE_SIZE,
+                completeToolTurn: chatMessages[0]?.role === 'tool_call',
+                fetchPage: async (before) => {
+                    const response = await fetch(`/api/agents/${targetAgentId}/sessions/${sess.id}/messages?limit=${HISTORY_PAGE_SIZE}&before=${encodeURIComponent(before)}`, {
+                        headers: { Authorization: `Bearer ${tkn}` },
+                    });
+                    if (!response.ok) throw new Error(`History request failed with ${response.status}`);
+                    return response.json();
+                },
             });
-            if (!res.ok) return;
-            const msgs = await res.json();
-            // Validate session is still active after async fetch
-            if (activeSession?.id !== sess.id) return;
-            if (msgs.length === 0) {
+            if (
+                currentAgentIdRef.current !== targetAgentId
+                || activeSessionIdRef.current !== String(sess.id)
+            ) return;
+            if (page.rows.length === 0) {
                 setChatHistoryHasMore(false);
                 return;
             }
-            const preParsed = msgs.map((m: any) => parseChatMsg({
+            const preParsed = page.rows.map((m: any) => parseChatMsg({
                 role: m.role, content: m.content || '',
-                ...(m.toolName && { toolName: m.toolName, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
+                ...(m.toolName && { toolName: m.toolName, toolCallId: m.toolCallId, toolArgs: m.toolArgs, toolStatus: m.toolStatus, toolResult: m.toolResult, toolThinking: m.toolThinking }),
                 ...(m.thinking && { thinking: m.thinking }),
                 ...(m.created_at && { timestamp: m.created_at }),
                 ...(m.id && { id: m.id }),
+                ...(m.runtime_error && {
+                    runtimeError: normalizeRuntimeError({ error: m.runtime_error }),
+                }),
             }));
-            // Save current scroll position
-            const el = chatContainerRef.current;
-            const oldScrollHeight = el?.scrollHeight ?? 0;
+            cancelLiveAutoFollow();
+            chatPrependAnchor.captureAnchor();
             setChatMessages(prev => [...preParsed, ...prev]);
-            // Update the oldest timestamp (first message in the new batch, since messages are in chronological order)
-            setChatOldestTimestamp(msgs[0].created_at);
-            setChatHistoryHasMore(msgs.length >= HISTORY_PAGE_SIZE);
-            // Restore scroll position after new messages are prepended
-            requestAnimationFrame(() => {
-                if (el) {
-                    const newScrollHeight = el.scrollHeight;
-                    el.scrollTop = newScrollHeight - oldScrollHeight;
-                }
-            });
+            setChatOldestTimestamp(page.oldestCursor);
+            setChatHistoryHasMore(page.hasMore);
         } catch (err: any) {
             console.error('Failed to load more chat history messages:', err);
         } finally {
             setChatHistoryLoadingMore(false);
         }
-    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp]);
+    }, [chatHistoryLoadingMore, chatHistoryHasMore, activeSession, id, chatOldestTimestamp, chatMessages, cancelLiveAutoFollow, chatPrependAnchor.captureAnchor]);
+
+    const historyLoadGesture = useOlderHistoryGesture({
+        containerRef: historyContainerRef,
+        canLoad: historyHasMore && !historyLoadingMore,
+        onLoadMore: loadMoreHistoryMessages,
+    });
+    const chatHistoryLoadGesture = useOlderHistoryGesture({
+        containerRef: chatContainerRef,
+        canLoad: chatHistoryHasMore && !chatHistoryLoadingMore,
+        onLoadMore: loadMoreChatHistoryMessages,
+    });
 
     const handleHistoryScroll = () => {
         const el = historyContainerRef.current;
         if (!el) return;
         const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
         setShowHistoryScrollBtn(distFromBottom > 200);
-        // Load more when scrolling near the top
-        if (el.scrollTop < 100 && historyHasMore && !historyLoadingMore) {
-            loadMoreHistoryMessages();
-        }
+        historyLoadGesture.onScroll();
     };
     const scrollHistoryToBottom = () => {
         scheduleHistoryScrollToBottom();
@@ -3512,7 +4230,7 @@ export default function AgentDetailPage() {
     }, [historyMsgs, activeSession?.id, scheduleHistoryScrollToBottom]);
     // Memoized component for each chat message to avoid re-renders while typing
     const ChatMessageItem = React.useMemo(() => React.memo(({
-        msg, i, isLeft, t, senderLabel, avatarText, forceSenderLabel = false, hideAvatar = false,
+        msg, i, isLeft, t, senderLabel, avatarText, forceSenderLabel = false, hideAvatar = false, hideDistill = false,
     }: {
         msg: any;
         i: number;
@@ -3522,12 +4240,18 @@ export default function AgentDetailPage() {
         avatarText?: string;
         forceSenderLabel?: boolean;
         hideAvatar?: boolean;
+        // True when this message's turn already renders a propose_experience_draft card,
+        // which is itself the review entry point — the manual 沉淀 button would be redundant.
+        hideDistill?: boolean;
     }) => {
         const fe = msg.fileName?.split('.').pop()?.toLowerCase() ?? '';
         const isImage = msg.imageUrl && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(fe);
         const resolvedSenderLabel = msg.sender_name || senderLabel;
         const resolvedAvatarText = avatarText || (resolvedSenderLabel ? resolvedSenderLabel[0] : (isLeft ? 'A' : 'U'));
         const showSenderLabel = !!resolvedSenderLabel && (forceSenderLabel || !!msg.sender_name);
+        const runtimeDiagnostics = msg.runtimeError
+            ? formatRuntimeErrorDiagnostics(msg.runtimeError)
+            : '';
 
         // Parse [image_data:data:image/...;base64,...] markers from user message content.
         // The backend persists these markers in the DB to preserve multimodal context
@@ -3546,6 +4270,15 @@ export default function AgentDetailPage() {
                 return ''; // always strip the marker from displayed text
             }).trim();
         }
+        // Experience-library citations: strip the raw [[exp:<uuid>]] markers from the shown text and
+        // collect the ids — they render as green pills below (storage/extraction logic unchanged).
+        const expCiteIds: string[] = [];
+        if (displayContent.includes('[[exp:')) {
+            displayContent = displayContent.replace(/\[\[exp:([0-9a-fA-F-]{36})\]\]/g, (_m: string, uuid: string) => {
+                if (!expCiteIds.includes(uuid)) expCiteIds.push(uuid);
+                return '';
+            }).replace(/[ \t]{2,}/g, ' ').trim();
+        }
 
         const timestampHtml = msg.timestamp ? (() => {
             const d = new Date(msg.timestamp);
@@ -3560,6 +4293,7 @@ export default function AgentDetailPage() {
                 <div className="chat-msg-timestamp">
                     {timeStr}
                     {msg.content && <CopyMessageButton text={msg.content} />}
+                    {msg.content && isLeft && !hideDistill && <DistillButton text={msg.content} sessionId={activeSessionIdRef.current} />}
                 </div>
             );
         })() : null;
@@ -3605,7 +4339,17 @@ export default function AgentDetailPage() {
                                         <div className="thinking-dots"><span /><span /><span /></div>
                                         <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>{t('agent.chat.thinking', 'Thinking...')}</span>
                                     </div>
-                                ) : <MarkdownRenderer content={displayContent} />
+                                ) : (
+                                    <>
+                                        <MarkdownRenderer content={displayContent} />
+                                        {runtimeDiagnostics && (
+                                            <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                                                {runtimeDiagnostics}
+                                            </div>
+                                        )}
+                                        {expCiteIds.length > 0 && <ExperienceCitations ids={expCiteIds} />}
+                                    </>
+                                )
                             ) : <MarkdownRenderer content={displayContent} />}
                         </div>
                     </div>
@@ -3625,12 +4369,10 @@ export default function AgentDetailPage() {
             cancelLiveAutoFollow();
         }
         setShowScrollBtn(distFromBottom > 200);
-        // Load more when scrolling near the top
-        if (el.scrollTop < 100 && chatHistoryHasMore && !chatHistoryLoadingMore) {
-            loadMoreChatHistoryMessages();
-        }
+        chatHistoryLoadGesture.onScroll();
     };
     const handleChatWheelCapture = (event: React.WheelEvent<HTMLDivElement>) => {
+        chatHistoryLoadGesture.onWheelCapture(event);
         const el = chatContainerRef.current;
         if (!el) return;
         if (event.deltaY < 0 && el.scrollTop > 0) {
@@ -3638,9 +4380,11 @@ export default function AgentDetailPage() {
         }
     };
     const handleChatTouchStartCapture = (event: React.TouchEvent<HTMLDivElement>) => {
+        chatHistoryLoadGesture.onTouchStartCapture(event);
         chatTouchStartYRef.current = event.touches[0]?.clientY ?? null;
     };
     const handleChatTouchMoveCapture = (event: React.TouchEvent<HTMLDivElement>) => {
+        chatHistoryLoadGesture.onTouchMoveCapture(event);
         const startY = chatTouchStartYRef.current;
         const currentY = event.touches[0]?.clientY;
         const el = chatContainerRef.current;
@@ -3722,6 +4466,15 @@ export default function AgentDetailPage() {
         if (showNoModelState) return;
         const activeRuntimeKey = buildSessionRuntimeKey(id, String(activeSession.id));
         const activeSocket = wsMapRef.current[activeRuntimeKey];
+        const currentRun = sessionActiveRunRef.current[activeRuntimeKey];
+        const resumesWaitingRun = currentRun?.status === 'waiting_user';
+        if (
+            resumesWaitingRun
+            && (!currentRun?.canResume || !currentRun.correlationId)
+        ) {
+            toast.warning(t('agent.chat.waitingReplyPending', 'Your previous reply is still being processed.'));
+            return;
+        }
         if (!chatInput.trim() && attachedFiles.length === 0) return;
 
         let userMsg = chatInput.trim();
@@ -3735,8 +4488,7 @@ export default function AgentDetailPage() {
             attachedFiles.forEach(file => {
                 filesDisplay += `[Attachment: ${file.name}] `;
                 const wsPath = file.path || '';
-                const codePath = wsPath.replace(/^workspace\//, '');
-                const fileLoc = wsPath ? `\nFile location: ${wsPath} (for read_file/read_document/send_email tools)\nIn execute_code, use relative path: "${codePath}" (working directory is workspace/)\n` : '';
+                const fileLoc = wsPath ? `\nFile location: ${wsPath} (for read_file/read_document/send_email tools)\nIn execute_code, use the same Agent-root-relative path: "${wsPath}". The sandbox working directory is "/".\n` : '';
 
                 if (file.imageUrl && supportsVision) {
                     filesPrompt += `[image_data:${file.imageUrl}]\n`;
@@ -3776,6 +4528,8 @@ export default function AgentDetailPage() {
             fileName: attachedFiles.map(f => f.name).join(', '),
             imageUrl: attachedFiles.length === 1 ? attachedFiles[0].imageUrl : undefined,
             modelId: effectiveChatModelId,
+            resumeRunId: resumesWaitingRun ? currentRun?.runId : undefined,
+            resumeCorrelationId: resumesWaitingRun ? currentRun?.correlationId || undefined : undefined,
         };
 
         setChatInput('');
@@ -3929,7 +4683,7 @@ export default function AgentDetailPage() {
 
     // ── Drag-and-drop chat file upload ──
     const handleDroppedChatFiles = useCallback(async (files: File[]) => {
-        if (!wsConnected || chatUploadDrafts.length > 0 || isWaiting || isStreaming || attachedFiles.length >= 10) return;
+        if (!wsConnected || chatUploadDrafts.length > 0 || attachedFiles.length >= 10) return;
         const availableSlots = Math.max(0, 10 - attachedFiles.length);
         const filesToProcess = files.slice(0, availableSlots);
 
@@ -3958,11 +4712,11 @@ export default function AgentDetailPage() {
                 setChatUploadDrafts(prev => prev.filter(d => d.id !== draftId));
             }
         }
-    }, [id, wsConnected, chatUploadDrafts.length, isWaiting, isStreaming, attachedFiles.length, isWritableSession, t]);
+    }, [id, wsConnected, chatUploadDrafts.length, attachedFiles.length, isWritableSession, t]);
 
     const { isDragging: isChatDragging, dropZoneProps: chatDropProps } = useDropZone({
         onDrop: handleDroppedChatFiles,
-        disabled: !wsConnected || chatUploadDrafts.length > 0 || isWaiting || isStreaming || attachedFiles.length >= 10 || !activeSession || !isWritableSession(activeSession),
+        disabled: !wsConnected || chatUploadDrafts.length > 0 || attachedFiles.length >= 10 || !activeSession || !isWritableSession(activeSession),
     });
 
     // Expandable activity log
@@ -4068,9 +4822,14 @@ export default function AgentDetailPage() {
         () => (llmModels as any[]).filter((m: any) => m.enabled),
         [llmModels],
     );
-    const effectiveChatModelId = overrideModelId
-        || agent?.primary_model_id
-        || myTenant?.default_model_id
+    const effectiveChatModelId = [
+        overrideModelId,
+        agent?.primary_model_id,
+        myTenant?.default_model_id,
+    ].find(
+        (candidate): candidate is string => Boolean(candidate)
+            && enabledLlmModels.some((model: any) => model.id === candidate),
+    )
         || enabledLlmModels[0]?.id
         || null;
 
@@ -4084,15 +4843,22 @@ export default function AgentDetailPage() {
     // sending the invisible trigger. Otherwise the empty session would be
     // marked as already kicked off while the user is still configuring models.
     useEffect(() => {
-        if (!wsConnected || !id || !activeSession?.id) return;
+        if (!id || !currentUser?.id || !activeSession?.id) return;
         if (!agent || agent.onboarded_for_me !== false) return;
         if (llmModelsLoading || !effectiveModelReady || !effectiveChatModelId) return;
-        if (chatMessages.length > 0) return;
         const runtimeKey = buildSessionRuntimeKey(id, String(activeSession.id));
-        if (onboardingKickoffRef.current.has(runtimeKey)) return;
+        if (!shouldKickoffOnboarding({
+            websocketReady: wsConnected,
+            messagesLoaded: messagesLoadedRuntimeKey === runtimeKey,
+            runtimeStateLoaded: runtimeStateLoadedRuntimeKey === runtimeKey,
+            messageCount: chatMessages.length,
+            hasActiveRun: selectedSessionActiveRun !== null,
+        })) return;
+        const pairKey = onboardingKickoffKey(id, String(currentUser.id));
+        if (onboardingKickoffRef.current.has(pairKey)) return;
         const socket = wsMapRef.current[runtimeKey];
         if (!socket || socket.readyState !== WebSocket.OPEN) return;
-        onboardingKickoffRef.current.add(runtimeKey);
+        onboardingKickoffRef.current.add(pairKey);
         setIsWaiting(true);
         setIsStreaming(false);
         socket.send(JSON.stringify({
@@ -4100,7 +4866,7 @@ export default function AgentDetailPage() {
             kind: 'onboarding_trigger',
             model_id: effectiveChatModelId,
         }));
-    }, [wsConnected, id, activeSession?.id, agent?.onboarded_for_me, llmModelsLoading, effectiveModelReady, effectiveChatModelId, chatMessages.length]);
+    }, [wsConnected, id, currentUser?.id, activeSession?.id, agent?.onboarded_for_me, llmModelsLoading, effectiveModelReady, effectiveChatModelId, chatMessages.length, messagesLoadedRuntimeKey, runtimeStateLoadedRuntimeKey, selectedSessionActiveRun]);
 
     const { data: permData } = useQuery({
         queryKey: ['agent-permissions', id],
@@ -5560,6 +6326,10 @@ export default function AgentDetailPage() {
                                                                             if (msg.role === 'tool_call') {
                                                                                 const tName = msg.toolName || (() => { try { return JSON.parse(msg.content || '{}').name; } catch { return ''; } })() || 'tool';
                                                                                 const tArgs = msg.toolArgs || (() => { try { return JSON.parse(msg.content || '{}').args; } catch { return {}; } })();
+                                                                                // Experience draft proposal renders as a human-gated review card, not a raw tool blob.
+                                                                                if (tName === 'propose_experience_draft') {
+                                                                                    return <ExperienceDraftCard key={mi} args={tArgs} sessionId={activeSessionIdRef.current} />;
+                                                                                }
                                                                                 const tResult = msg.toolResult || '';
                                                                                 const argsStr = typeof tArgs === 'string' ? tArgs : JSON.stringify(tArgs || {}, null, 2);
                                                                                 const resultStr = typeof tResult === 'string' ? tResult : JSON.stringify(tResult, null, 2);
@@ -5756,10 +6526,14 @@ export default function AgentDetailPage() {
                     )
                 }
 
-                {/* ── Relationships Tab ── */}
+                {/* ── Directory Tab ── */}
                 {
                     activeTab === 'relationships' && (
-                        <RelationshipEditor agentId={id!} readOnly={!canManage} />
+                        <AgentDirectory
+                            agentId={id!}
+                            accessMode={(agent as any)?.access_mode}
+                            canManage={canManage}
+                        />
                     )
                 }
 
@@ -5772,7 +6546,7 @@ export default function AgentDetailPage() {
                             write: (p, c) => fileApi.write(id!, p, c),
                             delete: (p) => fileApi.delete(id!, p),
                             upload: (file, path, onProgress) => fileApi.upload(id!, file, path + '/', onProgress),
-                            downloadUrl: (p) => fileApi.downloadUrl(id!, p),
+                            downloadUrl: (p, options) => fileApi.downloadUrl(id!, p, options),
                         };
                         return <FileBrowser api={adapter} rootPath="workspace" features={{ upload: canManage, newFile: canManage, newFolder: canManage, edit: canManage, delete: canManage, directoryNavigation: true }} />;
                     })()
@@ -5787,7 +6561,6 @@ export default function AgentDetailPage() {
                                 gap: 0,
                                 flex: 1,
                                 minHeight: 0,
-                                height: 'calc(100vh - 100px)',
                                 margin: '0 8px 8px',
                                 border: '1px solid rgba(0, 0, 0, 0.06)',
                                 borderRadius: '12px',
@@ -6060,7 +6833,19 @@ export default function AgentDetailPage() {
                                                     <>Read-only · {activeSession.username || 'User'}</>
                                                 )}
                                             </div>
-                                            <div ref={historyContainerRef} onScroll={handleHistoryScroll} style={{ flex: 1, overflowY: 'auto', padding: '48px 16px 12px' }}>
+                                            <div
+                                                ref={historyContainerRef}
+                                                onScroll={handleHistoryScroll}
+                                                onWheelCapture={historyLoadGesture.onWheelCapture}
+                                                onPointerDownCapture={historyLoadGesture.onPointerDownCapture}
+                                                onTouchStartCapture={historyLoadGesture.onTouchStartCapture}
+                                                onTouchMoveCapture={historyLoadGesture.onTouchMoveCapture}
+                                                onTouchEndCapture={historyLoadGesture.onTouchEndCapture}
+                                                onKeyDownCapture={historyLoadGesture.onKeyDownCapture}
+                                                className="agent-chat-message-scroll"
+                                                style={{ padding: '48px 16px 12px' }}
+                                                tabIndex={0}
+                                            >
                                                 {historyLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
                                                         Loading more messages...
@@ -6081,6 +6866,27 @@ export default function AgentDetailPage() {
                                                     const thisAgentPid = isA2A && thisAgentName
                                                         ? historyMsgs.find((m: any) => m.sender_name === thisAgentName)?.participant_id
                                                         : null;
+                                                    // Mark assistant messages whose turn already renders a propose_experience_draft
+                                                    // card (a turn = rows between user messages). Their 沉淀 button is redundant.
+                                                    const proposeTurnIdx = new Set<number>();
+                                                    {
+                                                        const toolNameOf = (mm: any) => mm.toolName || (() => { try { return JSON.parse(mm.content || '{}').name; } catch { return ''; } })();
+                                                        let s = 0;
+                                                        for (let k = 0; k <= historyMsgs.length; k++) {
+                                                            if (k === historyMsgs.length || historyMsgs[k].role === 'user') {
+                                                                let hasPropose = false;
+                                                                for (let j = s; j < k; j++) {
+                                                                    if (historyMsgs[j].role === 'tool_call' && toolNameOf(historyMsgs[j]) === 'propose_experience_draft') { hasPropose = true; break; }
+                                                                }
+                                                                if (hasPropose) {
+                                                                    for (let j = s; j < k; j++) {
+                                                                        if (historyMsgs[j].role === 'assistant' && historyMsgs[j].content?.trim()) proposeTurnIdx.add(j);
+                                                                    }
+                                                                }
+                                                                s = k + 1;
+                                                            }
+                                                        }
+                                                    }
                                                     return historyMsgs.map((m: any, i: number) => {
                                                         // Determine if this message is from "this agent" (left) or peer (right)
                                                         // Actually, "this agent" should be on the RIGHT (like 'me'), and peer on the LEFT
@@ -6090,6 +6896,9 @@ export default function AgentDetailPage() {
                                                         if (m.role === 'tool_call') {
                                                             const tName = m.toolName || (() => { try { return JSON.parse(m.content || '{}').name; } catch { return 'tool'; } })();
                                                             const tArgs = m.toolArgs || (() => { try { return JSON.parse(m.content || '{}').args; } catch { return {}; } })();
+                                                            if (tName === 'propose_experience_draft') {
+                                                                return <ExperienceDraftCard key={i} args={tArgs} sessionId={activeSessionIdRef.current} />;
+                                                            }
                                                             const tResult = m.toolResult ?? (() => { try { return JSON.parse(m.content || '{}').result; } catch { return ''; } })();
                                                             return (
                                                                 <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '6px', paddingLeft: '36px', minWidth: 0 }}>
@@ -6127,6 +6936,7 @@ export default function AgentDetailPage() {
                                                                     senderLabel={isHumanReadonly ? (isLeft ? ((agent as any)?.name || 'Agent') : (activeSession.username || 'User')) : undefined}
                                                                     avatarText={isHumanReadonly ? (isLeft ? (((agent as any)?.name || 'Agent')[0]) : ((activeSession.username || 'User')[0])) : undefined}
                                                                     forceSenderLabel={isHumanReadonly}
+                                                                    hideDistill={proposeTurnIdx.has(i)}
                                                                 />
                                                             </React.Fragment>
                                                         );
@@ -6152,9 +6962,14 @@ export default function AgentDetailPage() {
                                                 ref={chatContainerRef}
                                                 onScroll={handleChatScroll}
                                                 onWheelCapture={handleChatWheelCapture}
+                                                onPointerDownCapture={chatHistoryLoadGesture.onPointerDownCapture}
                                                 onTouchStartCapture={handleChatTouchStartCapture}
                                                 onTouchMoveCapture={handleChatTouchMoveCapture}
-                                                style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}
+                                                onTouchEndCapture={chatHistoryLoadGesture.onTouchEndCapture}
+                                                onKeyDownCapture={chatHistoryLoadGesture.onKeyDownCapture}
+                                                className="agent-chat-message-scroll"
+                                                style={{ padding: '12px 16px' }}
+                                                tabIndex={0}
                                             >
                                                 {chatHistoryLoadingMore && (
                                                     <div style={{ textAlign: 'center', padding: '12px 0', color: 'var(--text-tertiary)', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
@@ -6255,6 +7070,7 @@ export default function AgentDetailPage() {
                                                                 }
                                                                 currentGroup.push({
                                                                     type: 'tool',
+                                                                    toolCallId: msg.toolCallId,
                                                                     name: msg.toolName || 'tool',
                                                                     args: msg.toolArgs || {},
                                                                     status: msg.toolStatus === 'running' ? 'running' : 'done',
@@ -6284,17 +7100,28 @@ export default function AgentDetailPage() {
                                                                 continue;
                                                             }
                                                             flushGroup();
-                                                            grouped.push({ type: 'msg', msg, i });
+                                                            const isAssistantEmpty = msg.role === 'assistant'
+                                                                && !msg.content?.trim()
+                                                                && !msg.thinking?.trim()
+                                                                && !msg.runtimeError
+                                                                && !msg.fileName
+                                                                && !msg.imageUrl;
+                                                            if (!isAssistantEmpty) {
+                                                                grouped.push({ type: 'msg', msg, i });
+                                                            }
                                                         }
                                                     }
                                                     flushGroup(); // flush any trailing group
-
 
                                                     return grouped.map((entry, entryIdx) => {
                                                         const previousEntry = grouped[entryIdx - 1];
                                                         const hideAssistantAvatar = entry.type === 'msg'
                                                             && entry.msg.role === 'assistant'
                                                             && previousEntry?.type === 'analysis_group';
+                                                        // The assistant text that follows a propose_experience_draft group
+                                                        // already has the review card above it — suppress its 沉淀 button.
+                                                        const prevGroupHasPropose = previousEntry?.type === 'analysis_group'
+                                                            && previousEntry.items.some((it: any) => it.type === 'tool' && it.name === 'propose_experience_draft');
                                                         if (entry.type === 'analysis_group') {
                                                             // Group is considered running if it has a running tool,
                                                             // or if it's the very last entry and the agent is still active
@@ -6313,6 +7140,9 @@ export default function AgentDetailPage() {
                                                                         expanded={toolGroupExpandedRef.current.has(entry.key) ? !!toolGroupExpandedRef.current.get(entry.key) : false}
                                                                         onToggle={() => toggleToolGroup(entry.key)}
                                                                         isGroupRunning={groupIsRunning}
+                                                                        chatActive={isWaiting || isStreaming}
+                                                                        sessionId={activeSessionIdRef.current}
+                                                                        reconciliationsByToolCallId={selectedReconciliationsByToolCallId}
                                                                     />
                                                                 </div>
                                                             );
@@ -6337,6 +7167,7 @@ export default function AgentDetailPage() {
                                                                             senderLabel={(agent as any)?.name || 'Agent'}
                                                                             avatarText={((agent as any)?.name || 'Agent')[0]}
                                                                             hideAvatar={hideAssistantAvatar}
+                                                                            hideDistill={prevGroupHasPropose}
                                                                         />
                                                                     )}
                                                                 </React.Fragment>
@@ -6352,12 +7183,13 @@ export default function AgentDetailPage() {
                                                                 senderLabel={msg.role === 'assistant' ? ((agent as any)?.name || 'Agent') : (currentUser?.display_name || undefined)}
                                                                 avatarText={msg.role === 'assistant' ? (((agent as any)?.name || 'Agent')[0]) : (currentUser?.display_name?.[0] || undefined)}
                                                                 hideAvatar={hideAssistantAvatar}
+                                                                hideDistill={prevGroupHasPropose}
                                                             />
                                                         );
                                                     });
                                                 })()
                                                 }
-                                                {isWaiting && (
+                                                {showDirectRunThinking && (
                                                     <div className="chat-msg-row">
                                                         <div className="chat-msg-avatar">A</div>
                                                         <div className="chat-msg-bubble chat-msg-bubble--thinking">
@@ -6404,6 +7236,64 @@ export default function AgentDetailPage() {
                                             ) : null}
                                             <div ref={chatInputAreaRef} className="chat-input-area" style={{ flexShrink: 0 }}>
                                                 <div className="chat-composer">
+                                                    {selectedSessionActiveRun?.pendingToolReconciliations
+                                                        .filter(toolReconciliationNeedsUserAction)
+                                                        .map((reconciliation) => (
+                                                            <div className="chat-tool-reconciliation" key={reconciliation.executionId}>
+                                                                <div className="chat-tool-reconciliation__title">
+                                                                    <IconAlertTriangle size={16} />
+                                                                    {reconciliation.workspaceResolution
+                                                                        ? t('agent.chat.workspaceConflictTitle', '文件内容有变化')
+                                                                        : t('agent.chat.reconcileTitle', '工具执行结果需要确认')}
+                                                                </div>
+                                                                <div className="chat-tool-reconciliation__detail">
+                                                                    {reconciliation.workspaceResolution ? (
+                                                                        <span>{t('agent.chat.workspaceConflictBody', 'Agent 处理后的文件与工作区中的源文件不同。请选择要保留哪一个。')}</span>
+                                                                    ) : (
+                                                                        <>
+                                                                            <code>{reconciliation.toolName}</code>
+                                                                            <span>{reconciliation.resultSummary || reconciliation.errorCode || t('agent.chat.reconcileUnknown', '该操作可能已生效，也可能未生效。')}</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                                <div className="chat-tool-reconciliation__actions">
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn btn-secondary"
+                                                                        disabled={reconcilingExecutionId !== null}
+                                                                        onClick={() => void handleToolReconciliation(reconciliation, 'not_applied')}
+                                                                    >
+                                                                        {reconciliation.workspaceResolution
+                                                                            ? t('agent.chat.keepSourceFile', '保留源文件')
+                                                                            : t('agent.chat.reconcileNotApplied', '确认未生效，可继续')}
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn btn-primary"
+                                                                        disabled={reconcilingExecutionId !== null}
+                                                                        onClick={() => void handleToolReconciliation(reconciliation, 'applied')}
+                                                                    >
+                                                                        {reconciliation.workspaceResolution
+                                                                            ? t('agent.chat.useAgentResult', '使用 Agent 的结果')
+                                                                            : t('agent.chat.reconcileApplied', '确认已生效，继续')}
+                                                                    </button>
+                                                                    {reconciliation.workspaceResolution && (
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-primary"
+                                                                            disabled={reconcilingExecutionId !== null}
+                                                                            onClick={() => void handleToolReconciliation(
+                                                                                reconciliation,
+                                                                                'applied',
+                                                                                true,
+                                                                            )}
+                                                                        >
+                                                                            {t('agent.chat.useAgentResultForRun', '本次任务全部使用 Agent 的结果')}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     {(chatUploadDrafts.length > 0 || attachedFiles.length > 0) && (
                                                         <div className="chat-composer-attachments">
                                                             {chatUploadDrafts.map((draft) => (
@@ -6472,7 +7362,7 @@ export default function AgentDetailPage() {
                                                         <textarea
                                                             ref={chatInputRef}
                                                             className="chat-input"
-                                                            disabled={showNoModelState}
+                                                            disabled={showNoModelState || !!selectedSessionActiveRun?.pendingToolReconciliations.length}
                                                             value={chatInput}
                                                             onChange={e => {
                                                                 setChatInput(e.target.value);
@@ -6483,7 +7373,12 @@ export default function AgentDetailPage() {
                                                             }}
                                                             onKeyDown={e => {
                                                                 // Enter sends the message; Shift+Enter inserts a newline
-                                                                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isWaiting && !isStreaming) {
+                                                                if (
+                                                                    e.key === 'Enter'
+                                                                    && !e.shiftKey
+                                                                    && !e.nativeEvent.isComposing
+                                                                    && !(selectedSessionActiveRun?.status === 'waiting_user' && !selectedSessionActiveRun.canResume)
+                                                                ) {
                                                                     e.preventDefault();
                                                                     sendChatMsg();
                                                                 }
@@ -6499,7 +7394,7 @@ export default function AgentDetailPage() {
                                                             type="button"
                                                             className="chat-composer-btn"
                                                             onClick={() => fileInputRef.current?.click()}
-                                                            disabled={showNoModelState || !wsConnected || chatUploadDrafts.length > 0 || isWaiting || isStreaming || attachedFiles.length >= 10}
+                                                            disabled={showNoModelState || !wsConnected || chatUploadDrafts.length > 0 || attachedFiles.length >= 10 || !!selectedSessionActiveRun?.pendingToolReconciliations.length}
                                                             title={t('agent.workspace.uploadFile')}
                                                         >
                                                             <IconPaperclip size={16} stroke={1.75} />
@@ -6511,36 +7406,37 @@ export default function AgentDetailPage() {
                                                             disabled={showNoModelState || !wsConnected}
                                                         />
                                                         <div style={{ flex: 1 }} />
-                                                        {(isStreaming || isWaiting) ? (
+                                                        {selectedSessionActiveRun?.canCancel && (
                                                             <button
                                                                 type="button"
                                                                 className="btn btn-stop-generation"
                                                                 onClick={() => {
-                                                                    if (!id || !activeSession?.id) return;
+                                                                    if (!id || !activeSession?.id || !selectedSessionActiveRun?.runId) return;
                                                                     const activeRuntimeKey = buildSessionRuntimeKey(id, String(activeSession.id));
                                                                     const activeSocket = wsMapRef.current[activeRuntimeKey];
                                                                     if (activeSocket?.readyState === WebSocket.OPEN) {
-                                                                        activeSocket.send(JSON.stringify({ type: 'abort' }));
-                                                                        setIsStreaming(false);
-                                                                        setIsWaiting(false);
-                                                                        setSessionUiState(activeRuntimeKey, { isWaiting: false, isStreaming: false });
+                                                                        activeSocket.send(JSON.stringify({ type: 'abort', run_id: selectedSessionActiveRun.runId }));
                                                                     }
                                                                 }}
                                                                 title={t('chat.stop', 'Stop')}
                                                             >
                                                                 <span className="stop-icon" />
                                                             </button>
-                                                        ) : (
-                                                            <button
-                                                                type="button"
-                                                                className="btn btn-primary chat-composer-send"
-                                                                onClick={sendChatMsg}
-                                                                disabled={showNoModelState || !wsConnected || (!chatInput.trim() && attachedFiles.length === 0)}
-                                                                title={t('chat.send')}
-                                                            >
-                                                                <IconSend size={16} stroke={1.75} />
-                                                            </button>
                                                         )}
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-primary chat-composer-send"
+                                                            onClick={sendChatMsg}
+                                                            disabled={
+                                                                showNoModelState
+                                                                || !wsConnected
+                                                                || (!chatInput.trim() && attachedFiles.length === 0)
+                                                                || (selectedSessionActiveRun?.status === 'waiting_user' && !selectedSessionActiveRun.canResume)
+                                                            }
+                                                            title={t('chat.send')}
+                                                        >
+                                                            <IconSend size={16} stroke={1.75} />
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </div>

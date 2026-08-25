@@ -1,7 +1,8 @@
 import uuid
-import pytest
 from types import SimpleNamespace
+
 import httpx
+import pytest
 
 from app.api import webhooks as webhooks_api
 from app.main import app
@@ -28,14 +29,6 @@ class FakeSession:
         self.added = []
         self.committed = False
         self.expunged = []
-
-    async def execute(self, statement):
-        stmt_str = str(statement)
-        if "agent_triggers" in stmt_str:
-            return FakeScalarResult(self.triggers)
-        elif "agents" in stmt_str:
-            return FakeScalarResult(self.agent)
-        return FakeScalarResult(None)
 
     def add(self, value):
         self.added.append(value)
@@ -90,6 +83,13 @@ async def test_receive_webhook_success(monkeypatch, client):
     # Mock dependencies and DB session
     monkeypatch.setattr(webhooks_api, "async_session", FakeAsyncSessionFactory(session))
 
+    async def fake_get_enabled_webhook_target(token, db):
+        assert token == "valid_token"
+        assert db is session
+        return trigger, agent
+
+    monkeypatch.setattr(webhooks_api.trigger_dao, "get_enabled_webhook_target", fake_get_enabled_webhook_target)
+
     # Mock redis rate limiting
     async def fake_record_and_count_hits(token):
         return 1
@@ -98,7 +98,7 @@ async def test_receive_webhook_success(monkeypatch, client):
 
     # Mock enqueue_webhook_execution
     async def fake_enqueue_webhook_execution(db, trigger, body, payload_text, payload_obj, request_headers):
-        return SimpleNamespace(id=uuid.uuid4()), True
+        return SimpleNamespace(id=uuid.uuid4(), status="processing"), True
 
     monkeypatch.setattr(webhooks_api, "enqueue_webhook_execution", fake_enqueue_webhook_execution)
 
@@ -109,3 +109,71 @@ async def test_receive_webhook_success(monkeypatch, client):
     assert response.json() == {"ok": True}
     assert trigger in session.expunged
     assert agent in session.expunged
+
+
+@pytest.mark.asyncio
+async def test_receive_webhook_reports_runtime_intake_failure(monkeypatch, client):
+    agent_id = uuid.uuid4()
+    trigger = SimpleNamespace(
+        id=uuid.uuid4(),
+        agent_id=agent_id,
+        name="test-trigger",
+        type="webhook",
+        config={"token": "valid_token"},
+        is_enabled=True,
+    )
+    agent = SimpleNamespace(id=agent_id, webhook_rate_limit=5)
+    session = FakeSession(triggers=[trigger], agent=agent)
+    monkeypatch.setattr(webhooks_api, "async_session", FakeAsyncSessionFactory(session))
+
+    async def fake_get_enabled_webhook_target(token, db):
+        assert token == "valid_token"
+        assert db is session
+        return trigger, agent
+
+    monkeypatch.setattr(webhooks_api.trigger_dao, "get_enabled_webhook_target", fake_get_enabled_webhook_target)
+
+    async def fake_record_and_count_hits(_token):
+        return 1
+
+    async def reject_runtime(*_args, **_kwargs):
+        return SimpleNamespace(
+            id=uuid.uuid4(),
+            status="failed",
+            last_error="runtime_v2_disabled: rollout disabled",
+        ), True
+
+    monkeypatch.setattr(webhooks_api, "_record_and_count_hits", fake_record_and_count_hits)
+    monkeypatch.setattr(webhooks_api, "enqueue_webhook_execution", reject_runtime)
+
+    async with await client() as ac:
+        response = await ac.post("/api/webhooks/t/valid_token", json={"event": "test"})
+
+    assert response.status_code == 503
+    assert response.json() == {"ok": False, "error": "runtime_unavailable"}
+
+
+@pytest.mark.asyncio
+async def test_receive_webhook_ignores_token_without_authorized_agent(monkeypatch, client):
+    session = FakeSession()
+    monkeypatch.setattr(webhooks_api, "async_session", FakeAsyncSessionFactory(session))
+
+    async def fake_record_and_count_hits(_token):
+        return 1
+
+    async def no_authorized_target(token, db):
+        assert token == "valid_token"
+        assert db is session
+
+    async def fail_if_enqueued(*_args, **_kwargs):
+        pytest.fail("an unauthorized webhook target must not be enqueued")
+
+    monkeypatch.setattr(webhooks_api, "_record_and_count_hits", fake_record_and_count_hits)
+    monkeypatch.setattr(webhooks_api.trigger_dao, "get_enabled_webhook_target", no_authorized_target)
+    monkeypatch.setattr(webhooks_api, "enqueue_webhook_execution", fail_if_enqueued)
+
+    async with await client() as ac:
+        response = await ac.post("/api/webhooks/t/valid_token", json={"event": "test"})
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
