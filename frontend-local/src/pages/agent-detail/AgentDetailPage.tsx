@@ -6581,7 +6581,7 @@ export default function AgentDetailPage() {
                                                                 }
                                                             }}
                                                             onPaste={handlePaste}
-                                                            placeholder={showNoModelState ? t('agent.chat.noModelPlaceholder', 'Configure a company model to start chatting') : (!wsConnected && !!currentUser && sessionUserIdStr(activeSession) === viewerUserIdStr() ? 'Connecting...' : t('chat.placeholder'))}
+                                                            placeholder={showNoModelState ? t('agent.chat.noModelPlaceholder', 'Configure a company model to start chatting') : (!wsConnected && !!currentUser && sessionUserIdStr(activeSession) === viewerUserIdStr() ? t('agent.chat.connecting', 'Connecting...') : t('chat.placeholder'))}
                                                             rows={1}
                                                         />
                                                     </div>

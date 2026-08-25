@@ -517,7 +517,7 @@ export default function EnterpriseSettings() {
                                 </div>
                                 {a.status === 'pending' ? (
                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button className="btn btn-primary" onClick={() => resolveApproval.mutate({ id: a.id, action: 'approve' })}>{t('common.confirm')}</button>
+                                        <button className="btn btn-primary" onClick={() => resolveApproval.mutate({ id: a.id, action: 'approve' })}>{t('common.approve')}</button>
                                         <button className="btn btn-danger" onClick={() => resolveApproval.mutate({ id: a.id, action: 'reject' })}>{t('common.reject')}</button>
                                     </div>
                                 ) : (

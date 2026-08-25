@@ -33,6 +33,8 @@ export default function SkillsTab() {
     const [savingToken, setSavingToken] = useState(false);
     const [clawhubKeyInput, setClawhubKeyInput] = useState('');
     const [savingClawhubKey, setSavingClawhubKey] = useState(false);
+    const [zipUploading, setZipUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const showToast = (message: string, type: 'success' | 'error' = 'success') => {
         setToast({ message, type });
@@ -65,7 +67,7 @@ export default function SkillsTab() {
         try {
             const result = await skillApi.clawhub.install(slug);
             const tierLabel = result.tier === 1 ? t('enterprise.skills.tier1PurePrompt') : result.tier === 2 ? t('enterprise.skills.tier2CliApi') : t('enterprise.skills.tier3Native');
-            showToast(`${t('enterprise.skills.installed', { name: result.name })} — ${tierLabel}, ${result.file_count} files`);
+            showToast(`${t('enterprise.skills.installed', { name: result.name })} — ${tierLabel}, ${t('enterprise.skills.filesCount', { count: result.file_count })}`);
             setRefreshKey(k => k + 1);
             // Remove from search results
             setSearchResults(prev => prev.filter(r => r.slug !== slug));
@@ -93,7 +95,7 @@ export default function SkillsTab() {
         setUrlImporting(true);
         try {
             const result = await skillApi.importFromUrl(urlInput);
-            showToast(`${t('enterprise.skills.imported', { name: result.name })} — ${result.file_count} files`);
+            showToast(`${t('enterprise.skills.imported', { name: result.name })} — ${t('enterprise.skills.filesCount', { count: result.file_count })}`);
             setRefreshKey(k => k + 1);
             setShowUrlModal(false);
             setUrlInput('');
@@ -102,6 +104,34 @@ export default function SkillsTab() {
             showToast(e.message || t('enterprise.skills.importFailed'), 'error');
         }
         setUrlImporting(false);
+    };
+
+    const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const MAX_ZIP = 1 * 1024 * 1024; // 1MB — skill packages should stay small
+        if (file.size > MAX_ZIP) {
+            showToast(t('enterprise.skills.zipTooLarge'), 'error');
+            e.target.value = '';
+            return;
+        }
+        setZipUploading(true);
+        try {
+            const result = await skillApi.importZip(file);
+            showToast(`${t('enterprise.skills.zipImported', { name: result.name })} — ${t('enterprise.skills.filesCount', { count: result.file_count })}`);
+            setRefreshKey(k => k + 1);
+        } catch (err: any) {
+            const msg = String(err?.message || err);
+            let tip: string = msg;
+            if (/SKILL\.md/i.test(msg)) tip = t('enterprise.skills.zipNoSkillMd');
+            else if (/text skills|binary/i.test(msg)) tip = t('enterprise.skills.zipBinary');
+            else if (/already exist/i.test(msg)) tip = t('enterprise.skills.zipConflict');
+            else if (/size|exceeds|too many/i.test(msg)) tip = t('enterprise.skills.zipTooLarge');
+            else if (/valid zip/i.test(msg)) tip = t('enterprise.skills.zipInvalid');
+            showToast(tip, 'error');
+        }
+        setZipUploading(false);
+        e.target.value = '';
     };
 
     const tierBadge = (tier: number) => {
@@ -154,6 +184,15 @@ export default function SkillsTab() {
                     >
                         {t('enterprise.tools.importFromUrl')}
                     </button>
+                    <button
+                        className="btn btn-secondary"
+                        style={{ fontSize: '13px' }}
+                        disabled={zipUploading}
+                        onClick={() => fileInputRef.current?.click()}
+                    >
+                        {zipUploading ? t('enterprise.skills.uploading', 'Uploading...') : t('enterprise.skills.uploadZip', 'Upload ZIP')}
+                    </button>
+                    <input ref={fileInputRef} type="file" accept=".zip" style={{ display: 'none' }} onChange={handleZipUpload} />
                     <button
                         className="btn btn-primary"
                         style={{ fontSize: '13px' }}

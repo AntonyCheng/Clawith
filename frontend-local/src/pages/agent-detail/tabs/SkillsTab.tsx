@@ -1,4 +1,5 @@
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { useRef, useState } from 'react';
+import type { ChangeEvent, Dispatch, ReactNode, SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { IconDownload, IconFolder, IconTools } from '@tabler/icons-react';
 import { useTranslation } from 'react-i18next';
@@ -69,6 +70,35 @@ export default function SkillsTab(props: Props) {
     const dialog = useDialog();
     const toast = useToast();
     const queryClient = useQueryClient();
+    const [zipUploading, setZipUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleZipUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const MAX_ZIP = 1 * 1024 * 1024; // 1MB — skill packages should stay small
+        if (file.size > MAX_ZIP) {
+            await dialog.alert(t('agent.skills.zipTooLarge'), { type: 'error' });
+            e.target.value = '';
+            return;
+        }
+        setZipUploading(true);
+        try {
+            const response = await fileApi.importZip(agentId, file);
+            toast.success(t('common.file.zipImported', { name: response.folder_name }));
+            queryClient.invalidateQueries({ queryKey: ['files', agentId, 'skills'] });
+        } catch (err: any) {
+            const msg = String(err?.message || err);
+            let tip: string = msg;
+            if (/SKILL\.md/i.test(msg)) tip = t('agent.skills.zipNoSkillMd');
+            else if (/size|exceeds|too many/i.test(msg)) tip = t('agent.skills.zipTooLarge');
+            else if (/valid zip/i.test(msg)) tip = t('agent.skills.zipInvalid');
+            await dialog.alert(tip, { type: 'error' });
+        } finally {
+            setZipUploading(false);
+        }
+        e.target.value = '';
+    };
     const adapter: FileBrowserApi = {
         list: (path) => fileApi.list(agentId, path),
         read: (path) => fileApi.read(agentId, path),
@@ -111,6 +141,15 @@ export default function SkillsTab(props: Props) {
                         >
                             {t('agent.skills.browseClawHubBtn', 'Browse ClawHub')}
                         </button>
+                        <button
+                            className="btn btn-secondary"
+                            style={{ fontSize: '13px' }}
+                            disabled={zipUploading}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            {zipUploading ? t('agent.skills.uploading', 'Uploading...') : t('agent.skills.uploadZip', 'Upload ZIP')}
+                        </button>
+                        <input ref={fileInputRef} type="file" accept=".zip" style={{ display: 'none' }} onChange={handleZipUpload} />
                         <button
                             className="btn btn-primary"
                             style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}

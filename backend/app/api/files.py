@@ -838,6 +838,62 @@ upload_router = APIRouter(prefix="/agents/{agent_id}/files", tags=["files"])
 DEFAULT_UPLOAD_DIR = "workspace/uploads"
 
 
+@upload_router.post("/import-zip")
+async def import_skill_zip_to_agent(
+    agent_id: uuid.UUID,
+    file: UploadFileType = FastFile(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Import a skill from an uploaded ZIP archive into this agent's skills/ folder.
+
+    The archive must contain a SKILL.md at its root (a single wrapping
+    top-level directory is stripped automatically). Binary files are supported
+    and written through the storage backend. Existing files of a same-named
+    skill folder are overwritten.
+    """
+    await check_agent_access(db, current_user, agent_id)
+
+    from app.api.skills import (
+        MAX_SKILL_ZIP_AGENT,
+        _extract_skill_zip_files,
+        _skill_folder_name,
+    )
+
+    if file.size is not None and file.size > MAX_SKILL_ZIP_AGENT:
+        raise HTTPException(
+            413, f"Skill ZIP exceeds size limit ({MAX_SKILL_ZIP_AGENT // (1024 * 1024)}MB)."
+        )
+    data = await file.read()
+    extracted, top_dir = _extract_skill_zip_files(data, max_uncompressed_size=MAX_SKILL_ZIP_AGENT)
+
+    skill_md = next((f for f in extracted if f["path"].upper() == "SKILL.MD"), None)
+    if not skill_md:
+        raise HTTPException(
+            status_code=400,
+            detail="No SKILL.md found in archive — not a valid skill package",
+        )
+
+    folder_name = _skill_folder_name(top_dir, file.filename)
+
+    storage = get_storage_backend()
+    written = []
+    for f in extracted:
+        skill_key = _agent_storage_key(agent_id, f"skills/{folder_name}/{f['path']}")
+        if f["is_text"]:
+            await storage.write_text(skill_key, f["text"], encoding="utf-8")
+        else:
+            await storage.write_bytes(skill_key, f["raw"], content_type=guess_content_type(f["path"]))
+        written.append(f["path"])
+
+    return {
+        "status": "ok",
+        "folder_name": folder_name,
+        "files_written": len(written),
+        "files": written,
+    }
+
+
 @upload_router.post("/upload")
 async def upload_file_to_workspace(
     agent_id: uuid.UUID,

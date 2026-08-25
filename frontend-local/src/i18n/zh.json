@@ -502,7 +502,12 @@
       "importBtn": "导入",
       "importFromUrl": "从 URL 导入",
       "browseClawHubBtn": "浏览 ClawHub",
-      "importFromPresetsBtn": "从预设导入"
+      "importFromPresetsBtn": "从预设导入",
+      "uploadZip": "上传技能 ZIP",
+      "uploading": "上传中...",
+      "zipTooLarge": "文件超过 1MB 限制。",
+      "zipNoSkillMd": "技能包缺少 SKILL.md 文件——请确保 SKILL.md 位于 ZIP 根目录。",
+      "zipInvalid": "无效的 ZIP 文件。"
     },
     "toolMgmt": {
       "title": "工具管理",
@@ -573,7 +578,13 @@
       "provider": "来源",
       "toolName": "工具名",
       "inProgress": "进行中",
-      "done": "完成"
+      "done": "完成",
+      "noModelTitle": "未配置公司模型",
+      "noModelAdmin": "请先配置公司模型，再与该助手对话。",
+      "noModelMember": "该公司尚未配置模型，请联系管理员。",
+      "noModelPlaceholder": "配置公司模型后即可开始对话",
+      "goModelSettings": "前往模型管理",
+      "connecting": "连接中..."
     },
     "activityLog": {
       "title": "工作日志",
@@ -1877,7 +1888,16 @@
       "tier1PurePrompt": "Tier 1 · 纯提示词",
       "tier2CliApi": "Tier 2 · CLI/API",
       "tier3Native": "Tier 3 · OpenClaw 原生",
-      "updatedAt": "更新于 {{date}}"
+      "updatedAt": "更新于 {{date}}",
+      "uploadZip": "上传技能 ZIP",
+      "uploading": "上传中...",
+      "zipImported": "已导入 \"{{name}}\"",
+      "zipTooLarge": "文件超过 1MB 限制 —— 公司技能必须是小的纯文本包。",
+      "filesCount": "{{count}} 个文件",
+      "zipNoSkillMd": "技能包缺少 SKILL.md 文件——请确保 SKILL.md 位于 ZIP 根目录。",
+      "zipBinary": "公司技能库仅支持纯文本技能，含图片等资源的技能请上传到具体智能体。",
+      "zipConflict": "同名技能已存在，请修改名称或先删除已有技能。",
+      "zipInvalid": "无效的 ZIP 文件。"
     },
     "okr": {
       "okrSystem": "OKR 系统",
@@ -1984,7 +2004,8 @@
       "toolRemoveFailed": "移除工具失败",
       "modelDeleteFailed": "删除模型失败",
       "configDeleteFailed": "删除配置失败",
-      "companyDisableFailed": "禁用公司失败"
+      "companyDisableFailed": "禁用公司失败",
+      "zipUploadFailed": "技能 ZIP 上传失败"
     },
     "close": "关闭",
     "edit": "编辑",
@@ -2032,7 +2053,8 @@
       "filesImported": "已导入 {{count}} 个文件",
       "skillInstalled": "已安装 \"{{name}}\"",
       "skillImported": "已导入 \"{{name}}\"",
-      "triggersCount": "{{count}} 个触发器"
+      "triggersCount": "{{count}} 个触发器",
+      "zipImported": "已导入技能 \"{{name}}\""
     },
     "model": {
       "connectivityTest": "连通性测试",
@@ -2062,7 +2084,11 @@
     "success": "成功",
     "warning": "警告",
     "info": "提示",
-    "optional": "可选"
+    "optional": "可选",
+    "approve": "通过",
+    "reject": "拒绝",
+    "approved": "已通过",
+    "rejected": "已拒绝"
   },
   "admin": {
     "title": "公司管理",

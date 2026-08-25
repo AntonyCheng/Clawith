@@ -22,7 +22,7 @@ import config
 
 TOKEN_LIFETIME_SECONDS = 24 * 60 * 60
 TOKEN_SAFETY_MARGIN_SECONDS = 30 * 60  # re-login 30 min before actual expiry
-CHAT_TIMEOUT_SECONDS = 180
+CHAT_TIMEOUT_SECONDS = 1200  # 20 min — agent tool loops can easily exceed 3 min
 WELCOME_MESSAGE_WAIT_SECONDS = 2
 
 
@@ -150,7 +150,33 @@ async def get_session_history(agent_id: str, session_id: str, limit: int = 20) -
     )
 
 
-async def _chat_once(agent_id: str, message: str, session_id: str | None, token: str) -> dict:
+async def upload_file(agent_id: str, filename: str, content: bytes, content_type: str = "application/octet-stream") -> dict:
+    """POST /api/chat/upload - upload a file into the agent's workspace/uploads/.
+
+    The backend saves the file, extracts text from known formats, and returns
+    metadata including the workspace path the agent can read via read_file.
+    """
+    async def _do(token: str) -> httpx.Response:
+        async with httpx.AsyncClient(base_url=config.BACKEND_HTTP_URL, timeout=120) as client:
+            return await client.post(
+                "/api/chat/upload",
+                headers={"Authorization": f"Bearer {token}"},
+                files={"file": (filename, content, content_type)},
+                data={"agent_id": agent_id},
+            )
+
+    token = await _token_manager.get_token()
+    resp = await _do(token)
+    if resp.status_code == 401:
+        token = await _token_manager.get_token(force_refresh=True)
+        resp = await _do(token)
+
+    if resp.status_code >= 400:
+        raise BackendError(f"Upload to backend failed (status {resp.status_code}): {resp.text}")
+    return resp.json()
+
+
+async def _chat_once(agent_id: str, message: str, session_id: str | None, token: str, file_name: str | None = None) -> dict:
     """Open one WebSocket connection, send one message, collect the final reply."""
     ws_url = f"{config.BACKEND_WS_URL}/ws/chat/{agent_id}?token={token}&lang=zh"
     if session_id:
@@ -180,14 +206,22 @@ async def _chat_once(agent_id: str, message: str, session_id: str | None, token:
         except asyncio.TimeoutError:
             pass
 
-        await ws.send(json.dumps({"content": message}))
+        payload: dict = {"content": message}
+        if file_name:
+            payload["file_name"] = file_name
+        await ws.send(json.dumps(payload))
 
         deadline = time.monotonic() + CHAT_TIMEOUT_SECONDS
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise BackendError("Timed out waiting for the agent's reply.")
-            raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=remaining)
+            except asyncio.TimeoutError as exc:
+                raise BackendError(
+                    f"Timed out waiting for the agent's reply ({CHAT_TIMEOUT_SECONDS // 60} min)."
+                ) from exc
             data = json.loads(raw)
             msg_type = data.get("type")
             if msg_type == "error":
@@ -201,13 +235,19 @@ async def _chat_once(agent_id: str, message: str, session_id: str | None, token:
             # streaming events we don't need for a single request/response call.
 
 
-async def chat_with_agent(agent_id: str, message: str, session_id: str | None = None) -> dict:
-    """Send one message to an agent and return its full reply plus the session_id used."""
+async def chat_with_agent(
+    agent_id: str, message: str, session_id: str | None = None, file_name: str | None = None
+) -> dict:
+    """Send one message to an agent and return its full reply plus the session_id used.
+
+    `file_name` optionally names a file previously uploaded via upload_file, so
+    the chat history shows the attachment marker and the agent's read_file hint.
+    """
     token = await _token_manager.get_token()
     try:
-        return await _chat_once(agent_id, message, session_id, token)
+        return await _chat_once(agent_id, message, session_id, token, file_name)
     except BackendError as exc:
         if "Authentication failed" not in str(exc):
             raise
         token = await _token_manager.get_token(force_refresh=True)
-        return await _chat_once(agent_id, message, session_id, token)
+        return await _chat_once(agent_id, message, session_id, token, file_name)

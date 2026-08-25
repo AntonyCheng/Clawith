@@ -395,6 +395,9 @@ export const fileApi = {
             body: JSON.stringify({ skill_id: skillId }),
         }),
 
+    importZip: (agentId: string, file: File, onProgress?: (pct: number) => void) =>
+        uploadFileWithProgress(`/agents/${agentId}/files/import-zip`, file, onProgress).promise,
+
     downloadUrl: (agentId: string, path: string, options?: { inline?: boolean }) => {
         const token = localStorage.getItem('token');
         const params = new URLSearchParams({ path, token: token || '' });
@@ -568,6 +571,8 @@ export const skillApi = {
     },
     importFromUrl: (url: string) =>
         request<any>('/skills/import-from-url', { method: 'POST', body: JSON.stringify({ url }) }),
+    importZip: (file: File, onProgress?: (pct: number) => void) =>
+        uploadFileWithProgress('/skills/import-zip', file, onProgress).promise,
     previewUrl: (url: string) =>
         request<any>('/skills/import-from-url/preview', { method: 'POST', body: JSON.stringify({ url }) }),
     // Tenant-level settings

@@ -9,7 +9,7 @@ import zipfile
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -26,7 +26,10 @@ CLAWHUB_BASE = os.getenv("CLAWHUB_BASE", "https://clawhub.ai/api").rstrip("/")
 CLAWHUB_MIRROR_BASE = os.getenv("CLAWHUB_MIRROR_BASE", "https://cn.clawhub-mirror.com/api").rstrip("/")
 GITHUB_API = "https://api.github.com"
 
-MAX_SKILL_SIZE = 512_000  # 500 KB total limit per skill
+MAX_SKILL_SIZE = 512_000  # 500 KB total limit per skill (ClawHub / URL imports)
+MAX_SKILL_ZIP_COMPANY = 1_048_576  # 1 MB — company skill registry (stored as DB text)
+MAX_SKILL_ZIP_AGENT = 1_048_576  # 1 MB — agent skill workspace
+MAX_SKILL_ZIP_ENTRIES = 500  # anti zip-bomb: max file entries per archive
 
 
 async def _get_tenant_setting(tenant_id: str | None, key: str) -> str:
@@ -108,17 +111,29 @@ def _public_clawhub_url(base_url: str, slug: str) -> str:
     return f"https://clawhub.ai/skills/{slug}"
 
 
-def _extract_clawhub_zip_files(data: bytes) -> list[dict]:
-    """Convert a ClawHub skill zip into [{"path", "content"}] records."""
+def _extract_skill_zip_files(
+    data: bytes,
+    max_uncompressed_size: int = MAX_SKILL_SIZE,
+    max_entries: int = MAX_SKILL_ZIP_ENTRIES,
+) -> tuple[list[dict], str | None]:
+    """Extract a skill zip → ``(files, top_dir)``.
+
+    ``files`` is a list of ``{"path", "raw", "is_text", "text"}`` records;
+    ``top_dir`` is the stripped top-level folder name (or ``None`` when
+    SKILL.md sits at the archive root).
+    """
     files: list[dict] = []
     total_size = 0
 
     try:
         archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as exc:
-        raise HTTPException(502, "ClawHub download did not return a valid skill archive") from exc
+        raise HTTPException(400, "File is not a valid zip archive") from exc
 
     entries = [info for info in archive.infolist() if not info.is_dir()]
+    if len(entries) > max_entries:
+        raise HTTPException(413, f"Skill archive has too many files (limit {max_entries})")
+
     raw_paths = [Path(info.filename) for info in entries]
     strip_prefix = ""
     if raw_paths:
@@ -143,15 +158,38 @@ def _extract_clawhub_zip_files(data: bytes) -> list[dict]:
             continue
 
         total_size += info.file_size
-        if total_size > MAX_SKILL_SIZE:
-            raise HTTPException(413, f"Skill exceeds size limit ({MAX_SKILL_SIZE // 1024}KB)")
+        if total_size > max_uncompressed_size:
+            raise HTTPException(413, f"Skill exceeds size limit ({max_uncompressed_size // 1024}KB)")
 
-        content = archive.read(info).decode("utf-8", errors="replace")
-        files.append({"path": rel, "content": content})
+        raw = archive.read(info)
+        try:
+            text = raw.decode("utf-8")
+            is_text = True
+        except UnicodeDecodeError:
+            text = None
+            is_text = False
+        files.append({"path": rel, "raw": raw, "is_text": is_text, "text": text})
 
     if not any(f["path"].upper() == "SKILL.MD" for f in files):
-        raise HTTPException(400, "No SKILL.md found in ClawHub archive — not a valid skill package")
-    return files
+        raise HTTPException(400, "No SKILL.md found in archive — not a valid skill package")
+    top_dir = strip_prefix[:-1] if strip_prefix else None
+    return files, top_dir
+
+
+def _files_for_db(extracted: list[dict]) -> list[dict]:
+    """Convert extracted entries into ``[{"path", "content"}]`` for ``_save_skill_to_db``.
+
+    The company registry stores text only (``SkillFile.content`` is a Text
+    column), so binary entries are lossily decoded with errors replaced —
+    matching the historical ClawHub / URL import behaviour.
+    """
+    return [
+        {
+            "path": f["path"],
+            "content": f["text"] if f["is_text"] else f["raw"].decode("utf-8", errors="replace"),
+        }
+        for f in extracted
+    ]
 
 
 async def _fetch_clawhub_json(
@@ -232,7 +270,8 @@ async def _fetch_clawhub_skill_archive(
                 last_error = f"ClawHub rate limit exceeded at {base_url}"
                 continue
             if resp.status_code == 200 and ("zip" in content_type or resp.content.startswith(b"PK")):
-                return _extract_clawhub_zip_files(resp.content), base_url
+                extracted, _ = _extract_skill_zip_files(resp.content)
+                return _files_for_db(extracted), base_url
             last_error = f"ClawHub download failed from {base_url}: HTTP {resp.status_code}"
         except HTTPException:
             raise
@@ -621,6 +660,83 @@ async def import_from_url(body: UrlImportIn, current_user: User = Depends(get_cu
     result["tier"] = tier
     result["file_count"] = len(files)
     result["source"] = "url"
+    return result
+
+
+def _slugify(value: str) -> str:
+    """Normalize a string into a kebab-case folder name (a-z0-9-)."""
+    return re.sub(r"[^a-zA-Z0-9]+", "-", value or "").strip("-").lower()
+
+
+def _derive_folder_name(filename: str | None) -> str:
+    """Derive a fallback folder name from the uploaded zip filename."""
+    return _slugify(Path(filename or "skill").stem) or "skill"
+
+
+def _skill_folder_name(top_dir: str | None, filename: str | None) -> str:
+    """Use the zip's top-level folder name verbatim (CJK preserved), falling
+    back to the archive filename. Path-traversal segments are rejected."""
+    for candidate in (top_dir, Path(filename or "").stem):
+        name = (candidate or "").strip()
+        if name and name not in (".", "..") and "/" not in name and "\\" not in name:
+            return name
+    return "skill"
+
+
+# Separate router for multipart uploads (UploadFile cannot share the JSON router).
+skill_upload_router = APIRouter(prefix="/skills", tags=["skills"])
+
+
+@skill_upload_router.post("/import-zip")
+async def import_skill_zip(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Import a skill from an uploaded ZIP archive into the global registry.
+
+    The archive must contain a SKILL.md at its root (a single wrapping
+    top-level directory is stripped automatically). The company registry is
+    text-only, so archives with binary files are rejected — upload those to a
+    specific agent instead. A duplicate folder name yields HTTP 409.
+    """
+    if file.size is not None and file.size > MAX_SKILL_ZIP_COMPANY:
+        raise HTTPException(
+            413,
+            f"Skill ZIP exceeds size limit ({MAX_SKILL_ZIP_COMPANY // (1024 * 1024)}MB). "
+            "Company skills must be small text-only packages.",
+        )
+    data = await file.read()
+    extracted, top_dir = _extract_skill_zip_files(data, max_uncompressed_size=MAX_SKILL_ZIP_COMPANY)
+
+    # Company registry stores text only — reject archives with binary assets.
+    if any(not f["is_text"] for f in extracted):
+        raise HTTPException(
+            400,
+            "Company skill library only supports text skills. "
+            "Upload archives with binary assets (images, PDFs, fonts) "
+            "to a specific agent instead.",
+        )
+
+    skill_md = next((f for f in extracted if f["path"].upper() == "SKILL.MD"), None)
+    if not skill_md:
+        raise HTTPException(400, "No SKILL.md found in archive — not a valid skill package")
+
+    frontmatter = _parse_skill_md_frontmatter(skill_md["text"] or "")
+    name = frontmatter.get("name") or _derive_folder_name(file.filename)
+    description = frontmatter.get("description", "")
+    folder_name = _skill_folder_name(top_dir, file.filename)
+
+    result = await _save_skill_to_db(
+        folder_name=folder_name,
+        name=name,
+        description=description,
+        category="zip-import",
+        icon="",
+        files=_files_for_db(extracted),
+        tenant_id=str(current_user.tenant_id) if current_user.tenant_id else None,
+    )
+    result["source"] = "zip"
+    result["file_count"] = len(extracted)
     return result
 
 

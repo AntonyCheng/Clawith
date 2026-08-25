@@ -495,7 +495,12 @@
       "importBtn": "Import",
       "importFromUrl": "Import from URL",
       "browseClawHubBtn": "Browse ClawHub",
-      "importFromPresetsBtn": "Import from Presets"
+      "importFromPresetsBtn": "Import from Presets",
+      "uploadZip": "Upload Skill ZIP",
+      "uploading": "Uploading...",
+      "zipTooLarge": "File exceeds 1MB limit.",
+      "zipNoSkillMd": "Skill package is missing SKILL.md — ensure SKILL.md is at the archive root.",
+      "zipInvalid": "Invalid ZIP archive."
     },
     "toolMgmt": {
       "title": "Tool Management",
@@ -566,7 +571,13 @@
       "provider": "Provider",
       "toolName": "Tool",
       "inProgress": "In progress",
-      "done": "Done"
+      "done": "Done",
+      "noModelTitle": "No company model configured",
+      "noModelAdmin": "Configure a company model before chatting with this assistant.",
+      "noModelMember": "This company has not configured a model yet. Please contact an administrator.",
+      "noModelPlaceholder": "Configure a company model to start chatting",
+      "goModelSettings": "Go to model management",
+      "connecting": "Connecting..."
     },
     "activityLog": {
       "title": "Activity Log",
@@ -1788,7 +1799,16 @@
       "tier1PurePrompt": "Tier 1 · Pure Prompt",
       "tier2CliApi": "Tier 2 · CLI/API",
       "tier3Native": "Tier 3 · OpenClaw Native",
-      "updatedAt": "Updated {{date}}"
+      "updatedAt": "Updated {{date}}",
+      "uploadZip": "Upload Skill ZIP",
+      "uploading": "Uploading...",
+      "zipImported": "Imported \"{{name}}\"",
+      "zipTooLarge": "File exceeds 1MB — company skills must be small text-only packages.",
+      "filesCount": "{{count}} files",
+      "zipNoSkillMd": "Skill package is missing SKILL.md — ensure SKILL.md is at the archive root.",
+      "zipBinary": "Company skill library only supports text skills; upload archives with binary assets to a specific agent.",
+      "zipConflict": "A skill with this name already exists; rename it or delete the existing one first.",
+      "zipInvalid": "Invalid ZIP archive."
     },
     "okr": {
       "okrSystem": "OKR System",
@@ -1893,7 +1913,8 @@
       "toolRemoveFailed": "Failed to remove tool",
       "modelDeleteFailed": "Failed to delete model",
       "configDeleteFailed": "Failed to delete configuration",
-      "companyDisableFailed": "Failed to disable company"
+      "companyDisableFailed": "Failed to disable company",
+      "zipUploadFailed": "Skill ZIP upload failed"
     },
     "close": "Close",
     "edit": "Edit",
@@ -1943,7 +1964,8 @@
       "filesImported": "Imported {{count}} files",
       "skillInstalled": "Installed \"{{name}}\"",
       "skillImported": "Imported \"{{name}}\"",
-      "triggersCount": "{{count}} triggers"
+      "triggersCount": "{{count}} triggers",
+      "zipImported": "Imported skill \"{{name}}\""
     },
     "model": {
       "connectivityTest": "Connectivity Test",
@@ -1973,7 +1995,11 @@
     "success": "Success",
     "warning": "Warning",
     "info": "Info",
-    "optional": "Optional"
+    "optional": "Optional",
+    "approve": "Approve",
+    "reject": "Reject",
+    "approved": "Approved",
+    "rejected": "Rejected"
   },
   "openclaw": {
     "created": "OpenClaw Agent Created",
