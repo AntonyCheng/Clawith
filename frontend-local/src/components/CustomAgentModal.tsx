@@ -13,6 +13,8 @@ import {
     IconX,
 } from '@tabler/icons-react';
 import { agentApi, authApi, enterpriseApi, tenantApi } from '../services/api';
+import { validateAgentName } from '../utils/agentNameValidation';
+import { buildOpenClawInstruction } from '../utils/openClawInstruction';
 import { useDialog } from './Dialog/DialogProvider';
 import LinearCopyButton from './LinearCopyButton';
 
@@ -39,7 +41,7 @@ interface Props {
 }
 
 export default function CustomAgentModal({ open, initialMode = 'native', onClose, onDone }: Props) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const dialog = useDialog();
@@ -125,8 +127,8 @@ export default function CustomAgentModal({ open, initialMode = 'native', onClose
     const createAgent = useMutation({
         mutationFn: async ({ chatNow }: { chatNow: boolean }) => {
             const trimmedName = name.trim();
-            if (!trimmedName) {
-                throw new Error(t('customAgentModal.nameRequired'));
+            if (validateAgentName(trimmedName)) {
+                throw new Error(t('customAgentModal.nameInvalid'));
             }
             if (mode === 'native' && enabledModels.length === 0) {
                 throw new Error(t('customAgentModal.noModelError'));
@@ -174,8 +176,15 @@ export default function CustomAgentModal({ open, initialMode = 'native', onClose
     if (!open) return null;
 
     const busy = createAgent.isPending;
+    const nameError = validateAgentName(name);
+    const nameErrorText = nameError === 'too_short'
+        ? t('customAgentModal.nameTooShort')
+        : nameError === 'too_long'
+            ? t('customAgentModal.nameTooLong')
+            : '';
+    const nameInvalid = nameError !== null;
     const setupInstruction = createdExternal?.api_key
-        ? buildOpenClawInstruction(createdExternal.api_key)
+        ? buildOpenClawInstruction(createdExternal.api_key, !!i18n.language?.startsWith('zh'))
         : '';
 
     const closeSuccess = () => {
@@ -274,8 +283,19 @@ export default function CustomAgentModal({ open, initialMode = 'native', onClose
                                             : t('customAgentModal.namePlaceholderExternal')}
                                         disabled={busy}
                                         autoFocus
+                                        aria-invalid={nameErrorText ? true : undefined}
+                                        aria-describedby={nameErrorText ? 'custom-agent-name-error' : undefined}
                                         style={{ width: '100%' }}
                                     />
+                                    {nameErrorText ? (
+                                        <span
+                                            id="custom-agent-name-error"
+                                            role="alert"
+                                            style={{ fontSize: '12px', color: 'var(--error, #dc2626)', lineHeight: 1.4 }}
+                                        >
+                                            {nameErrorText}
+                                        </span>
+                                    ) : null}
                                 </Field>
 
                                 <Field label={t('customAgentModal.role')}>
@@ -359,7 +379,7 @@ export default function CustomAgentModal({ open, initialMode = 'native', onClose
                                     >
                                         <button
                                             className="btn btn-secondary"
-                                            disabled={busy || nativeHasNoModel}
+                                            disabled={busy || nativeHasNoModel || nameInvalid}
                                             style={{ pointerEvents: nativeHasNoModel ? 'none' : undefined }}
                                             onClick={() => createAgent.mutate({ chatNow: false })}
                                         >
@@ -372,7 +392,7 @@ export default function CustomAgentModal({ open, initialMode = 'native', onClose
                                     >
                                         <button
                                             className="btn btn-primary"
-                                            disabled={busy || nativeHasNoModel}
+                                            disabled={busy || nativeHasNoModel || nameInvalid}
                                             style={{ pointerEvents: nativeHasNoModel ? 'none' : undefined }}
                                             onClick={() => createAgent.mutate({ chatNow: true })}
                                         >
@@ -383,7 +403,7 @@ export default function CustomAgentModal({ open, initialMode = 'native', onClose
                             ) : (
                                 <button
                                     className="btn btn-primary"
-                                    disabled={busy}
+                                    disabled={busy || nameInvalid}
                                     onClick={() => createAgent.mutate({ chatNow: false })}
                                 >
                                     {busy ? t('customAgentModal.creating') : t('customAgentModal.createConnection')}
@@ -641,59 +661,3 @@ function ExternalSuccess({
     );
 }
 
-function buildOpenClawInstruction(apiKey: string) {
-    const origin = window.location.origin;
-    return `Please create a skill file at skills/digitalemployee_sync.md with the following content, then add "Check Digital Employee inbox using the digitalemployee_sync skill and process any pending messages" to your HEARTBEAT.md:
-
----
-name: digitalemployee_sync
-description: Sync with Digital Employee platform — check inbox, submit results, and send messages.
----
-
-# Digital Employee Sync
-
-## When to use
-Check for new messages from the Digital Employee platform during every heartbeat cycle.
-You can also proactively send messages to people and agents in your relationships.
-
-## Instructions
-
-### 1. Check inbox
-Make an HTTP GET request:
-- URL: ${origin}/api/gateway/poll
-- Header: X-Api-Key: ${apiKey}
-
-The response contains a \`messages\` array. Each message includes:
-- \`id\` — unique message ID (use this for reporting)
-- \`content\` — the message text
-- \`sender_user_name\` — name of the Digital Employee user who sent it
-- \`sender_user_id\` — unique ID of the sender
-- \`conversation_id\` — the conversation this message belongs to
-- \`history\` — array of previous messages in this conversation for context
-
-The response also contains a \`relationships\` array describing your colleagues:
-- \`name\` — the person or agent name
-- \`type\` — "human" or "agent"
-- \`role\` — relationship type (e.g. collaborator, supervisor)
-- \`channels\` — available communication channels (e.g. ["feishu"], ["agent"])
-
-IMPORTANT: Use the \`history\` array to understand conversation context before replying.
-Different \`sender_user_name\` values mean different people — address them accordingly.
-
-### 2. Report results
-For each completed message, make an HTTP POST request:
-- URL: ${origin}/api/gateway/report
-- Header: X-Api-Key: ${apiKey}
-- Header: Content-Type: application/json
-- Body: {"message_id": "<id from the message>", "result": "<your response>"}
-
-### 3. Send a message to someone
-To proactively contact a person or agent, make an HTTP POST request:
-- URL: ${origin}/api/gateway/send-message
-- Header: X-Api-Key: ${apiKey}
-- Header: Content-Type: application/json
-- Body: {"target": "<name of person or agent>", "content": "<your message>"}
-
-The system auto-detects the best channel. For agents, the reply appears in your next poll.
-For humans, the message is delivered via their available channel (e.g. Feishu).`;
-}

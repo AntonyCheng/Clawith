@@ -52,9 +52,13 @@ import {
 } from '@tabler/icons-react';
 import { useDropZone } from '../../hooks/useDropZone';
 import ApprovalsTab from './tabs/ApprovalsTab';
+import AgentDirectory from './AgentDirectory';
 import { AGENT_DETAIL_TABS } from './agentDetailTabs';
 import { sessionActiveRunFromResponse } from './sessionRuntimeState';
+import { onboardingKickoffKey, shouldKickoffOnboarding } from './onboardingKickoff';
+import { belongsInOtherSessions } from './sessionVisibility';
 import { loadDirectHistoryTurn } from '../../services/directHistoryPagination';
+import { normalizeRuntimeError, formatRuntimeErrorDiagnostics, runtimeErrorDisablesReconnect, runtimeErrorMarksAgentExpired } from '../../services/runtimeError';
 import MindTab from './tabs/MindTab';
 import SettingsTab from './tabs/SettingsTab';
 import SkillsTab from './tabs/SkillsTab';
@@ -1270,706 +1274,6 @@ function ThoughtDisclosure({
 
 
 
-function RelationshipEditor({ agentId, readOnly = false }: { agentId: string; readOnly?: boolean }) {
-    const { t, i18n } = useTranslation();
-    const isChinese = i18n.language?.startsWith('zh');
-    const humanSearchRef = useRef<HTMLDivElement>(null);
-    const agentSearchRef = useRef<HTMLDivElement>(null);
-    const getHumanMemberSourceLabel = useCallback((member: any) => {
-        const providerName = (member?.provider_name || '').trim();
-        const providerType = (member?.provider_type || '').trim().toLowerCase();
-        if (!providerName || providerType === 'platform' || providerType === 'web' || providerName.toLowerCase() === 'web') {
-            return isChinese ? '平台用户' : 'Platform User';
-        }
-        return providerName;
-    }, [isChinese]);
-
-    const renderHumanMemberSourceBadge = useCallback((member: any) => {
-        const providerName = (member?.provider_name || '').trim();
-        const providerType = (member?.provider_type || '').trim().toLowerCase();
-        const isPlatformUser = !providerName || providerType === 'platform' || providerType === 'web' || providerName.toLowerCase() === 'web';
-        const showPlatformBadge = Boolean(member?.is_platform_user) && !isPlatformUser;
-        const badgeStyle = (platform: boolean): React.CSSProperties => ({
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '1px 6px',
-            borderRadius: '999px',
-            fontSize: '10px',
-            fontWeight: 600,
-            marginRight: '6px',
-            background: platform ? 'rgba(99,102,241,0.10)' : 'rgba(16,185,129,0.10)',
-            color: platform ? 'rgb(79,70,229)' : 'rgb(16,185,129)',
-            border: platform ? '1px solid rgba(99,102,241,0.18)' : '1px solid rgba(16,185,129,0.18)',
-        });
-        return (
-            <>
-                <span style={badgeStyle(isPlatformUser)}>
-                    {getHumanMemberSourceLabel(member)}
-                </span>
-                {showPlatformBadge && (
-                    <span style={badgeStyle(true)}>
-                        {isChinese ? '平台用户' : 'Platform User'}
-                    </span>
-                )}
-            </>
-        );
-    }, [getHumanMemberSourceLabel, isChinese]);
-
-    const getRestrictedTitle = useCallback((reason?: string | null) => {
-        const reasonText = reason ? ` (${reason})` : '';
-        return isChinese
-            ? `当关系目标不存在、停用/过期，或当前访问权限不再允许这个 Agent 与该用户/Agent 互动时，会显示为 restricted。关系记录会保留，但运行时不会使用。${reasonText}`
-            : `Restricted means the target is missing, inactive/expired, or current access permissions no longer allow this agent to interact with that user/agent. The record is kept, but runtime use is blocked.${reasonText}`;
-    }, [isChinese]);
-
-    const [restrictedTooltip, setRestrictedTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
-    const showRestrictedTooltip = useCallback((event: React.SyntheticEvent<HTMLElement>, reason?: string | null) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const tooltipWidth = Math.min(320, Math.max(220, window.innerWidth - 32));
-        const x = Math.min(
-            Math.max(rect.left + rect.width / 2, 16 + tooltipWidth / 2),
-            window.innerWidth - 16 - tooltipWidth / 2,
-        );
-        setRestrictedTooltip({
-            text: getRestrictedTitle(reason),
-            x,
-            y: rect.top - 8,
-        });
-    }, [getRestrictedTitle]);
-    const hideRestrictedTooltip = useCallback(() => setRestrictedTooltip(null), []);
-
-    const [search, setSearch] = useState('');
-    const [showHumanForm, setShowHumanForm] = useState(false);
-    const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [showMemberDropdown, setShowMemberDropdown] = useState(false);
-    const [selectedMembers, setSelectedMembers] = useState<any[]>([]);
-    const [relation, setRelation] = useState('collaborator');
-    const [description, setDescription] = useState('');
-    const [agentSearch, setAgentSearch] = useState('');
-    const [showAgentForm, setShowAgentForm] = useState(false);
-    const [agentSearchResults, setAgentSearchResults] = useState<any[]>([]);
-    const [showAgentDropdown, setShowAgentDropdown] = useState(false);
-    const [selectedAgents, setSelectedAgents] = useState<any[]>([]);
-    const [agentRelation, setAgentRelation] = useState('collaborator');
-    const [agentDescription, setAgentDescription] = useState('');
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [editRelation, setEditRelation] = useState('');
-    const [editDescription, setEditDescription] = useState('');
-    const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
-    const [editAgentRelation, setEditAgentRelation] = useState('');
-    const [editAgentDescription, setEditAgentDescription] = useState('');
-    const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
-
-    const { data: relationships = [], refetch } = useQuery({
-        queryKey: ['relationships', agentId],
-        queryFn: () => fetchAuth<any[]>(`/agents/${agentId}/relationships/`),
-    });
-    const { data: agentRelationships = [], refetch: refetchAgentRels } = useQuery({
-        queryKey: ['agent-relationships', agentId],
-        queryFn: () => fetchAuth<any[]>(`/agents/${agentId}/relationships/agents`),
-    });
-
-    const relatedMemberIds = useMemo(() => new Set(relationships.map((r: any) => r.member_id)), [relationships]);
-    const relatedAgentIds = useMemo(() => new Set(agentRelationships.map((r: any) => r.target_agent_id)), [agentRelationships]);
-    const selectedMemberIds = useMemo(() => new Set(selectedMembers.map((m: any) => m.id)), [selectedMembers]);
-    const selectedAgentIds = useMemo(() => new Set(selectedAgents.map((a: any) => a.id)), [selectedAgents]);
-    const relatedMemberById = useMemo(() => {
-        const map = new Map<string, any>();
-        relationships.forEach((r: any) => {
-            if (r.member_id) map.set(r.member_id, r);
-        });
-        return map;
-    }, [relationships]);
-
-    const visibleMemberResults = useMemo(
-        () => searchResults,
-        [searchResults],
-    );
-    const visibleAgentResults = useMemo(
-        () => agentSearchResults.filter((a: any) => !relatedAgentIds.has(a.id)),
-        [agentSearchResults, relatedAgentIds],
-    );
-
-    const loadOrgMembers = async (keyword = '') => {
-        const query = keyword.trim() ? `?search=${encodeURIComponent(keyword.trim())}` : '';
-        const results = await fetchAuth<any[]>(`/agents/${agentId}/relationships/member-candidates${query}`);
-        setSearchResults(results);
-    };
-
-    const loadAgentCandidates = async (keyword = '') => {
-        const query = keyword.trim() ? `?search=${encodeURIComponent(keyword.trim())}` : '';
-        const results = await fetchAuth<any[]>(`/agents/${agentId}/relationships/agent-candidates${query}`);
-        setAgentSearchResults(results);
-    };
-
-    useEffect(() => {
-        if (!search || search.length < 1) { setSearchResults([]); return; }
-        const timer = setTimeout(() => {
-            loadOrgMembers(search);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [search]);
-
-    useEffect(() => {
-        if (!agentSearch || agentSearch.length < 1) { setAgentSearchResults([]); return; }
-        const timer = setTimeout(() => {
-            loadAgentCandidates(agentSearch);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [agentId, agentSearch]);
-
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            const target = e.target as Node;
-            if (showMemberDropdown && humanSearchRef.current && !humanSearchRef.current.contains(target)) {
-                setShowMemberDropdown(false);
-            }
-            if (showAgentDropdown && agentSearchRef.current && !agentSearchRef.current.contains(target)) {
-                setShowAgentDropdown(false);
-            }
-        };
-        if (showMemberDropdown || showAgentDropdown) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [showMemberDropdown, showAgentDropdown]);
-
-    const resetHumanDraft = () => {
-        setShowHumanForm(false);
-        setSearch('');
-        setSearchResults([]);
-        setShowMemberDropdown(false);
-        setSelectedMembers([]);
-        setRelation('collaborator');
-        setDescription('');
-    };
-
-    const resetAgentDraft = () => {
-        setShowAgentForm(false);
-        setAgentSearch('');
-        setAgentSearchResults([]);
-        setShowAgentDropdown(false);
-        setSelectedAgents([]);
-        setAgentRelation('collaborator');
-        setAgentDescription('');
-    };
-
-    const toggleMemberSelection = (member: any) => {
-        setSelectedMembers(prev =>
-            prev.some((item: any) => item.id === member.id)
-                ? prev.filter((item: any) => item.id !== member.id)
-                : [...prev, member]
-        );
-    };
-
-    const toggleAgentSelection = (agent: any) => {
-        setSelectedAgents(prev =>
-            prev.some((item: any) => item.id === agent.id)
-                ? prev.filter((item: any) => item.id !== agent.id)
-                : [...prev, agent]
-        );
-    };
-
-    const addRelationship = async () => {
-        if (!selectedMembers.length) return;
-        const existing = new Map(
-            relationships.map((r: any) => [r.member_id, { member_id: r.member_id, relation: r.relation, description: r.description }])
-        );
-        selectedMembers.forEach((member: any) => {
-            existing.set(member.id, { member_id: member.id, relation, description });
-        });
-        await fetchAuth(`/agents/${agentId}/relationships/`, { method: 'PUT', body: JSON.stringify({ relationships: Array.from(existing.values()) }) });
-        resetHumanDraft();
-        refetch();
-    };
-
-    const removeRelationship = async (relId: string) => {
-        setDeletingIds(prev => new Set(prev).add(relId));
-        try {
-            await fetchAuth(`/agents/${agentId}/relationships/${relId}`, { method: 'DELETE' });
-            refetch();
-        } catch {
-            setDeletingIds(prev => { const s = new Set(prev); s.delete(relId); return s; });
-            refetch();
-        } finally {
-            setDeletingIds(prev => { const s = new Set(prev); s.delete(relId); return s; });
-        }
-    };
-
-    const startEditRelationship = (r: any) => {
-        setEditingId(r.id);
-        setEditRelation(r.relation || 'collaborator');
-        setEditDescription(r.description || '');
-    };
-
-    const saveEditRelationship = async (targetId: string) => {
-        const updated = relationships.map((r: any) => ({
-            member_id: r.member_id,
-            relation: r.id === targetId ? editRelation : r.relation,
-            description: r.id === targetId ? editDescription : r.description,
-        }));
-        await fetchAuth(`/agents/${agentId}/relationships/`, { method: 'PUT', body: JSON.stringify({ relationships: updated }) });
-        setEditingId(null);
-        refetch();
-    };
-
-    const addAgentRelationship = async () => {
-        if (!selectedAgents.length) return;
-        const existing = new Map(
-            agentRelationships.map((r: any) => [r.target_agent_id, { target_agent_id: r.target_agent_id, relation: r.relation, description: r.description }])
-        );
-        selectedAgents.forEach((agent: any) => {
-            existing.set(agent.id, { target_agent_id: agent.id, relation: agentRelation, description: agentDescription });
-        });
-        await fetchAuth(`/agents/${agentId}/relationships/agents`, { method: 'PUT', body: JSON.stringify({ relationships: Array.from(existing.values()) }) });
-        resetAgentDraft();
-        refetchAgentRels();
-    };
-
-    const removeAgentRelationship = async (relId: string) => {
-        setDeletingIds(prev => new Set(prev).add(relId));
-        try {
-            await fetchAuth(`/agents/${agentId}/relationships/agents/${relId}`, { method: 'DELETE' });
-            refetchAgentRels();
-        } catch {
-            setDeletingIds(prev => { const s = new Set(prev); s.delete(relId); return s; });
-            refetchAgentRels();
-        } finally {
-            setDeletingIds(prev => { const s = new Set(prev); s.delete(relId); return s; });
-        }
-    };
-
-    const startEditAgentRelationship = (r: any) => {
-        setEditingAgentId(r.id);
-        setEditAgentRelation(r.relation || 'collaborator');
-        setEditAgentDescription(r.description || '');
-    };
-
-    const saveEditAgentRelationship = async (targetId: string) => {
-        const updated = agentRelationships.map((r: any) => ({
-            target_agent_id: r.target_agent_id,
-            relation: r.id === targetId ? editAgentRelation : r.relation,
-            description: r.id === targetId ? editAgentDescription : r.description,
-        }));
-        await fetchAuth(`/agents/${agentId}/relationships/agents`, { method: 'PUT', body: JSON.stringify({ relationships: updated }) });
-        setEditingAgentId(null);
-        refetchAgentRels();
-    };
-
-    return (
-        <div>
-            {restrictedTooltip && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        left: restrictedTooltip.x,
-                        top: restrictedTooltip.y,
-                        transform: 'translate(-50%, -100%)',
-                        zIndex: 10000,
-                        width: 'max-content',
-                        maxWidth: 'min(320px, calc(100vw - 32px))',
-                        padding: '8px 10px',
-                        borderRadius: '8px',
-                        border: '1px solid var(--border-subtle)',
-                        background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                        boxShadow: '0 10px 30px rgba(0,0,0,0.16)',
-                        fontSize: '12px',
-                        lineHeight: 1.45,
-                        whiteSpace: 'normal',
-                        overflowWrap: 'anywhere',
-                        wordBreak: 'break-word',
-                        pointerEvents: 'none',
-                    }}
-                >
-                    {restrictedTooltip.text}
-                </div>
-            )}
-            <div className="card" style={{ marginBottom: '12px' }}>
-                <h4 style={{ marginBottom: '12px' }}>{t('agent.detail.humanRelationships')}</h4>
-                <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '12px' }}>{t('agent.detail.humanRelationships')}</p>
-                {relationships.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                        {relationships.map((r: any) => (
-                            <div key={r.id} style={{
-                                borderRadius: '8px', border: '1px solid var(--border-subtle)',
-                                overflow: 'hidden',
-                                opacity: deletingIds.has(r.id) ? 0.4 : 1,
-                                transition: 'opacity 0.2s ease',
-                                pointerEvents: deletingIds.has(r.id) ? 'none' : 'auto',
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px' }}>
-                                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(224,238,238,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 600, flexShrink: 0 }}>{r.member?.name?.[0] || '?'}</div>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontWeight: 600, fontSize: '13px' }}>
-                                            {r.member?.name || '?'} <span className="badge" style={{ fontSize: '10px', marginLeft: '4px' }}>{String(t(`agent.detail.${r.relation}`, r.relation_label))}</span>
-                                            {r.access_status && r.access_status !== 'active' && (
-                                                <span
-                                                    className="badge"
-                                                    onMouseEnter={(event) => showRestrictedTooltip(event, r.access_status_reason)}
-                                                    onMouseLeave={hideRestrictedTooltip}
-                                                    onFocus={(event) => showRestrictedTooltip(event, r.access_status_reason)}
-                                                    onBlur={hideRestrictedTooltip}
-                                                    tabIndex={0}
-                                                    style={{ fontSize: '10px', marginLeft: '4px', color: 'var(--warning)', background: 'rgba(245,158,11,0.12)', cursor: 'help' }}
-                                                >
-                                                    {r.access_status}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                            {renderHumanMemberSourceBadge(r.member)}
-                                            {r.member?.department_path || ''} · {r.member?.email || ''}
-                                        </div>
-                                        {r.description && editingId !== r.id && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{r.description}</div>}
-                                    </div>
-                                    {!readOnly && editingId !== r.id && (
-                                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                                            <button className="btn btn-ghost" style={{ fontSize: '12px' }} onClick={() => startEditRelationship(r)}>{t('common.edit', 'Edit')}</button>
-                                            <button
-                                                className="btn btn-ghost"
-                                                style={{ color: deletingIds.has(r.id) ? 'var(--text-tertiary)' : 'var(--error)', fontSize: '12px' }}
-                                                disabled={deletingIds.has(r.id)}
-                                                onClick={() => removeRelationship(r.id)}
-                                            >
-                                                {deletingIds.has(r.id) ? t('common.deleting', 'Deleting...') : t('common.delete')}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                                {editingId === r.id && (
-                                    <div style={{ padding: '0 10px 10px', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)' }}>
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
-                                            <select className="input" value={editRelation} onChange={e => setEditRelation(e.target.value)} style={{ width: '140px', fontSize: '12px' }}>
-                                                {getRelationOptions(t).map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                            </select>
-                                        </div>
-                                        <textarea className="input" value={editDescription} onChange={e => setEditDescription(e.target.value)} rows={2} style={{ fontSize: '12px', resize: 'vertical', marginBottom: '8px', width: '100%' }} placeholder={t('agent.detail.descriptionPlaceholder', 'Description...')} />
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={() => saveEditRelationship(r.id)}>{t('common.save', 'Save')}</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={() => setEditingId(null)}>{t('common.cancel')}</button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
-                {!readOnly && !showHumanForm && (
-                    <button className="btn btn-secondary" type="button" onClick={() => setShowHumanForm(true)}>
-                        {t('agent.detail.addRelationship', 'Add Relationship')}
-                    </button>
-                )}
-                {!readOnly && showHumanForm && (
-                    <div
-                        style={{ border: '1px solid var(--border-subtle)', borderRadius: '8px', padding: '12px', background: 'var(--bg-elevated)' }}
-                        onMouseDownCapture={(e) => {
-                            const target = e.target as Node;
-                            if (humanSearchRef.current && !humanSearchRef.current.contains(target)) {
-                                setShowMemberDropdown(false);
-                            }
-                        }}
-                    >
-                        <div ref={humanSearchRef} style={{ position: 'relative', marginBottom: '8px' }}>
-                            <input
-                                className="input"
-                                placeholder={t('agent.detail.searchMembers')}
-                                value={search}
-                                onChange={e => {
-                                    setSearch(e.target.value);
-                                    setShowMemberDropdown(true);
-                                }}
-                                onFocus={() => {
-                                    setShowMemberDropdown(true);
-                                    if (!search.trim() && searchResults.length === 0) {
-                                        loadOrgMembers();
-                                    }
-                                }}
-                                style={{ fontSize: '13px' }}
-                            />
-                            {showMemberDropdown && visibleMemberResults.length > 0 && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', marginTop: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                                    {visibleMemberResults.map((m: any) => {
-                                        const existingRelationship = relatedMemberById.get(m.id);
-                                        const alreadyAdded = Boolean(existingRelationship);
-                                        const checked = alreadyAdded || selectedMemberIds.has(m.id);
-                                        return (
-                                            <div
-                                                key={m.id}
-                                                style={{
-                                                    padding: '8px 12px',
-                                                    cursor: alreadyAdded ? 'default' : 'pointer',
-                                                    fontSize: '13px',
-                                                    borderBottom: '1px solid var(--border-subtle)',
-                                                    display: 'flex',
-                                                    alignItems: 'flex-start',
-                                                    gap: '8px',
-                                                    opacity: alreadyAdded ? 0.72 : 1,
-                                                }}
-                                                onClick={() => {
-                                                    if (!alreadyAdded) toggleMemberSelection(m);
-                                                }}
-                                                onMouseEnter={e => (e.currentTarget.style.background = alreadyAdded ? 'transparent' : 'var(--bg-elevated)')}
-                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                                <input type="checkbox" checked={checked} disabled={alreadyAdded} readOnly style={{ marginTop: '2px' }} />
-                                                <div style={{ minWidth: 0, flex: 1 }}>
-                                                    <div style={{ fontWeight: 500 }}>
-                                                        {m.name}
-                                                        {alreadyAdded && (
-                                                            <span className="badge" style={{ fontSize: '10px', marginLeft: '6px', color: 'var(--text-tertiary)', background: 'var(--bg-elevated)' }}>
-                                                                {isChinese ? '已添加' : 'Added'}
-                                                            </span>
-                                                        )}
-                                                        {alreadyAdded && existingRelationship?.relation_label && (
-                                                            <span className="badge" style={{ fontSize: '10px', marginLeft: '4px' }}>
-                                                                {String(t(`agent.detail.${existingRelationship.relation}`, existingRelationship.relation_label))}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                                        {renderHumanMemberSourceBadge(m)}
-                                                        {m.department_path} · {m.email}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                        {showMemberDropdown && search && visibleMemberResults.length === 0 && (
-                            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                                {t('agent.detail.noSearchResults', 'No available results')}
-                            </div>
-                        )}
-                        {selectedMembers.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
-                                {selectedMembers.map((member: any) => (
-                                    <div
-                                        key={member.id}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            border: '1px solid var(--border-subtle)',
-                                            borderRadius: '10px',
-                                            padding: '8px 10px',
-                                            background: 'var(--bg-primary)',
-                                            fontSize: '12px',
-                                            lineHeight: 1.2,
-                                        }}
-                                    >
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--bg-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', flexShrink: 0 }}>
-                                            {member.name?.[0] || '?'}
-                                        </div>
-                                        <div style={{ minWidth: 0 }}>
-                                            <div style={{ fontWeight: 600 }}>{member.name}</div>
-                                            <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{member.department_path || member.email || ''}</div>
-                                        </div>
-                                        <button className="btn btn-ghost" type="button" style={{ fontSize: '12px', padding: 0, minWidth: 'auto', marginLeft: '2px' }} onClick={() => toggleMemberSelection(member)}>×</button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                            <select className="input" value={relation} onChange={e => setRelation(e.target.value)} style={{ width: '160px', fontSize: '12px' }}>
-                                {getRelationOptions(t).map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-                        </div>
-                        <textarea className="input" placeholder="" value={description} onChange={e => setDescription(e.target.value)} rows={2} style={{ fontSize: '12px', resize: 'vertical', marginBottom: '8px' }} />
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={addRelationship} disabled={selectedMembers.length === 0}>
-                                {t('common.confirm')} {selectedMembers.length > 0 ? `(${selectedMembers.length})` : ''}
-                            </button>
-                            <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={resetHumanDraft}>
-                                {t('common.cancel')}
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-            <div className="card" style={{ marginBottom: '12px' }}>
-                <h4 style={{ marginBottom: '12px' }}>{t('agent.detail.agentRelationships')}</h4>
-                <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '12px' }}>{t('agent.detail.agentRelationships')}</p>
-                {agentRelationships.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                        {agentRelationships.map((r: any) => (
-                            <div key={r.id} style={{
-                                borderRadius: '8px',
-                                border: `1px solid ${r.access_status && r.access_status !== 'active' ? 'rgba(245,158,11,0.35)' : 'rgba(16,185,129,0.3)'}`,
-                                background: r.access_status && r.access_status !== 'active' ? 'rgba(245,158,11,0.06)' : 'rgba(16,185,129,0.05)', overflow: 'hidden',
-                                opacity: deletingIds.has(r.id) ? 0.4 : 1,
-                                transition: 'opacity 0.2s ease',
-                                pointerEvents: deletingIds.has(r.id) ? 'none' : 'auto',
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px' }}>
-                                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>A</div>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                        <div style={{ fontWeight: 600, fontSize: '13px' }}>
-                                            {r.target_agent?.name || '?'} <span className="badge" style={{ fontSize: '10px', marginLeft: '4px', background: 'rgba(16,185,129,0.15)', color: 'rgb(16,185,129)' }}>{String(t(`agent.detail.${r.relation}`, r.relation_label))}</span>
-                                            {r.access_status && r.access_status !== 'active' && (
-                                                <span
-                                                    className="badge"
-                                                    onMouseEnter={(event) => showRestrictedTooltip(event, r.access_status_reason)}
-                                                    onMouseLeave={hideRestrictedTooltip}
-                                                    onFocus={(event) => showRestrictedTooltip(event, r.access_status_reason)}
-                                                    onBlur={hideRestrictedTooltip}
-                                                    tabIndex={0}
-                                                    style={{ fontSize: '10px', marginLeft: '4px', color: 'var(--warning)', background: 'rgba(245,158,11,0.12)', cursor: 'help' }}
-                                                >
-                                                    {r.access_status}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
-                                            {r.target_agent?.role_description || 'Agent'}
-                                            {r.access_status_reason ? ` · ${r.access_status_reason}` : ''}
-                                        </div>
-                                        {r.description && editingAgentId !== r.id && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>{r.description}</div>}
-                                    </div>
-                                    {!readOnly && editingAgentId !== r.id && (
-                                        <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                                            <button className="btn btn-ghost" style={{ fontSize: '12px' }} onClick={() => startEditAgentRelationship(r)}>{t('common.edit', 'Edit')}</button>
-                                            <button
-                                                className="btn btn-ghost"
-                                                style={{ color: deletingIds.has(r.id) ? 'var(--text-tertiary)' : 'var(--error)', fontSize: '12px' }}
-                                                disabled={deletingIds.has(r.id)}
-                                                onClick={() => removeAgentRelationship(r.id)}
-                                            >
-                                                {deletingIds.has(r.id) ? t('common.deleting', 'Deleting...') : t('common.delete')}
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                                {editingAgentId === r.id && (
-                                    <div style={{ padding: '0 10px 10px', borderTop: '1px solid rgba(16,185,129,0.2)', background: 'var(--bg-elevated)' }}>
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '8px' }}>
-                                            <select className="input" value={editAgentRelation} onChange={e => setEditAgentRelation(e.target.value)} style={{ width: '140px', fontSize: '12px' }}>
-                                                {getAgentRelationOptions(t).map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                            </select>
-                                        </div>
-                                        <textarea className="input" value={editAgentDescription} onChange={e => setEditAgentDescription(e.target.value)} rows={2} style={{ fontSize: '12px', resize: 'vertical', marginBottom: '8px', width: '100%' }} placeholder={t('agent.detail.descriptionPlaceholder', 'Description...')} />
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={() => saveEditAgentRelationship(r.id)}>{t('common.save', 'Save')}</button>
-                                            <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={() => setEditingAgentId(null)}>{t('common.cancel')}</button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                )}
-                {!readOnly && !showAgentForm && (
-                    <button className="btn btn-secondary" type="button" onClick={() => setShowAgentForm(true)}>
-                        {t('agent.detail.addRelationship', 'Add Relationship')}
-                    </button>
-                )}
-                {!readOnly && showAgentForm && (
-                    <div
-                        style={{ border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', padding: '12px', background: 'var(--bg-elevated)' }}
-                        onMouseDownCapture={(e) => {
-                            const target = e.target as Node;
-                            if (agentSearchRef.current && !agentSearchRef.current.contains(target)) {
-                                setShowAgentDropdown(false);
-                            }
-                        }}
-                    >
-                        <div ref={agentSearchRef} style={{ position: 'relative', marginBottom: '8px' }}>
-                            <input
-                                className="input"
-                                placeholder={t('agent.detail.searchAgents', '搜索可见数字员工...')}
-                                value={agentSearch}
-                                onChange={e => {
-                                    setAgentSearch(e.target.value);
-                                    setShowAgentDropdown(true);
-                                }}
-                                onFocus={() => {
-                                    setShowAgentDropdown(true);
-                                    if (!agentSearch.trim() && agentSearchResults.length === 0) {
-                                        loadAgentCandidates();
-                                    }
-                                }}
-                                style={{ fontSize: '13px' }}
-                            />
-                            {showAgentDropdown && visibleAgentResults.length > 0 && (
-                                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px', marginTop: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
-                                    {visibleAgentResults.map((agent: any) => {
-                                        const checked = selectedAgentIds.has(agent.id);
-                                        return (
-                                            <div key={agent.id} style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'flex-start', gap: '8px' }}
-                                                onClick={() => toggleAgentSelection(agent)}
-                                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-elevated)')}
-                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                                                <input type="checkbox" checked={checked} readOnly style={{ marginTop: '2px' }} />
-                                                <div style={{ minWidth: 0, flex: 1 }}>
-                                                    <div style={{ fontWeight: 500 }}>{agent.name}</div>
-                                                    <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>{agent.role_description || 'Agent'}</div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                        {showAgentDropdown && agentSearch && visibleAgentResults.length === 0 && (
-                            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
-                                {t('agent.detail.noSearchResults', 'No available results')}
-                            </div>
-                        )}
-                        {selectedAgents.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
-                                {selectedAgents.map((agent: any) => (
-                                    <div
-                                        key={agent.id}
-                                        style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '8px',
-                                            border: '1px solid rgba(16,185,129,0.24)',
-                                            borderRadius: '10px',
-                                            padding: '8px 10px',
-                                            background: 'var(--bg-primary)',
-                                            fontSize: '12px',
-                                            lineHeight: 1.2,
-                                        }}
-                                    >
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', overflow: 'hidden', background: 'rgba(16,185,129,0.12)', color: 'rgb(16,185,129)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '11px', flexShrink: 0 }}>
-                                            {agent.avatar_url ? (
-                                                <img src={agent.avatar_url} alt={agent.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                            ) : (
-                                                <span>{agent.name?.[0] || 'A'}</span>
-                                            )}
-                                        </div>
-                                        <div style={{ minWidth: 0 }}>
-                                            <div style={{ fontWeight: 600 }}>{agent.name}</div>
-                                            <div style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>{agent.role_description || 'Agent'}</div>
-                                        </div>
-                                        <button className="btn btn-ghost" type="button" style={{ fontSize: '12px', padding: 0, minWidth: 'auto', marginLeft: '2px' }} onClick={() => toggleAgentSelection(agent)}>×</button>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                            <select className="input" value={agentRelation} onChange={e => setAgentRelation(e.target.value)} style={{ width: '160px', flexShrink: 0, fontSize: '12px' }}>
-                                {getAgentRelationOptions(t).map((o: any) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-                        </div>
-                        <textarea className="input" placeholder="" value={agentDescription} onChange={e => setAgentDescription(e.target.value)} rows={2} style={{ fontSize: '12px', resize: 'vertical', marginBottom: '8px' }} />
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button className="btn btn-primary" style={{ fontSize: '12px' }} onClick={addAgentRelationship} disabled={selectedAgents.length === 0}>
-                                {t('common.confirm')} {selectedAgents.length > 0 ? `(${selectedAgents.length})` : ''}
-                            </button>
-                            <button className="btn btn-secondary" style={{ fontSize: '12px' }} onClick={resetAgentDraft}>
-                                {t('common.cancel')}
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
 export default function AgentDetailPage() {
     const { t, i18n } = useTranslation();
     const tsLocale = i18n.language?.startsWith('zh') ? 'zh-CN' : 'en-US';
@@ -2159,6 +1463,9 @@ export default function AgentDetailPage() {
     const reconnectDisabledRef = useRef<Record<SessionRuntimeKey, boolean>>({});
     const sessionUiStateRef = useRef<Record<SessionRuntimeKey, { isWaiting: boolean; isStreaming: boolean }>>({});
     const sessionActiveRunRef = useRef<Record<SessionRuntimeKey, SessionActiveRunHint | null>>({});
+    // onboarding 自动触发的前置条件：消息与 Runtime 状态都已加载完成（对齐上游 shouldKickoffOnboarding）。
+    const [messagesLoadedRuntimeKey, setMessagesLoadedRuntimeKey] = useState<string | null>(null);
+    const [runtimeStateLoadedRuntimeKey, setRuntimeStateLoadedRuntimeKey] = useState<string | null>(null);
 
     // 查询会话的 Runtime 状态：若存在 waiting_user 的挂起 Run，恢复续跑凭据。
     const fetchSessionRuntimeState = async (agentId: string, sessionId: string) => {
@@ -2180,6 +1487,9 @@ export default function AgentDetailPage() {
                 setSessionUiState(runtimeKey, { isWaiting: true, isStreaming: false });
             } else {
                 sessionActiveRunRef.current[runtimeKey] = null;
+            }
+            if (currentAgentIdRef.current === agentId && activeSessionIdRef.current === sessionId) {
+                setRuntimeStateLoadedRuntimeKey(runtimeKey);
             }
             return run;
         } catch {
@@ -2275,13 +1585,8 @@ export default function AgentDetailPage() {
      *  exempt them from the user_id check — otherwise they'd always be hidden. */
     const otherUsersSessions = useMemo(() => {
         const vu = viewerUserIdStr();
-        return allSessions.filter((s: any) => {
-            // Always show agent-to-agent sessions in the "Other users" tab
-            if (isAgentChatSession(s)) return true;
-            const su = sessionUserIdStr(s);
-            if (vu && su === vu) return false;
-            return true;
-        });
+        // 归入管理员 "Other sessions" 面板的会话：群聊 / agent 渠道 / 非本人发起（上游 sessionVisibility.ts）。
+        return allSessions.filter((s: any) => belongsInOtherSessions(s, vu));
     }, [allSessions, currentUser?.id]);
 
     const othersListForPicker = otherUsersSessions;
@@ -2397,6 +1702,8 @@ export default function AgentDetailPage() {
         setHistoryOldestTimestamp(null);
         setHistoryHasMore(true);
         setHistoryLoadingMore(false);
+        setMessagesLoadedRuntimeKey(null);
+        setRuntimeStateLoadedRuntimeKey(null);
         setIsStreaming(runtimeState.isStreaming);
         setIsWaiting(runtimeState.isWaiting);
         setActiveSession(sess);
@@ -2426,6 +1733,7 @@ export default function AgentDetailPage() {
                 ...(m.thinking && { thinking: m.thinking }),
                 ...(m.created_at && { timestamp: m.created_at }),
                 ...(m.id && { id: m.id }),
+                ...(m.runtime_error && { runtimeError: normalizeRuntimeError({ error: m.runtime_error }) }),
             }));
 
             // Set the oldest message cursor for pagination. Use the backend's compound
@@ -2445,6 +1753,7 @@ export default function AgentDetailPage() {
             // immediately in local state so unread badges clear without waiting for the next poll.
             clearUnreadForSession(String(sess.id));
             queryClient.invalidateQueries({ queryKey: ['agents'] });
+            setMessagesLoadedRuntimeKey(buildSessionRuntimeKey(targetAgentId, String(sess.id)));
             // v1.11.4：恢复该会话可能存在的 waiting_user 挂起 Run 续跑凭据
             //（页面刷新/重进会话后内存凭据丢失的场景）。
             if (writable) void fetchSessionRuntimeState(targetAgentId, String(sess.id));
@@ -2546,7 +1855,7 @@ export default function AgentDetailPage() {
         } catch (e: any) { toast.error(t('common.error.saveFailed', '保存失败'), { details: String(e?.message || e) }); }
         setExpirySaving(false);
     };
-    interface ChatMsg { role: 'user' | 'assistant' | 'tool_call'; content: string; fileName?: string; toolName?: string; toolCallId?: string; toolArgs?: any; toolStatus?: 'running' | 'done'; toolResult?: string; toolThinking?: string; thinking?: string; imageUrl?: string; timestamp?: string; }
+    interface ChatMsg { role: 'user' | 'assistant' | 'tool_call'; content: string; fileName?: string; toolName?: string; toolCallId?: string; toolArgs?: any; toolStatus?: 'running' | 'done'; toolResult?: string; toolThinking?: string; thinking?: string; imageUrl?: string; timestamp?: string; runtimeError?: ReturnType<typeof normalizeRuntimeError>; }
     const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
     const getToolTargetKey = (args: any): string => {
         if (!args) return '';
@@ -3211,8 +2520,12 @@ export default function AgentDetailPage() {
                 setChatMessages(prev => {
                     const last = prev[prev.length - 1];
                     const thinking = (last && last.role === 'assistant' && (last as any)._streaming) ? last.thinking : undefined;
-                    if (last && last.role === 'assistant' && (last as any)._streaming) return [...prev.slice(0, -1), parseChatMsg({ role: 'assistant', content: d.content, thinking, timestamp: new Date().toISOString() })];
-                    return [...prev, parseChatMsg({ role: d.role, content: d.content, timestamp: new Date().toISOString() })];
+                    // done 包携带失败信息（runtime_status=failed / error / delivery_error）时归一化并挂到消息上
+                    const runtimeError = d.error || d.delivery_error || d.runtime_status === 'failed'
+                        ? normalizeRuntimeError(d)
+                        : null;
+                    if (last && last.role === 'assistant' && (last as any)._streaming) return [...prev.slice(0, -1), parseChatMsg({ role: 'assistant', content: d.content, thinking, timestamp: new Date().toISOString(), ...(runtimeError && { runtimeError }) })];
+                    return [...prev, parseChatMsg({ role: d.role, content: d.content, timestamp: new Date().toISOString(), ...(runtimeError && { runtimeError }) })];
                 });
                 const currentSessionId = activeSessionIdRef.current ? String(activeSessionIdRef.current) : '';
                 if (currentSessionId) clearUnreadForSession(currentSessionId);
@@ -3222,7 +2535,8 @@ export default function AgentDetailPage() {
                 }
                 queryClient.invalidateQueries({ queryKey: ['agents'] });
             } else if (d.type === 'error' || d.type === 'quota_exceeded') {
-                const msg = d.content || d.detail || d.message || 'Request denied';
+                const runtimeError = normalizeRuntimeError(d);
+                const msg = runtimeError.message || d.content || d.detail || d.message || 'Request denied';
                 const isNoModelError = msg.includes('no LLM model') || msg.includes('No model');
                 if (isNoModelError) {
                     reconnectDisabledRef.current[key] = true;
@@ -3232,12 +2546,11 @@ export default function AgentDetailPage() {
                     const last = prev[prev.length - 1];
                     const warningText = `Warning: ${msg}`;
                     if (last && last.role === 'assistant' && last.content === warningText) return prev;
-                    return [...prev, parseChatMsg({ role: 'assistant', content: warningText })];
+                    return [...prev, parseChatMsg({ role: 'assistant', content: warningText, runtimeError })];
                 });
-                if (msg.includes('expired') || msg.includes('Setup failed')) {
-                    reconnectDisabledRef.current[key] = true;
-                    if (msg.includes('expired')) setAgentExpired(true);
-                }
+                // 按错误 code 判定（model_unavailable/agent_expired/setup_failed 停止重连；agent_expired 标记过期）
+                if (runtimeErrorDisablesReconnect(runtimeError)) reconnectDisabledRef.current[key] = true;
+                if (runtimeErrorMarksAgentExpired(runtimeError)) setAgentExpired(true);
             } else if (d.type === 'trigger_notification') {
                 const targetSessionId = d.session_id ? String(d.session_id) : '';
                 const currentSessionId = activeSessionIdRef.current ? String(activeSessionIdRef.current) : '';
@@ -3492,6 +2805,7 @@ export default function AgentDetailPage() {
                 ...(m.thinking && { thinking: m.thinking }),
                 ...(m.created_at && { timestamp: m.created_at }),
                 ...(m.id && { id: m.id }),
+                ...(m.runtime_error && { runtimeError: normalizeRuntimeError({ error: m.runtime_error }) }),
             }));
             // Save current scroll position
             const el = historyContainerRef.current;
@@ -3546,6 +2860,7 @@ export default function AgentDetailPage() {
                 ...(m.thinking && { thinking: m.thinking }),
                 ...(m.created_at && { timestamp: m.created_at }),
                 ...(m.id && { id: m.id }),
+                ...(m.runtime_error && { runtimeError: normalizeRuntimeError({ error: m.runtime_error }) }),
             }));
             // Save current scroll position
             const el = chatContainerRef.current;
@@ -3621,6 +2936,10 @@ export default function AgentDetailPage() {
         const resolvedSenderLabel = msg.sender_name || senderLabel;
         const resolvedAvatarText = avatarText || (resolvedSenderLabel ? resolvedSenderLabel[0] : (isLeft ? 'A' : 'U'));
         const showSenderLabel = !!resolvedSenderLabel && (forceSenderLabel || !!msg.sender_name);
+        // 失败消息的诊断行（Code / Trace / Run），来自 v1.11.4 Runtime 错误包。
+        const runtimeDiagnostics = msg.runtimeError
+            ? formatRuntimeErrorDiagnostics(msg.runtimeError)
+            : '';
 
         // Parse [image_data:data:image/...;base64,...] markers from user message content.
         // The backend persists these markers in the DB to preserve multimodal context
@@ -3702,7 +3021,16 @@ export default function AgentDetailPage() {
                                         <div className="thinking-dots"><span /><span /><span /></div>
                                         <span style={{ color: 'var(--text-tertiary)', fontSize: '13px' }}>{t('agent.chat.thinking', 'Thinking...')}</span>
                                     </div>
-                                ) : <MarkdownRenderer content={displayContent} />
+                                ) : (
+                                    <>
+                                        <MarkdownRenderer content={displayContent} />
+                                        {runtimeDiagnostics && (
+                                            <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                                                {runtimeDiagnostics}
+                                            </div>
+                                        )}
+                                    </>
+                                )
                             ) : <MarkdownRenderer content={displayContent} />}
                         </div>
                     </div>
@@ -4206,15 +3534,22 @@ export default function AgentDetailPage() {
     // sending the invisible trigger. Otherwise the empty session would be
     // marked as already kicked off while the user is still configuring models.
     useEffect(() => {
-        if (!wsConnected || !id || !activeSession?.id) return;
+        if (!id || !currentUser?.id || !activeSession?.id) return;
         if (!agent || agent.onboarded_for_me !== false) return;
         if (llmModelsLoading || !effectiveModelReady || !effectiveChatModelId) return;
-        if (chatMessages.length > 0) return;
         const runtimeKey = buildSessionRuntimeKey(id, String(activeSession.id));
-        if (onboardingKickoffRef.current.has(runtimeKey)) return;
+        if (!shouldKickoffOnboarding({
+            websocketReady: wsConnected,
+            messagesLoaded: messagesLoadedRuntimeKey === runtimeKey,
+            runtimeStateLoaded: runtimeStateLoadedRuntimeKey === runtimeKey,
+            messageCount: chatMessages.length,
+            hasActiveRun: !!sessionActiveRunRef.current[runtimeKey],
+        })) return;
+        const pairKey = onboardingKickoffKey(id, String(currentUser.id));
+        if (onboardingKickoffRef.current.has(pairKey)) return;
         const socket = wsMapRef.current[runtimeKey];
         if (!socket || socket.readyState !== WebSocket.OPEN) return;
-        onboardingKickoffRef.current.add(runtimeKey);
+        onboardingKickoffRef.current.add(pairKey);
         setIsWaiting(true);
         setIsStreaming(false);
         socket.send(JSON.stringify({
@@ -4222,7 +3557,7 @@ export default function AgentDetailPage() {
             kind: 'onboarding_trigger',
             model_id: effectiveChatModelId,
         }));
-    }, [wsConnected, id, activeSession?.id, agent?.onboarded_for_me, llmModelsLoading, effectiveModelReady, effectiveChatModelId, chatMessages.length]);
+    }, [wsConnected, id, currentUser?.id, activeSession?.id, agent?.onboarded_for_me, llmModelsLoading, effectiveModelReady, effectiveChatModelId, chatMessages.length, messagesLoadedRuntimeKey, runtimeStateLoadedRuntimeKey]);
 
     const { data: permData } = useQuery({
         queryKey: ['agent-permissions', id],
@@ -5911,10 +5246,10 @@ export default function AgentDetailPage() {
                     )
                 }
 
-                {/* ── Relationships Tab ── */}
+                {/* ── Relationships Tab（v1.11.4：AgentDirectory 通讯录，走新 directory API）── */}
                 {
                     activeTab === 'relationships' && (
-                        <RelationshipEditor agentId={id!} readOnly={!canManage} />
+                        <AgentDirectory agentId={id!} accessMode={(agent as any)?.access_mode} canManage={canManage} />
                     )
                 }
 

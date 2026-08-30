@@ -825,7 +825,42 @@
         "placeholder": "例如：你好！我是你的 AI 助手，有什么可以帮你的吗？"
       }
     },
+    "directory": {
+      "title": "通讯录",
+      "subtitle": "这个数字员工当前可以联系的人类成员和数字员工。",
+      "searchPlaceholder": "搜索可联系的人或数字员工...",
+      "all": "全部",
+      "people": "人类成员",
+      "agents": "数字员工",
+      "showUnavailable": "显示暂不可联系",
+      "contactable": "可联系",
+      "unavailable": "暂不可联系",
+      "loadMore": "加载更多",
+      "loadingMore": "加载中...",
+      "emptyTitle": "没有找到可联系对象",
+      "emptyDesc": "尝试同步组织通讯录，或检查这个数字员工的可见性设置。",
+      "count": "{{count}} 个对象",
+      "digitalEmployee": "数字员工",
+      "clawithUser": "平台用户",
+      "provider": {
+        "feishu": "飞书用户",
+        "dingtalk": "钉钉用户",
+        "wecom": "企业微信用户",
+        "slack": "Slack 用户",
+        "googleWorkspace": "Google 用户",
+        "microsoftTeams": "Microsoft Teams 用户",
+        "fallback": "{{provider}} 用户"
+      }
+    },
     "tools": {
+      "authorized": "已授权",
+      "checkAuthorization": "检查 MCP 授权",
+      "authorize": "授权",
+      "reauthorize": "重新授权",
+      "check": "检查",
+      "authorizationConnected": "此 MCP 连接已授权。",
+      "authorizationUnavailable": "授权状态暂时不可用。",
+      "authorizationCheckFailed": "无法检查 MCP 授权。",
       "platformTools": "平台预置工具",
       "companyTools": "公司配置工具",
       "agentInstalled": "数字员工自行安装的工具",
@@ -2489,6 +2524,9 @@
   "customAgentModal": {
     "noModelButtonHint": "需要先在公司设置中启用至少一个模型，才能创建平台托管成员。",
     "nameRequired": "请填写名称",
+    "nameInvalid": "名称必须包含 2 到 100 个字符",
+    "nameTooShort": "名称至少需要 2 个字符",
+    "nameTooLong": "名称不能超过 100 个字符",
     "noModelError": "公司还没有启用可用模型，请先配置模型或切换为外部 Agent。",
     "modelRequired": "请选择模型",
     "nativeTitle": "创建自定义成员",

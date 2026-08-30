@@ -743,7 +743,42 @@
         "placeholder": "e.g. Hello! I'm your AI assistant. How can I help you?"
       }
     },
+    "directory": {
+      "title": "Directory",
+      "subtitle": "People and agents this agent can currently contact.",
+      "searchPlaceholder": "Search people or agents this agent can contact...",
+      "all": "All",
+      "people": "People",
+      "agents": "Agents",
+      "showUnavailable": "Show unavailable",
+      "contactable": "Contactable",
+      "unavailable": "Unavailable",
+      "loadMore": "Load more",
+      "loadingMore": "Loading...",
+      "emptyTitle": "No contactable targets found",
+      "emptyDesc": "Try syncing the organization directory, or check this agent's visibility settings.",
+      "count": "{{count}} targets",
+      "digitalEmployee": "Agent",
+      "clawithUser": "Platform User",
+      "provider": {
+        "feishu": "Feishu User",
+        "dingtalk": "DingTalk User",
+        "wecom": "WeCom User",
+        "slack": "Slack User",
+        "googleWorkspace": "Google User",
+        "microsoftTeams": "Microsoft Teams User",
+        "fallback": "{{provider}} User"
+      }
+    },
     "tools": {
+      "authorized": "Authorized",
+      "checkAuthorization": "Check MCP authorization",
+      "authorize": "Authorize",
+      "reauthorize": "Re-authorize",
+      "check": "Check",
+      "authorizationConnected": "This MCP connection is authorized.",
+      "authorizationUnavailable": "Authorization status is temporarily unavailable.",
+      "authorizationCheckFailed": "Could not check MCP authorization.",
       "platformTools": "Platform Preset Tools",
       "companyTools": "Company Configured Tools",
       "agentInstalled": "Agent Self-Installed Tools",
@@ -2396,6 +2431,9 @@
   "customAgentModal": {
     "noModelButtonHint": "Enable at least one model in company settings before creating a platform-hosted teammate.",
     "nameRequired": "Name is required",
+    "nameInvalid": "Name must contain 2 to 100 characters",
+    "nameTooShort": "Name must be at least 2 characters",
+    "nameTooLong": "Name cannot exceed 100 characters",
     "noModelError": "No company model is enabled yet. Configure a model or switch to External agent.",
     "modelRequired": "Choose a model",
     "nativeTitle": "Create custom teammate",

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { IconChevronDown, IconCheck } from '@tabler/icons-react';
 import { enterpriseApi } from '../services/api';
+import { subscribeModelCacheInvalidation } from '../services/modelCacheEvents';
 
 interface Model {
     id: string;
@@ -39,10 +40,13 @@ export default function ModelSwitcher({ value, onChange, tenantDefaultId, disabl
         { top: number; bottom: number; left: number; width: number; placement: 'above' | 'below'; maxHeight: number } | null
     >(null);
 
-    const { data: models = [] } = useQuery({
+    const { data: models = [], refetch: refetchModels } = useQuery({
         queryKey: ['llm-models'],
         queryFn: enterpriseApi.llmModels,
     });
+
+    // 企业设置保存后广播模型缓存失效（含跨标签页），本下拉立即重拉模型列表。
+    useEffect(() => subscribeModelCacheInvalidation(() => { void refetchModels(); }), [refetchModels]);
 
     const enabled = (models as Model[]).filter(m => m.enabled !== false);
     const selected = enabled.find(m => m.id === value)

@@ -5,6 +5,7 @@ import { IconEdit } from '@tabler/icons-react';
 import { useDialog } from '../../../components/Dialog/DialogProvider';
 import { useToast } from '../../../components/Toast/ToastProvider';
 import { useAuthStore } from '../../../stores';
+import { notifyModelCacheInvalidated } from '../../../services/modelCacheEvents';
 import { fetchJson } from '../utils/fetchJson';
 
 interface LLMModel {
@@ -80,6 +81,8 @@ export default function LlmTab({ selectedTenantId }: LlmTabProps) {
         qc.invalidateQueries({ queryKey: ['tenant-default-model'] });
         qc.invalidateQueries({ queryKey: ['agents'] });
         qc.invalidateQueries({ queryKey: ['agent'] });
+        // 广播模型缓存失效（含其他浏览器标签页），已打开的模型下拉立即刷新。
+        notifyModelCacheInvalidated();
     };
 
     const { data: models = [] } = useQuery({
