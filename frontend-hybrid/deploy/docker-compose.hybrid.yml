@@ -1,0 +1,32 @@
+# 演练环境追加的前端对照服务（override 文件，不影响基础 compose）：
+#   3010 → frontend-hybrid（上游底座 + 本地壳层，切换生产前的候选版）
+#   3011 → frontend（纯上游对照基准，一行未改）
+# 启动：docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up -d --build <service>
+services:
+  clawith-frontend-hybrid:
+    build: ../frontend-hybrid
+    restart: unless-stopped
+    ports:
+      - "3010:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000
+      API_UPSTREAM: ${API_UPSTREAM:-clawith-backend:8000}
+      MINIO_UPSTREAM: ${MINIO_UPSTREAM:-minio:9000}
+    networks:
+      - default
+    depends_on:
+      - clawith-backend
+
+  clawith-frontend-upstream:
+    build: ../frontend
+    restart: unless-stopped
+    ports:
+      - "3011:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000
+      API_UPSTREAM: ${API_UPSTREAM:-clawith-backend:8000}
+      MINIO_UPSTREAM: ${MINIO_UPSTREAM:-minio:9000}
+    networks:
+      - default
+    depends_on:
+      - clawith-backend

@@ -1,0 +1,1117 @@
+/* ============================================================
+ * 数字员工主题层（frontend-hybrid 本地壳）
+ * 生成自 frontend-local/src/index.css 与上游的 diff：
+ *   ① 主题变量覆盖（11 个差异变量）
+ *   ② 本地独有选择器（61 个，含 Phase D 页面迁移后生效的样式）
+ *   ③ 与上游同名但仅颜色属性不同的选择器（56 个）
+ * 结构性差异选择器保持上游版 —— 详见 LOCAL-LAYER.md。
+ * 本文件必须在 index.css / atlas.css 之后引入（main.tsx 中保证）。
+ * ============================================================ */
+
+/* ① 主题变量覆盖 */
+
+:root, [data-theme="dark"] {
+    --accent-primary: #E60012;
+    --accent-hover: #C4001F;
+    --accent-subtle: rgba(230, 0, 39, 0.08);
+    --accent-text: #1D61F7;
+}
+
+[data-theme="light"] {
+    --bg-primary: #f9fcfe;
+    --bg-secondary: rgba(255, 255, 255, 1);
+    --border-subtle: #f2f2f2;
+    --accent-primary: #E60012;
+    --accent-hover: #C4001F;
+    --accent-subtle: rgba(230, 0, 39, 0.08);
+    --accent-text: #1D61F7;
+}
+
+/* body 背景锁定（本地硬编码白底） */
+
+body {
+    background: #ffffff;
+}
+
+/* ② 本地独有选择器 */
+
+.add-kr-input:focus {
+    box-shadow: none;
+}
+
+.workspace-switcher-avatar.tone-1, .workspace-switcher-avatar.tone-2, .workspace-switcher-avatar.tone-3, .workspace-switcher-avatar.tone-4, .workspace-switcher-avatar.tone-5, .workspace-switcher-avatar.tone-6 {
+    background: #E60012;
+      color: #ffffff;
+}
+
+[data-theme="dark"] .workspace-switcher-avatar.tone-1, [data-theme="dark"] .workspace-switcher-avatar.tone-2, [data-theme="dark"] .workspace-switcher-avatar.tone-3, [data-theme="dark"] .workspace-switcher-avatar.tone-4, [data-theme="dark"] .workspace-switcher-avatar.tone-5, [data-theme="dark"] .workspace-switcher-avatar.tone-6 {
+    background: #E60012;
+      color: #ffffff;
+}
+
+.sidebar-item.active:hover {
+    background: #e7e7e7;
+      color: #E60012;
+      font-weight: 700;
+}
+
+.sidebar-item-icon svg {
+    width: 16px;
+      height: 16px;
+      stroke-width: 1.5;
+      color: inherit;
+}
+
+.sidebar-item:hover .sidebar-item-icon {
+    color: inherit;
+}
+
+.sidebar-item.active .sidebar-item-icon {
+    color: #E60012;
+}
+
+.sidebar-agent-item.owned .sidebar-item-icon::after {
+    content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 2px;
+      width: 7px;
+      height: 7px;
+      background: var(--accent-primary);
+      border-radius: 50%;
+      border: 1.5px solid var(--bg-secondary);
+}
+
+.sidebar-item:hover .sidebar-item-text {
+    color: inherit;
+}
+
+.sidebar-item.active .sidebar-item-text {
+    color: #E60012;
+      font-weight: 700;
+}
+
+.btn-primary-light {
+    background: rgba(230, 0, 39, 0.1);
+      color: #E60012;
+      border: 1px solid rgba(230, 0, 39, 0.2);
+      cursor: not-allowed;
+}
+
+.talent-market-start-btn {
+    background: #E60012;
+      color: #ffffff;
+      border: 1px solid #E60012;
+      font-weight: 600;
+}
+
+.talent-market-start-btn:hover {
+    background: #C4001F;
+      border-color: #C4001F;
+      color: #ffffff;
+}
+
+.es-card--padded {
+    background: rgba(246, 248, 250, 1);
+      border: 1px solid #eaedf0;
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: none;
+}
+
+.es-card .card, .es-info .card {
+    background: #ffffff;
+      border: 1px solid #eaedf0;
+      border-radius: 10px;
+      box-shadow: none;
+}
+
+.es-card .card:hover, .es-info .card:hover {
+    border-color: #eaedf0;
+      box-shadow: none;
+}
+
+.es-card .form-input, .es-card textarea.form-input, .es-card input.form-input, .es-card .input, .es-info .form-input, .es-info textarea.form-input, .es-info input.form-input, .es-info .input {
+    background: #f6f9fd;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      height: 38px;
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.es-card textarea.form-input, .es-info textarea.form-input {
+    height: auto;
+      min-height: 200px;
+      padding: 8px 12px;
+      line-height: 1.6;
+      font-family: var(--font-mono);
+      font-size: 13px;
+}
+
+.es-card .form-input:focus, .es-card textarea.form-input:focus, .es-card input.form-input:focus, .es-card .input:focus, .es-info .form-input:focus, .es-info textarea.form-input:focus, .es-info input.form-input:focus, .es-info .input:focus {
+    border-color: var(--accent-primary);
+      box-shadow: 0 0 0 2px var(--accent-subtle);
+      outline: none;
+}
+
+.es-card .btn, .es-info .btn {
+    height: 30px;
+      padding: 0 14px;
+      font-size: var(--text-xs);
+}
+
+.es-info .btn-secondary {
+    background: var(--accent-primary);
+      border: 1px solid var(--accent-primary);
+      color: #ffffff;
+}
+
+.es-info .btn-secondary:hover {
+    background: var(--accent-hover);
+      border-color: var(--accent-hover);
+      box-shadow: var(--shadow-sm);
+}
+
+.es-info .btn-secondary:disabled {
+    background: var(--bg-hover);
+      border-color: var(--border-subtle);
+      color: var(--text-tertiary);
+}
+
+.es-card .btn-ghost, .es-info .btn-ghost {
+    background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+}
+
+.es-card .btn-ghost:hover, .es-info .btn-ghost:hover {
+    background: var(--bg-hover);
+      color: var(--text-primary);
+}
+
+.agent-avatar.has-image {
+    background: transparent;
+      font-size: 0;
+      box-shadow: none;
+      overflow: hidden;
+}
+
+.agent-avatar img {
+    width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+      display: block;
+}
+
+@media (max-width: 768px) {
+    .agent-avatar.openclaw {
+        border: 1.5px dashed var(--text-tertiary);
+        background: transparent;
+      }
+}
+
+.llm-model-grid .form-input {
+    background: #F6F8FA !important;
+}
+
+.agent-detail-avatar--fallback {
+    background: #ef4444;
+      color: #fff;
+}
+
+.agent-detail-identity--compact .agent-detail-avatar--fallback {
+    background: #ef4444;
+      color: #fff;
+}
+
+.agent-info-card-section:nth-child(2) {
+    border-right: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] .agent-info-card-section:nth-child(2) {
+    border-right-color: rgba(255, 255, 255, 0.06);
+}
+
+.agent-info-profile-avatar {
+    width: 200px;
+      height: 200px;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 10px;
+      background: #ef4444;
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 60px;
+      align-self: center;
+}
+
+.agent-info-profile-avatar img {
+    width: 100%;
+      height: 100%;
+      object-fit: cover;
+}
+
+[data-theme="dark"] .agent-info-profile-avatar {
+    background: rgba(255, 255, 255, 0.08);
+      color: rgba(255, 255, 255, 0.7);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .agent-info-profile-avatar img {
+    background: transparent;
+}
+
+.agent-info-tools-skills {
+    margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+}
+
+.agent-info-capability-block {
+    display: flex;
+      flex-direction: column;
+      gap: 6px;
+}
+
+.agent-info-capability-title {
+    display: flex;
+      align-items: baseline;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+}
+
+.agent-info-capability-count {
+    font-size: 11px;
+      font-weight: 500;
+      color: var(--text-tertiary);
+      opacity: 0.75;
+}
+
+.agent-info-chip-list {
+    display: flex;
+      flex-wrap: wrap;
+      align-content: start;
+      gap: 4px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      box-sizing: border-box;
+      max-height: 162px;
+    scrollbar-width: none;
+      -ms-overflow-style: none;
+}
+
+.agent-info-chip-list::-webkit-scrollbar {
+    height: 0;
+      width: 0;
+      background: transparent;
+}
+
+.agent-info-chip-list:hover {
+    scrollbar-width: thin;
+}
+
+.agent-info-chip-list:hover::-webkit-scrollbar {
+    height: 8px;
+      width: 8px;
+}
+
+.agent-info-chip {
+    display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      max-width: 100%;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: transparent;
+      border: 1px solid rgba(237, 237, 237, 1);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 500;
+      line-height: 1.5;
+      white-space: nowrap;
+      
+      height: 22px;
+      box-sizing: border-box;
+}
+
+[data-theme="dark"] .agent-info-chip {
+    background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.06);
+}
+
+.aware-view-switch {
+    display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px;
+      border-radius: 7px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(217, 217, 217, 0);
+}
+
+.aware-view-switch .active {
+    color: #fff;
+}
+
+.aware-side-subtitle span {
+    font-size: 12px;
+      color: rgba(88, 94, 107, 1);
+}
+
+.workspace-op-tree-dir-time {
+    margin-left: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+      flex-shrink: 0;
+}
+
+.chat-msg-avatar img {
+    width: 100%;
+      height: 100%;
+      object-fit: cover;
+}
+
+.chat-msg-avatar.has-image {
+    background: transparent;
+      font-size: 0;
+      overflow: hidden;
+}
+
+[data-theme="dark"] .chat-msg-avatar {
+    background: rgb(230, 0, 18);
+      border-color: #ececec;
+      color: rgb(255, 255, 255);
+}
+
+[data-theme="dark"] .chat-msg-avatar.has-image {
+    background: transparent;
+      font-size: 0;
+}
+
+.dashboard-tabs {
+    display: flex;
+      gap: var(--space-1);
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 24px;
+      background: rgba(248, 249, 253, 0);
+      border-radius: 10px 10px 0 0;
+      padding: 4px 8px 0;
+      border: none;
+      box-shadow: none;
+      overflow: hidden;
+}
+
+.dashboard-tab {
+    padding: 12px 24px;
+      font-size: 13px;
+      font-weight: 500;
+      color: rgba(90, 90, 90, 1);
+      border-bottom: 3px solid transparent;
+      transition: all 180ms ease;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: transparent;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+}
+
+.dashboard-tab:hover {
+    color: var(--text-primary);
+      background: rgba(230, 0, 39, 0.04);
+}
+
+.dashboard-tab.active {
+    color: #E60027;
+      border-bottom: 3px solid #E60027;
+      font-weight: 600;
+}
+
+.dashboard-tab-icon {
+    display: flex;
+      opacity: 0.85;
+}
+
+.dashboard-tab.active .dashboard-tab-icon {
+    opacity: 1;
+}
+
+/* ③ 同名选择器 · 颜色定制覆盖 */
+
+input, textarea {
+    font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+      background: #ffffff;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      padding: var(--space-2) var(--space-3);
+      outline: none;
+      transition: border-color var(--transition-fast);
+}
+
+select {
+    font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+      background-color: #ffffff;
+      background-image: var(--select-chevron);
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 16px;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      padding: 4px 32px 4px 12px;
+      outline: none;
+      transition: border-color var(--transition-fast);
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      text-overflow: ellipsis;
+}
+
+.sidebar {
+    width: var(--sidebar-width);
+      background: var(--bg-primary);
+      border-right: 2px solid #eeeeee;
+      box-shadow:
+        6px 0 22px rgba(29, 97, 247, 0.05),
+        0 4px 16px rgba(15, 23, 42, 0.04);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: var(--notification-bar-height);
+      left: 0;
+      bottom: 0;
+      height: calc(100dvh - var(--notification-bar-height));
+      max-height: calc(100dvh - var(--notification-bar-height));
+      z-index: 10;
+      transition: width var(--transition-default);
+      
+      overflow-x: visible;
+      overflow-y: hidden;
+      isolation: isolate;
+}
+
+.sidebar-top {
+    padding-top: var(--space-2);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 1;
+      background: #f5f5f5;
+}
+
+.sidebar-scrollable {
+    flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 0;
+      position: relative;
+      z-index: 0;
+      background: #f5f5f5;
+}
+
+.sidebar-agent-header button, .sidebar-agent-drawer-header button {
+    width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #E60012;
+      border-radius: 6px;
+      background: #E60012;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      box-shadow: 0 6px 12px rgba(230, 0, 18, 0.16);
+}
+
+.sidebar-agent-header button:hover, .sidebar-agent-drawer-header button:hover {
+    color: #ffffff;
+      background: #C4001F;
+      border-color: #C4001F;
+}
+
+.sidebar-agent-search input {
+    width: 100%;
+      box-sizing: border-box;
+      padding: 5px 24px 5px 28px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      background: rgba(245, 245, 245, 1);
+      color: var(--text-primary);
+      font-size: 12px;
+      outline: none;
+}
+
+.sidebar-agent-search input:focus {
+    border-color: rgb(230, 0, 18);
+}
+
+.sidebar-bottom {
+    flex-shrink: 0;
+      background: #f5f5f5;
+      border-top: none;
+      box-shadow: 0 -1px 0 rgba(29, 97, 247, 0.08);
+}
+
+.workspace-switcher-avatar {
+    width: 26px;
+      height: 26px;
+      flex: 0 0 26px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #eeeeec;
+      border: none;
+      color: #6f6f68;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0;
+      box-shadow: 0 6px 12px rgba(230, 0, 18, 0.16);
+}
+
+[data-theme="dark"] .workspace-switcher-avatar {
+    background: #2a2a32;
+      color: #ffffff;
+}
+
+.sidebar-agent-drawer {
+    position: fixed;
+      top: calc(10px + var(--notification-bar-height));
+      left: calc(var(--sidebar-width-collapsed) + 8px);
+      z-index: 9400;
+      width: 278px;
+      height: calc(100vh - 20px - var(--notification-bar-height));
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #f8f9fd;
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      box-shadow: var(--shadow-lg);
+      animation: sidebarAgentDrawerIn 0.14s ease;
+}
+
+.sidebar-footer {
+    padding: var(--space-4) var(--space-5);
+      background: #f5f5f5;
+}
+
+.btn-primary {
+    background: var(--accent-primary);
+      color: #ffffff;
+}
+
+.badge-info {
+    background: rgba(230, 0, 39, 0.10);
+      color: #0a0a0f;
+}
+
+.tabs {
+    display: flex;
+      gap: var(--space-1);
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: var(--space-6);
+      position: sticky;
+      top: var(--notification-bar-height);
+      background: #fff;
+      z-index: 5;
+      padding-top: var(--space-2);
+}
+
+.tab.active {
+    color: #e60012;
+      border-bottom-color: var(--accent-primary);
+}
+
+.new-session-btn:hover {
+    background: #C4001F;
+      color: #ffffff;
+      border-color: #C4001F;
+}
+
+.agent-detail-page--settings > .tabs {
+    align-items: center;
+      border-bottom: none;
+      padding-top: 0;
+      margin-top: 0;
+      background: #ffffff;
+}
+
+.agent-top-action.active {
+    color: rgba(239, 68, 68, 1);
+      background-color: rgba(253, 236, 236, 1);
+      border-color: rgba(239, 68, 68, 1);
+}
+
+.agent-info-section-icon--blue {
+    background: rgb(230, 0, 18);
+      color: rgb(255, 255, 255);
+}
+
+.agent-info-section-icon--indigo {
+    background: rgb(230, 0, 18);
+      color: rgb(255, 255, 255);
+}
+
+.agent-info-profile-meta {
+    margin-top: 14px;
+      color: rgba(99, 99, 99, 1);
+}
+
+.agent-info-expiry-button:hover {
+    background: rgb(230, 0, 18);
+      color: rgb(255, 255, 255);
+      border-color: rgb(230, 0, 18);
+}
+
+.agent-info-model-card {
+    display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 1);
+      border: 1px solid rgb(234, 237, 240);
+      box-shadow: 0px 4px 5px 0px rgba(0, 0, 0, 0.05);
+      margin-bottom: 12px;
+}
+
+.aware-side-preview {
+    height: 100%;
+      overflow: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background-color: #f6f8fa;
+}
+
+.aware-side-section {
+    border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      background-color: #fff;
+      padding: 14px;
+}
+
+.aware-side-focus-head:hover {
+    background: #ececec;
+      border-color: var(--border-subtle);
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.aware-view-button {
+    border: 0;
+      background: transparent;
+      color: rgba(239, 68, 68, 1);
+      border-radius: 5px;
+      padding: 3px 7px;
+      font-size: 11px;
+      line-height: 16px;
+      cursor: pointer;
+}
+
+.aware-view-button.active {
+    color: #fff;
+      background: rgba(239, 68, 68, 1);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.aware-side-collapse {
+    width: auto;
+      max-width: 100%;
+      border-color: rgba(213, 212, 205, 0);
+      background-color: rgba(239, 239, 236, 0);
+      color: var(--text-secondary);
+      border-radius: 7px;
+      padding: 5px 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 16px;
+      transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.aware-calendar-nav-button, .aware-calendar-range {
+    border: 1px solid rgba(237, 237, 237, 1);
+      background: rgba(255, 255, 255, 1);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      height: 26px;
+      padding: 0 8px;
+      font-size: 11px;
+      line-height: 24px;
+      cursor: pointer;
+}
+
+.aware-calendar-day {
+    min-width: 0;
+      min-height: 62px;
+      border: 1px solid rgba(237, 237, 237, 1);
+      border-radius: 7px;
+      padding: 6px;
+      background: rgba(255, 255, 255, 1);
+      overflow: visible;
+      position: relative;
+}
+
+.aware-calendar-day.is-today {
+    border-color: rgba(237, 237, 237, 1);
+      background: rgba(255, 255, 255, 1);
+}
+
+.aware-side-reflection {
+    border-top: 1px solid rgba(240, 240, 240, 1);
+}
+
+.agent-side-panel-tab.active {
+    color: rgba(239, 68, 68, 1);
+      background: rgba(255, 255, 255, 0);
+      border-color: rgba(255, 255, 255, 0);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.analysis-trace--running .analysis-trace-signal span:first-child {
+    animation: analysis-tool-running-dot 1.25s ease-in-out infinite;
+}
+
+.workspace-op-main {
+    position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+      background: rgba(255, 255, 255, 1);
+}
+
+.chat-msg-avatar--user {
+    background: rgb(230, 0, 18);
+      border-color: #ececec;
+      color: rgb(255, 255, 255);
+}
+
+[data-theme="dark"] .chat-msg-avatar--user {
+    background: rgb(230, 0, 18);
+      border-color: #ececec;
+      color: rgb(255, 255, 255);
+}
+
+.chat-msg-bubble {
+    max-width: 100%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      word-break: break-word;
+      background: #f6f8fa;
+      border: 1px solid #ececec;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+      transition: box-shadow 150ms ease;
+}
+
+.chat-msg-bubble--user {
+    background: rgba(255, 255, 255, 1);
+      border-color: #ececec;
+}
+
+[data-theme="dark"] .chat-msg-bubble {
+    background: #f6f8fa;
+      border-color: #ececec;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] .chat-msg-bubble--user {
+    background: rgba(255, 255, 255, 1);
+      border-color: rgba(255, 255, 255, 0.1);
+}
+
+.chat-msg-file-chip {
+    display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255, 255, 255, 1);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 11px;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+}
+
+.chat-composer .btn.chat-composer-send {
+    background: #ef4444;
+      color: #ffffff;
+      border-color: #ef4444;
+      padding: 0;
+      width: 28px;
+      min-width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      border-radius: 6px;
+}
+
+.chat-composer .btn.chat-composer-send:hover:not(:disabled) {
+    background: #dc2626;
+      border-color: #dc2626;
+}
+
+[data-theme="dark"] .chat-composer .btn.chat-composer-send {
+    background: #ef4444;
+      border-color: #ef4444;
+      color: #ffffff;
+}
+
+[data-theme="dark"] .chat-composer .btn.chat-composer-send:hover:not(:disabled) {
+    background: #dc2626;
+      border-color: #dc2626;
+}
+
+.chat-composer .btn.chat-composer-send:disabled {
+    opacity: 0.45;
+      background: #ef4444;
+      border-color: #ef4444;
+}
+
+.tool-source-tabs {
+    display: inline-flex;
+      align-self: flex-start;
+      align-items: center;
+      gap: 2px;
+      padding: 3px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      background: rgba(230, 0, 18, 0.1);
+      width: fit-content;
+      max-width: 100%;
+}
+
+.tool-source-tabs button {
+    display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-width: 0;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: rgba(230, 0, 18, 1);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 18px;
+      padding: 5px 11px;
+      transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.tool-source-tabs button.active {
+    background: rgba(230, 0, 18, 1);
+      color: #ffffff;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.tool-source-tab-count {
+    min-width: 18px;
+      height: 18px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: transparent;
+      color: rgba(230, 0, 18, 1);
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 18px;
+}
+
+.tool-source-tabs button.active .tool-source-tab-count {
+    background: transparent;
+      color: #ffffff;
+}
+
+/* ═══ 侧边栏细节复刻（对照 frontend-local index.css 原样覆盖）═══
+ * 背景：首版 theme.css 把这些"结构性差异"选择器留成了上游样式，导致侧边栏
+ * 字体/间距/图标区宽度与本地生产不一致。此处按本地原值逐条覆盖（theme.css
+ * 位于 index.css 之后加载，同特异性后者胜出）。
+ * 上游 v1.11.4 新增的 .sidebar-item-badge、.workspace-switcher-avatar.tone-*、
+ * .aware-side-collapse 为上游新功能样式，保留不覆盖。 */
+
+/* agent 单字头像：本地为红底白字块（上游为灰底次要字色） */
+.agent-avatar {
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+    background: #E60012;
+    line-height: 11px;
+    letter-spacing: -0.22px;
+    box-shadow: 0 6px 12px rgba(230, 0, 18, 0.16);
+}
+
+/* 上游给 openclaw 类型头像加了虚线透明样式；本地无此区分，还原红块 */
+.agent-avatar.openclaw {
+    background: #E60012;
+    border: none;
+    color: #ffffff;
+}
+
+/* 上游给自建 agent 头像加右下角红点（.owned::after）；本地无此效果，隐藏 */
+.sidebar-agent-item.owned .agent-avatar::after {
+    content: none;
+}
+
+/* 导航条目：圆角 10px、过渡曲线与本地一致 */
+.sidebar-item {
+    border-radius: 10px;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* 条目文字：本地中灰 #4b4b4b（上游继承 text-primary 深色，显重） */
+.sidebar-item-text {
+    font-weight: 400;
+    color: #4b4b4b;
+}
+
+/* 图标区：本地 28px 定宽深色图标（上游 18px，导致文字起始位置不同） */
+.sidebar-item-icon {
+    width: 28px;
+    color: #0F172A;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color var(--transition-fast);
+}
+
+.sidebar-item.active {
+    background: #e7e7e7;
+    color: #E60012;
+    font-weight: 700;
+}
+
+.sidebar-item:hover {
+    background: #ececec;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* "数字员工"分组标题行：本地黑色 12px */
+.sidebar-agent-header {
+    padding: 6px 14px;
+    color: #000000;
+    font-size: 12px;
+}
+
+/* 空态标题（我的数字员工）：本地品牌红 */
+.sidebar-section-title {
+    color: #E60012;
+    opacity: 0.8;
+    padding: 0;
+}
+
+/* 分隔线：本地无外边距（上游带上下边距+半透明） */
+.sidebar-divider {
+    margin: 0;
+    opacity: 1;
+}
+
+/* 顶部工作区名称：本地 700 字重 + 负字距 */
+.workspace-switcher-name {
+    font-weight: 700;
+    color: #0F172A;
+    letter-spacing: -0.01em;
+}
+
+/* workspace 操作面板文件名：本地 inline-flex 布局 */
+.workspace-op-tree-file-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ═══ 复刻包二（2026-08-28 拍板：#2 复刻 / #3 chat-composer 保留上游毛玻璃）═══ */
+
+/* 聊天消息头像：本地红底白字方角（上游灰底圆形，与 has-image 修复不配套） */
+.chat-msg-avatar {
+    background: rgb(230, 0, 18);
+    border: 1px solid #ececec;
+    border-radius: 8px;
+    color: rgb(255, 255, 255);
+    overflow: hidden;
+}
+
+.chat-msg-avatar--user {
+    background: rgb(230, 0, 18);
+    border-color: #ececec;
+    color: rgb(255, 255, 255);
+}
+
+/* agent 详情"新会话"按钮：本地红底白字 */
+.new-session-btn {
+    background: #E60012;
+    border: 1px solid #E60012;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* 内容区：本地上下留白 15px（左右与上游同为 space-8；上游 min-height 保留通知条适配） */
+.main-content {
+    background-color: #ffffff;
+    padding-top: 15px;
+    padding-bottom: 15px;
+}
+
+/* 全局底色：本地纯白（上游 min-height 保留） */
+.app-layout {
+    background: #ffffff;
+}
+
+/* agent-info 卡到期按钮：本地红底（组件布局归 Phase E，样式先就位） */
+.agent-info-expiry-button {
+    background: rgb(230, 0, 18);
+    border: 1px solid rgb(230, 0, 18);
+    color: rgb(255, 255, 255);
+    margin-top: 4px;
+}
+
+/* ═══ Phase E：agent-info 卡本地布局复刻（2026-08-28 拍板 #9：840px 三列）═══
+ * 上游 v1.11.4 自带同名卡（560px 两列），JSX 已换本地版，此处覆盖布局差值；
+ * 其余 agent-info-* 类上游 CSS 与本地值一致，直接复用。 */
+.agent-info-card {
+    width: min(840px, 86vw);
+}
+
+.agent-info-card-body {
+    padding: 0px 16px 10px;
+}
+
+.agent-info-card-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+
+.agent-info-chevron {
+    opacity: 1;
+}
+
+.agent-info-profile-role {
+    color: rgba(99, 99, 99, 1);
+    margin-top: 10px;
+}

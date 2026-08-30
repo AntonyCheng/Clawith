@@ -1,0 +1,163 @@
+/* CompanySetup — 蓝湖风格样式
+   复用 LoginPage.css 的 token 与基础组件,仅承载本页专属布局 */
+
+.cs-page {
+  min-height: 100dvh;
+  width: 100%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 80px 24px;
+  box-sizing: border-box;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  color: var(--lp-text-primary);
+}
+
+.cs-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 20px;
+  width: 100%;
+  max-width: 720px;
+}
+
+.cs-title {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0;
+  color: var(--lp-text-primary);
+  margin: 0;
+  max-width: 640px;
+}
+
+.cs-subtitle {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--lp-text-secondary);
+  margin: 0;
+  max-width: 640px;
+}
+
+.cs-form {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+
+.cs-input-meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--lp-text-muted);
+}
+
+.cs-input--code {
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}
+
+.cs-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-top: 16px;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--lp-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 0.5px;
+  text-underline-offset: 3px;
+  align-self: center;
+}
+
+.cs-link:hover {
+  color: var(--lp-primary-hover);
+}
+
+.cs-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--lp-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.cs-modal-close:hover {
+  color: var(--lp-text-primary);
+}
+
+.cs-modal-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cs-lang-wrap {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 10;
+}
+
+.cs-topbar {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cs-logo {
+  height: 22px;
+  width: auto;
+  display: block;
+}
+
+.cs-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: 13px 'IBM Plex Sans', system-ui;
+  color: var(--lp-text-secondary);
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: color .15s, background .15s;
+}
+
+.cs-back-btn:hover {
+  color: var(--lp-text-primary);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+@media (max-width: 640px) {
+  .cs-title { font-size: 30px; }
+  .cs-subtitle { font-size: 15px; }
+  .cs-topbar { gap: 8px; }
+  .cs-logo { height: 18px; }
+  .cs-back-btn span { display: none; }
+}

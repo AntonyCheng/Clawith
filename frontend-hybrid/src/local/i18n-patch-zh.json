@@ -1,0 +1,581 @@
+{
+  "nav": {
+    "myAgentsEmpty": "请新建/聘用数字员工",
+    "roster": "花名册"
+  },
+  "agent": {
+    "mind": {
+      "heartbeatDesc": "定期感知检查的指令。智能体在每次心跳时读取此文件。"
+    },
+    "profile": {
+      "title": "数字员工档案"
+    },
+    "directory": {
+      "clawithUser": "平台用户",
+      "emptyDesc": "尝试同步组织通讯录，或检查这个数字员工的可见性设置。",
+      "subtitle": "这个数字员工当前可以联系的人类成员和数字员工。"
+    },
+    "settings": {
+      "expiry": {
+        "title": "智能体过期时间"
+      },
+      "avatar": {
+        "title": "头像",
+        "upload": "上传头像",
+        "reupload": "重新上传",
+        "remove": "删除",
+        "sizeLimitError": "图片不能超过 2MB",
+        "uploadFailed": "上传失败，请重试",
+        "supportedFormats": "支持 PNG、JPG，最大 2MB"
+      }
+    },
+    "aware": {
+      "focusDesc": "智能体当前正在关注的任务",
+      "reflectionsDesc": "智能体自主行动的思考记录",
+      "reflectionsEmpty": "暂无内心独白记录。智能体的自主行动将显示在这里。",
+      "focusEmpty": "暂无关注点。智能体在对话中会自动创建和更新关注点。"
+    },
+    "tools": {
+      "authorizationCheckFailed": "无法检查 MCP 授权。",
+      "authorizationUnavailable": "授权状态暂时不可用。",
+      "authorize": "授权",
+      "check": "检查",
+      "expandAll": "全部展开",
+      "checkAuthorization": "检查 MCP 授权",
+      "authorized": "已授权",
+      "authorizationConnected": "此 MCP 连接已授权。",
+      "collapseAll": "全部折叠",
+      "reauthorize": "重新授权"
+    },
+    "chat": {
+      "connecting": "连接中...",
+      "noModelMember": "该公司尚未配置模型，请联系管理员。",
+      "noModelTitle": "未配置公司模型",
+      "goModelSettings": "前往模型管理",
+      "noModelAdmin": "请先配置公司模型，再与该助手对话。",
+      "noModelPlaceholder": "配置公司模型后即可开始对话"
+    },
+    "workspace": {
+      "confirmDelete": "确定要删除 {{name}} 吗？",
+      "deleteConfirm": "确定要删除 \"{{name}}\" 吗？",
+      "loadFailed": "文件加载失败"
+    },
+    "skills": {
+      "uploading": "上传中...",
+      "uploadZip": "上传技能 ZIP",
+      "importFromUrl": "从 URL 导入",
+      "zipTooLarge": "文件超过 1MB 限制。",
+      "zipNoSkillMd": "技能包缺少 SKILL.md 文件——请确保 SKILL.md 位于 ZIP 根目录。",
+      "importFromPresetsBtn": "从预设导入",
+      "browseClawHubBtn": "浏览 ClawHub",
+      "zipInvalid": "无效的 ZIP 文件。"
+    },
+    "upload": {
+      "dropToAttach": "拖放文件以添加附件（最多 10 个）"
+    },
+    "toolsAndSkills": "工具和技能"
+  },
+  "admin": {
+    "ssoDomainPlaceholder": "例如: acme.digitalemployee.com",
+    "clientId": "Client ID",
+    "smtpPortPlaceholder": "465",
+    "oauthLogin": "OAuth 登录",
+    "emailConfigSaved": "邮箱配置已保存",
+    "smtpPort": "SMTP 端口",
+    "systemEmail": "系统邮件",
+    "slug": "Slug",
+    "companyName": "公司名称",
+    "edit": "编辑",
+    "smtpPasswordPlaceholder": "••••••••",
+    "agentBayDesc": "配置 AgentBay 云端计算机集成",
+    "useSsl": "使用 SSL/TLS",
+    "apiKeyFromAgentBay": "API Key（来自 AgentBay）",
+    "fromNamePlaceholder": "数字员工",
+    "emailPlaceholder": "your-email@gmail.com",
+    "inactive": "未激活",
+    "agentBaySettings": "AgentBay 设置",
+    "save": "保存",
+    "companyManagement": "公司管理",
+    "authorizationCallback": "授权回调 URL",
+    "apiKey": "API Key",
+    "enabled": "已启用",
+    "timeout": "超时时间（秒）",
+    "savedButDisabled": "已保存但未启用",
+    "enabledOnLogin": "在登录页启用",
+    "windows": "Windows",
+    "cloudComputerOs": "云端计算机操作系统",
+    "clientSecret": "Client Secret",
+    "saved": "已保存",
+    "apiKeyPlaceholder": "输入您的 AgentBay API Key",
+    "fromName": "发件人名称",
+    "linux": "Linux",
+    "copy": "复制",
+    "smtpHost": "SMTP 主机",
+    "smtpHostPlaceholder": "smtp.gmail.com",
+    "ssoDisabled": "SSO 已禁用",
+    "companies": "公司管理",
+    "password": "SMTP 密码",
+    "sendTestEmail": "发送测试邮件",
+    "authorizedRedirect": "授权回调地址",
+    "systemEmailPlaceholder": "noreply@yourcompany.com",
+    "delete": "删除",
+    "fromAddress": "发件人邮箱",
+    "cancel": "取消",
+    "timeoutPlaceholder": "15",
+    "scope": "Scope",
+    "platformConfig": "平台配置",
+    "systemEmailDesc": "配置 SMTP 设置以发送系统邮件",
+    "oauthLoginDesc": "配置平台级社交登录。启用后，用户可在登录页面通过 Google 或 GitHub 登录。",
+    "actions": "操作",
+    "username": "SMTP 用户名",
+    "default": "默认",
+    "saveFailed": "保存失败",
+    "testEmailFailed": "测试邮件发送失败",
+    "saveTemplatesFailed": "模板保存失败",
+    "oauthClientIdSecretRequired": "Client ID 和 Client Secret 不能为空",
+    "oauthSaved": "OAuth 配置已保存",
+    "oauthSaveFailed": "OAuth 配置保存失败"
+  },
+  "talentMarket": {
+    "customTitle": "自建智能体"
+  },
+  "customAgentModal": {
+    "noModelsExternalHint": "如果你只是接入外部运行的智能体，可以切换到\"外部智能体\"。",
+    "noKeyReturned": "未返回 API Key，请进入智能体页面重新生成。",
+    "enterAgent": "进入智能体"
+  },
+  "enterprise": {
+    "companyNoSelected": "未选择公司。请刷新页面或联系支持。",
+    "openclaw": {
+      "openClawSettings": "OpenClaw 设置",
+      "apiKeyDesc": "OpenClaw 通过此 Key 连接平台。重新生成将立即使旧 Key 失效。",
+      "regenerate": "重新生成",
+      "generate": "生成",
+      "legacyKey": "旧版密钥（已加密），请重新生成后查看",
+      "notGenerated": "未生成",
+      "regenerateKeyQuestion": "确认重新生成 API Key？",
+      "generateKeyQuestion": "生成 API Key？",
+      "currentKeyRevoked": "当前 Key 将立即被撤销。使用旧 Key 的所有设备将断开连接。",
+      "newKeyGenerated": "将为该 Agent 生成新的 API Key。",
+      "generating": "生成中...",
+      "confirm": "确认",
+      "dangerZone": "危险操作",
+      "dangerZoneDesc": "此操作无法撤销。所有聊天记录、活动日志和关联数据将被永久删除。",
+      "confirmDeleteAgent": "确认删除 Agent「{{name}}」？",
+      "irreversible": "此操作不可逆。",
+      "deleting": "删除中...",
+      "delete": "确认删除",
+      "deleteThisAgent": "删除此 Agent"
+    },
+    "tools": {
+      "tools": "工具",
+      "allTools": "全部工具",
+      "apiKeyOptional": "API Key",
+      "okr": "目标与关键成果（OKR）及进度汇报",
+      "custom": "公司自添或 MCP 工具",
+      "authEmbeddedUrl": "如果 MCP 服务器将 Key 嵌入 URL 中（如 Tavily 使用 ?api_key=xxx），系统会自动发送该 Key。",
+      "triggers": "触发器、提醒与自我意识工作流",
+      "discovery": "工具和能力发现",
+      "importPartial": "已导入 {{success}}/{{total}} 个工具",
+      "howAuthWorks": "认证方式说明",
+      "email": "邮件读取与发送工具",
+      "importPartialFail": "部分工具导入失败",
+      "optional": "（可选）",
+      "social": "社交发布与社区工作流",
+      "feishu": "飞书/Lark 消息与协作",
+      "saved": "已保存",
+      "authPriority": "如果两者都提供了，API Key 字段优先。所有 Key 均加密存储。",
+      "browserAutomation": "浏览器与云端计算机自动化",
+      "unknownAgent": "未知数字员工",
+      "reset": "重置",
+      "general": "通用工具",
+      "urlOrJsonHint": "如果 Key 已嵌入 URL 中，请留空",
+      "remove": "移除",
+      "filterAll": "全部",
+      "expandAll": "展开全部",
+      "mcpShort": "MCP",
+      "removeTool": "移除工具",
+      "communication": "消息与跨渠道协作",
+      "editServer": "编辑服务器",
+      "codeExecution": "代码执行与开发工具",
+      "categoryDesc": "该分类下的工具",
+      "webSearch": "网页与知识搜索工具",
+      "importing": "导入中...",
+      "fileManagement": "读取、写入、转换和管理工作区文件",
+      "apply": "应用",
+      "serverUrl": "服务器 URL",
+      "filterDisabled": "已禁用",
+      "import": "导入",
+      "filterConfigured": "已配置",
+      "count": "{{count}} 个工具",
+      "builtInShort": "内置",
+      "collapseAll": "收起全部",
+      "filterEnabled": "已启用",
+      "authBearer": "对于使用 Bearer token 认证的服务器，请在此处输入 Key。每条请求会以 Authorization: Bearer <key> 发送。"
+    },
+    "okr": {
+      "okrSystem": "OKR 系统",
+      "okrSystemEnabled": "启用后，企业内的所有成员和数字员工都可以使用 OKR 来管理目标。OKR Agent 将主动追踪和汇报进度。",
+      "chooseCadenceFirst": "首次启用前选择 OKR 周期",
+      "chooseCadenceDesc": "选择季度或月度。首次启用 OKR 后，此周期将被锁定以保持历史记录和汇报的一致性。",
+      "quarterly": "按季度",
+      "monthly": "按月",
+      "savingOkrSettings": "正在保存 OKR 设置...",
+      "settingsSaved": "OKR 设置已保存",
+      "companyOkrSet": "公司 OKR 已设定",
+      "step1SetCompanyOkr": "第一步：设定公司 OKR",
+      "companyObjectivesDesc": "当前周期的公司目标已记录。请前往 OKR 页面查看详情，或提醒成员设定各自的 OKR。",
+      "firstStepDesc": "启用 OKR 后的第一步是让 OKR Agent 记录您的公司目标。点击按钮与 OKR Agent 对话，描述本期的目标。",
+      "chatWithOkrAgent": "与 OKR Agent 对话",
+      "openOkrAgentChat": "前往 OKR Agent 对话",
+      "okrAgentNotFound": "OKR Agent 未找到",
+      "periodPreference": "周期偏好",
+      "cadenceLocked": "OKR 周期已锁定，不能修改",
+      "cadenceLockedDesc": "OKR 周期在首次启用后锁定，以保持历史记录、汇报和提醒的一致性。",
+      "enableMemberDaily": "启用成员日报收集",
+      "enableMemberDailyDesc": "成员仅提交日报。公司日报在次日 09:00 生成，周报在每周一 09:00 生成，月报在每月1日 09:00 生成。",
+      "skipNonWorkdays": "自动跳过休息日",
+      "collectionTime": "开始收集时间：",
+      "testing": "测试中...",
+      "testCollectionNow": "立即测试收集",
+      "timezoneDesc": "定时收集目前遵循公司时区：{{timezone}}",
+      "timezoneWarning": "您的公司时区仍为 UTC。如需使用中国当地时间，请先到公司信息中将时区设置为中国 / Asia/Shanghai。",
+      "triggeringTest": "正在触发测试收集...",
+      "scheduleDesc": "每天此时，OKR Agent 开始收集成员的日报。公司日报在次日 09:00 生成，周报在每周一 09:00 生成，月报在每月1日 09:00 生成。"
+    },
+    "llm": {
+      "testSuccessShort": "连接成功",
+      "optionalPasswordHint": "••••••••（留空则保持不变）",
+      "testErrorShort": "连通性测试出错",
+      "testConnectionShort": "测试连接",
+      "testFailedShort": "连通性测试失败",
+      "modelInUse": "该模型正在被 {{count}} 个数字员工使用：",
+      "setAsDefault": "设为默认",
+      "defaultBadge": "默认"
+    },
+    "org": {
+      "oidcProvider": "通用 OIDC 提供商",
+      "active": "活跃",
+      "copied": "已复制",
+      "copy": "复制",
+      "reAuthorizeAdminSync": "重新授权管理员同步",
+      "syncFailedRetry": "同步失败，请重试",
+      "wecomStep1": "第1步：进入企业微信应用管理，找到「接收消息」插件，将上述服务器 URL 设置为回调地址。",
+      "syncSuccess": "关系网络同步成功！",
+      "updateSsoFailed": "更新 SSO 配置失败",
+      "syncError": "错误：{{error}}",
+      "configDesc": "配置企业目录同步和身份提供商设置。",
+      "dingtalkIntegration": "钉钉应用集成",
+      "directorySyncAuth": "目录同步授权",
+      "wecomStep3": "第3步：将 App Secret 粘贴到上方字段并点击保存。",
+      "googleAuthDesc": "使用 Google Workspace 管理员账号登录以授予目录读取权限。数字员工将安全存储刷新令牌并用于定时同步。",
+      "saveFirst": "请先保存供应商配置。",
+      "syncDirectory": "同步目录",
+      "googleAdminSync": "Google 管理员目录同步",
+      "setupGuide": "设置指南与所需权限",
+      "feishuLarkIntegration": "飞书/Lark 集成",
+      "syncWarning": "警告：{{warning}}",
+      "wechatWorkIntegration": "企业微信集成",
+      "authorizeUrl": "授权 URL",
+      "syncRelationshipsDesc": "自动将所有组织成员和公司可见的数字员工关联到 OKR Agent",
+      "notConfigured": "未配置",
+      "wecomReceiveUrl": "企业微信接收消息服务器 URL",
+      "googleOAuth": "Google OAuth",
+      "authorizedAs": "已授权：{{email}}",
+      "verifyTokenHint": "请先在上方配置好 Verify Token 和 EncodingAESKey，然后保存以生成最终 URL。",
+      "syncFailed": "关系网络同步失败",
+      "authorizeAdminSync": "授权管理员同步",
+      "syncRelationships": "同步关系网络",
+      "wecomStep2": "第2步：URL 验证通过后，进入「应用管理」插件，在下方配置相同的 App ID 和 App Secret。",
+      "unauthorized": "未授权"
+    },
+    "skills": {
+      "skills": "技能",
+      "searchFailed": "搜索失败",
+      "installFailed": "安装失败",
+      "previewFailed": "预览失败",
+      "importFailed": "导入失败",
+      "containsScripts": "包含脚本",
+      "cancel": "取消",
+      "importSkill": "导入",
+      "importing": "导入中...",
+      "gitHubTokenPlaceholder": "ghp_xxxxxxxxxxxx",
+      "apiKeyPlaceholder": "sk-ant-xxxxxxxxxxxx",
+      "tier1PurePrompt": "Tier 1 · 纯提示词",
+      "tier2CliApi": "Tier 2 · CLI/API",
+      "tier3Native": "Tier 3 · OpenClaw 原生",
+      "updatedAt": "更新于 {{date}}",
+      "uploadZip": "上传技能 ZIP",
+      "uploading": "上传中...",
+      "zipImported": "已导入 \"{{name}}\"",
+      "zipTooLarge": "文件超过 1MB 限制 —— 公司技能必须是小的纯文本包。",
+      "filesCount": "{{count}} 个文件",
+      "zipNoSkillMd": "技能包缺少 SKILL.md 文件——请确保 SKILL.md 位于 ZIP 根目录。",
+      "zipBinary": "公司技能库仅支持纯文本技能，含图片等资源的技能请上传到具体智能体。",
+      "zipConflict": "同名技能已存在，请修改名称或先删除已有技能。",
+      "zipInvalid": "无效的 ZIP 文件。",
+      "installed": "已安装",
+      "imported": "已导入"
+    }
+  },
+  "app": {
+    "brand": "数字员工",
+    "logoAlt": "数字员工"
+  },
+  "plaza": {
+    "daysAgo": "{{count}} 天前",
+    "hoursAgo": "{{count}} 小时前",
+    "minutesAgo": "{{count}} 分钟前"
+  },
+  "auth": {
+    "createOrJoinOrganization": "创建或加入公司",
+    "multiTenantPrompt": "该邮箱对应多个公司，请选择要登录的公司：",
+    "tenantSelectionSubtitle": "该邮箱对应多个公司，请选择要登录的公司：",
+    "emailRequired": "请输入邮箱。",
+    "passwordRequired": "请输入密码。",
+    "oauthLoadFailed": "social login 加载失败",
+    "tenantSelection": "选择公司",
+    "emailInvalid": "请输入有效的邮箱地址。",
+    "fieldRequired": "请填写此字段。",
+    "selectOrganization": "选择公司"
+  },
+  "dashboard": {
+    "tabs": {
+      "employees": "员工概览",
+      "cost": "成本概览",
+      "value": "价值贡献"
+    },
+    "employeeOverview": {
+      "loadError": "员工概览数据加载失败，请稍后重试",
+      "todayActivities": "今日活动数",
+      "totalHours": "累计任务时长",
+      "matrixTitle": "数字员工任务矩阵",
+      "sub": {
+        "totalActivities": "累计 {{value}} 次",
+        "avgPerPerson": "平均 {{value}} / 人"
+      },
+      "leaderboard": {
+        "mostPopularTitle": "最受欢迎 Top 5",
+        "busiestTitle": "最忙 Top 5",
+        "idlestTitle": "最闲 Top 5",
+        "mostPopularTooltip": "排序依据：活动数。按被使用的频繁程度从高到低排序。",
+        "busiestTooltip": "排序依据：繁忙度 = 活动数 × Token 用量，由高到低排序。右侧「任务时长」仅供参考，与排序口径不同，数值不一定严格递减。",
+        "idlestTooltip": "排序依据：繁忙度 = 活动数 × Token 用量，由低到高排序。右侧「任务时长」仅供参考，与排序口径不同。"
+      }
+    },
+    "matrix": {
+      "empty": "暂无员工数据",
+      "col": {
+        "agent": "员工",
+        "valueScore": "价值贡献",
+        "dailySaturation": "今日饱满度"
+      }
+    },
+    "valueContribution": {
+      "loadError": "价值贡献数据加载失败，请稍后重试",
+      "totalHoursSaved": "总节省工时",
+      "totalSavings": "总节省成本",
+      "totalTokenCost": "总 Token 成本",
+      "totalProfit": "总利润",
+      "tableTitle": "按员工价值贡献（按利润降序）",
+      "noAgents": "暂无员工数据",
+      "sub": {
+        "savingsEstimate": "按 1000 元/人日估算",
+        "tokenCostEstimate": "按 5 元/百万估算"
+      },
+      "profitState": {
+        "profit": "盈利",
+        "loss": "亏损"
+      },
+      "col": {
+        "agent": "员工",
+        "savedHours": "节省工时",
+        "savedCost": "节省成本",
+        "tokenCost": "Token 成本",
+        "profit": "利润"
+      }
+    },
+    "costOverview": {
+      "loadError": "成本概览数据加载失败，请稍后重试",
+      "modelsUsed": "使用模型数",
+      "todayTokens": "今日 Token",
+      "avgDailyTokens": "日均 Token",
+      "avgMonthlyTokens": "当月 Token",
+      "avgDailyCost": "日均成本",
+      "modelBreakdownTitle": "模型成本分布",
+      "timeBucketsTitle": "时间维度",
+      "noModels": "暂无模型数据",
+      "sub": {
+        "coversModels": "覆盖 {{count}} 个模型",
+        "thisMonth": "当月 {{value}}",
+        "tokenCount": "Token {{value}}",
+        "agentsCount": "{{count}} 个员工"
+      }
+    },
+    "common": {
+      "totalTokens": "累计 Token",
+      "activityCount": "活动数",
+      "taskHours": "任务时长",
+      "personDays": "≈ {{value}} 人日"
+    },
+    "leaderboard": {
+      "empty": "暂无数据"
+    },
+    "tokenTrend": {
+      "title": "Token 时序趋势",
+      "loadError": "趋势数据加载失败，请稍后重试",
+      "empty": "近 {{days}} 天无 token 使用记录",
+      "ariaLabel": "近 {{days}} 天成本趋势",
+      "peak": "单日峰值",
+      "dataPoints": "数据点数",
+      "tooltip": {
+        "cost": "成本"
+      },
+      "legend": {
+        "dailyCost": "每日成本"
+      },
+      "sub": {
+        "recentDays": "近 {{days}} 天"
+      }
+    }
+  },
+  "common": {
+    "approved": "已通过",
+    "error": {
+      "genericFailed": "失败",
+      "zipUploadFailed": "技能 ZIP 上传失败"
+    },
+    "info": "提示",
+    "test": "测试",
+    "testEmail": "测试邮件",
+    "success": "成功",
+    "approve": "通过",
+    "warning": "警告",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "optional": "可选",
+    "reject": "拒绝",
+    "rejected": "已拒绝",
+    "file": {
+      "zipImported": "已导入技能 \"{{name}}\""
+    },
+    "default": "默认"
+  },
+  "platformDashboard": {
+    "leaderboards": {
+      "topCompanies": {
+        "cacheLabel": "缓存 {{cachedTokens}} · {{pct}}%"
+      },
+      "topAgents": {
+        "cacheLabel": "缓存 {{cachedTokens}} · {{pct}}%"
+      }
+    },
+    "churn": {
+      "never": "从未"
+    },
+    "charts": {
+      "loading": "加载中...",
+      "noData": "暂无数据"
+    }
+  },
+  "groups": {
+    "groups": {
+      "loadFailed": "加载消息失败",
+      "createFailed": "建群失败",
+      "planningHint": "@ 了多个智能体，系统会先做任务规划再分工执行",
+      "cancelAccepted": "已请求停止当前运行",
+      "announcement": "群公告",
+      "inviteTitle": "邀请成员",
+      "pickSession": "选择或新建一个会话开始协作。",
+      "expandGroup": "展开",
+      "dangerZone": "危险操作",
+      "deleteSessionFailed": "删除会话失败",
+      "sessionTitlePlaceholder": "会话名称，可留空",
+      "renameSessionFailed": "重命名失败",
+      "create": "创建群聊",
+      "deletedBadge": "已删除",
+      "dispatchWarning": "智能体唤醒未完成",
+      "tabPeople": "成员",
+      "removeFailed": "移出成员失败",
+      "noGroups": "还没有群聊。创建一个，把人和智能体拉进来。",
+      "searchPlaceholder": "搜索名称",
+      "tabAgents": "智能体",
+      "newSession": "新建会话",
+      "deleteGroupConfirm": "删除后该群的所有会话、消息和文件都将无法恢复。",
+      "noAgentsForMemory": "群里还没有智能体。邀请一个之后，它在这个群的记忆会显示在这里。",
+      "memberCount": "{{count}} 位成员",
+      "memory": "记忆",
+      "expandGroups": "展开群聊栏",
+      "sendHint": "Enter 发送，Shift + Enter 换行",
+      "settingsSaved": "已保存",
+      "memoryNote": "这是该智能体在本群的长期记忆，只在它于本群被 @ 时加载。",
+      "collapseGroups": "折叠群聊栏",
+      "cancelFailed": "停止运行失败",
+      "renameSession": "重命名会话",
+      "inviteOk": "{{name}} 已入群",
+      "members": "成员",
+      "namePlaceholder": "群名称",
+      "groupDescription": "群介绍",
+      "loadMore": "加载更早的消息",
+      "send": "发送",
+      "announcementNote": "群公告会注入被 @ 智能体的上下文，用于约定群目标和协作规则。",
+      "removeConfirm": "确定将 {{name}} 移出群聊？",
+      "deleteGroupFailed": "删除群聊失败",
+      "sessionNamePlaceholder": "会话名称",
+      "collapseGroup": "折叠",
+      "inviteFailed": "邀请失败",
+      "selectedCount": "已选 {{count}} 位",
+      "workspaceUploadInvalidName": "文件名不能包含路径分隔符",
+      "announcementPlaceholder": "写下群目标、协作规则和对智能体的要求...",
+      "removed": "已移出 {{name}}",
+      "dragToResize": "拖动调整宽度",
+      "showPanel": "展开面板",
+      "deleteGroupDone": "群聊已删除",
+      "createSessionFailed": "创建会话失败",
+      "workspaceNote": "群 workspace 是全群共享的文件区，群内所有会话共用同一份。智能体的产物也会放在这里。",
+      "noCandidates": "没有可邀请的对象",
+      "descriptionPlaceholder": "这个群是做什么的...",
+      "unknownSender": "未知成员",
+      "invite": "邀请",
+      "workspace": "文件",
+      "workspaceUploadUnsupported": "群文件区不支持这种文件格式",
+      "fileDeleteFailed": "删除失败",
+      "fileDeleted": "已删除",
+      "hidePanel": "收起面板",
+      "deleteSession": "删除会话",
+      "settings": "群设置",
+      "fileSaveFailed": "保存失败",
+      "cancelRun": "停止运行",
+      "fileSaved": "已保存",
+      "title": "群聊",
+      "deleteGroup": "删除群聊",
+      "manager": "群管理",
+      "fileLoadFailed": "读取失败",
+      "groupName": "群名称",
+      "agentBadge": "智能体",
+      "sendFailed": "发送失败",
+      "remove": "移出群聊",
+      "taskPlanning": "任务规划中",
+      "deleteSessionConfirm": "删除后该会话的消息不再可见，且无法恢复。",
+      "settingsSaveFailed": "保存失败",
+      "composerPlaceholder": "发送消息，@ 唤醒智能体",
+      "agentCount": "{{count}} 个智能体",
+      "noMessages": "还没有消息。发一条，或 @ 一个智能体开始协作。"
+    }
+  },
+  "roster": {
+    "title": "花名册",
+    "total": "平台数字员工共 {{count}} 位",
+    "search": "搜索姓名或职责…",
+    "inProgress": "进行中",
+    "pending": "待办",
+    "enterChat": "进入对话",
+    "noRole": "暂无岗位职责描述",
+    "noSkills": "暂无技能",
+    "empty": "暂无数字员工",
+    "noMatch": "没有匹配的数字员工",
+    "skills": "技能",
+    "sortByValue": "按价值贡献排序",
+    "loading": "正在加载花名册…"
+  }
+}
