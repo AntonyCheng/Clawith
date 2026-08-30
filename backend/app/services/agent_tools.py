@@ -608,6 +608,7 @@ RUNTIME_TYPED_APPLICATION_TOOL_NAMES = frozenset(
         "tavily_search",
         "google_search",
         "bing_search",
+        "searxng_search",  # 【本地定制】自托管 SearXNG
         "search_experience",
         "read_experience",
         "propose_experience_draft",
@@ -4367,6 +4368,8 @@ async def execute_builtin_tool_outcome(
         return await _jina_search_outcome(arguments, agent_id)
     if tool_name == "jina_read":
         return await _jina_read_outcome(arguments, agent_id)
+    if tool_name == "searxng_search":
+        return await _searxng_search_outcome(arguments, agent_id)
     if tool_name == "exa_search":
         return await _exa_search_outcome(arguments, agent_id)
     if tool_name == "tavily_search":
@@ -4615,6 +4618,8 @@ async def _execute_tool_direct(
             return await _web_search(arguments, agent_id)
         elif tool_name == "jina_search":
             return await _jina_search(arguments, agent_id)
+        elif tool_name == "searxng_search":
+            return await _searxng_search(arguments, agent_id)
         elif tool_name == "read_webpage":
             return await _read_webpage(arguments)
         elif tool_name == "exa_search":
@@ -4915,6 +4920,8 @@ async def execute_tool(
             result = await _web_search(arguments, agent_id)
         elif tool_name == "jina_search":
             result = await _jina_search(arguments, agent_id)
+        elif tool_name == "searxng_search":
+            result = await _searxng_search(arguments, agent_id)
         elif tool_name == "exa_search":
             result = await _exa_search(arguments, agent_id)
         elif tool_name == "duckduckgo_search":
@@ -5466,6 +5473,142 @@ async def _jina_search(
     return _legacy_tool_outcome_text(
         outcome,
         fallback="Jina Search returned no summary.",
+    )
+
+
+# 【本地定制】自托管 SearXNG 搜索（对照 _jina_search_outcome 的错误语义）。
+# 实例为必应单分类定制：categories/pageno 实测不可用，仅暴露关键词搜索。
+async def _searxng_search_outcome(
+    arguments: dict,
+    agent_id: uuid.UUID | None = None,
+) -> ToolExecutionOutcome:
+    """Search a self-hosted SearXNG instance via its JSON API."""
+    import httpx
+    from urllib.parse import urlparse
+
+    query = arguments.get("query")
+    if not isinstance(query, str) or not query.strip():
+        return _typed_failure(
+            "searxng_search requires query.",
+            "invalid_tool_arguments",
+        )
+    query = query.strip()
+    try:
+        max_results = int(arguments.get("max_results", 10))
+    except (TypeError, ValueError):
+        return _typed_failure(
+            "searxng_search max_results must be an integer.",
+            "invalid_tool_arguments",
+        )
+    if max_results < 1:
+        return _typed_failure(
+            "searxng_search max_results must be positive.",
+            "invalid_tool_arguments",
+        )
+    max_results = min(max_results, 20)
+    language = arguments.get("language")
+    if not isinstance(language, str) or not language.strip():
+        language = "zh-CN"
+
+    import os
+
+    config = await _get_tool_config(agent_id, "searxng_search") or {}
+    base_url = ""
+    raw_base = config.get("base_url")
+    if isinstance(raw_base, str):
+        base_url = raw_base.strip()
+    if not base_url:
+        base_url = os.environ.get("SEARXNG_BASE_URL", "").strip()
+    if not base_url:
+        base_url = "http://10.9.0.26:7170"  # 【本地定制】默认自托管实例
+    if "://" not in base_url:
+        base_url = "http://" + base_url
+    parsed_base = urlparse(base_url)
+    if parsed_base.scheme not in {"http", "https"} or not parsed_base.hostname:
+        return _typed_failure(
+            "searxng_search base_url configuration is invalid.",
+            "search_configuration_invalid",
+        )
+    base_url = base_url.rstrip("/")
+
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+            resp = await client.get(
+                f"{base_url}/search",
+                params={"q": query, "format": "json", "language": language},
+                headers={"Accept": "application/json"},
+            )
+    except httpx.TimeoutException:
+        return _typed_failure(
+            "SearXNG search timed out.",
+            "searxng_search_timeout",
+            retryable=True,
+        )
+    except httpx.TransportError as exc:
+        return _typed_failure(
+            f"SearXNG search transport failed: {type(exc).__name__}.",
+            "searxng_search_transport_failed",
+            retryable=True,
+        )
+    except Exception as exc:
+        return _typed_failure(
+            f"SearXNG search failed: {type(exc).__name__}.",
+            "searxng_search_failed",
+        )
+
+    if resp.status_code == 403:
+        return _typed_failure(
+            "SearXNG returned HTTP 403 — the instance likely has format=json "
+            "disabled in settings.yml (search.formats).",
+            "searxng_search_http_error",
+        )
+    if resp.status_code != 200:
+        return _typed_failure(
+            f"SearXNG search returned HTTP {resp.status_code}.",
+            "searxng_search_http_error",
+            retryable=_read_http_status_retryable(resp.status_code),
+        )
+    try:
+        data = resp.json()
+    except Exception:
+        return _typed_failure(
+            "SearXNG search returned invalid JSON.",
+            "searxng_search_response_invalid",
+            retryable=True,
+        )
+    if not isinstance(data, Mapping) or not isinstance(data.get("results"), list):
+        return _typed_failure(
+            "SearXNG search returned an invalid result collection.",
+            "searxng_search_response_invalid",
+            retryable=True,
+        )
+    items = [
+        item for item in data["results"] if isinstance(item, Mapping)
+    ][:max_results]
+    if not items:
+        return _typed_success(f'No SearXNG results found for "{query}".')
+
+    parts = []
+    for index, item in enumerate(items, 1):
+        title = item.get("title") or "Untitled"
+        url = item.get("url") or ""
+        description = (item.get("content") or "")[:500]
+        parts.append(f"**{index}. {title}**\n{url}\n{description}")
+    return _typed_success(
+        f'SearXNG results for "{query}" ({len(items)} items):\n\n'
+        + "\n\n---\n\n".join(parts)
+    )
+
+
+async def _searxng_search(
+    arguments: dict,
+    agent_id: uuid.UUID | None = None,
+) -> str:
+    """Legacy display adapter for typed SearXNG search."""
+    outcome = await _searxng_search_outcome(arguments, agent_id)
+    return _legacy_tool_outcome_text(
+        outcome,
+        fallback="SearXNG search returned no summary.",
     )
 
 

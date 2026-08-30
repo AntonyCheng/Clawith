@@ -830,6 +830,37 @@ _BUILTIN_TOOL_SOURCE = [
         "config": {},
         "config_schema": {"fields": []},
     },
+    # 【本地定制】自托管 SearXNG 元搜索（Bing 单分类实例，2026-08-30 实测：
+    # categories/pageno 参数被该实例忽略，故不暴露）。零配置可用，改地址走 config。
+    {
+        "name": "searxng_search",
+        "display_name": "SearXNG Search",
+        "description": "Search the internet via the self-hosted SearXNG metasearch engine (Bing-backed). No API key required. Returns titles, URLs, and snippets.",
+        "category": "search",
+        "icon": "🔎",
+        "is_default": True,
+        "parameters_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search keywords"},
+                "language": {"type": "string", "description": "Result language, e.g. zh-CN / en-US / all (default zh-CN)"},
+                "max_results": {"type": "integer", "description": "Number of results to return (default 10, max 20)"},
+            },
+            "required": ["query"],
+        },
+        "config": {},
+        "config_schema": {
+            "fields": [
+                {
+                    "key": "base_url",
+                    "label": "SearXNG 实例地址",
+                    "type": "text",
+                    "default": "http://10.9.0.26:7170",
+                    "placeholder": "http://10.9.0.26:7170（需开启 JSON API：settings.yml search.formats 含 json）",
+                },
+            ]
+        },
+    },
     {
         "name": "tavily_search",
         "display_name": "Tavily Search",
@@ -3847,6 +3878,7 @@ _READ_TOOL_NAMES = frozenset(
         "jina_search",
         "exa_search",
         "duckduckgo_search",
+        "searxng_search",
         "tavily_search",
         "google_search",
         "bing_search",
