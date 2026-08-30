@@ -2,7 +2,7 @@
 
 frontend-hybrid = **上游 frontend 原样底座 + 数字员工本地薄壳**。
 - `frontend/`（上游）一行不改，是保底参照与未来升级种子
-- `frontend-local/`（v1.10.3 定制版）已冻结，仅作回滚保底；生产切换前 deploy-local 仍构建它
+- `frontend-local/`（v1.10.3 定制版）**目录已于 2026-08-30 删除**，终态永久存档于 git `0ab3ab3c`；需要时 `git checkout 0ab3ab3c -- frontend-local/` 精确还原。前端回滚走镜像 `clawith-frontend:rollback-frontend-local`，不经源码
 - 本项目的所有本地定制**集中在 `src/local/` + 少量钩子文件**，见下文清单
 
 ## 一、壳层文件清单
@@ -25,6 +25,9 @@ frontend-hybrid = **上游 frontend 原样底座 + 数字员工本地薄壳**。
 另有 `public/` 补入本地资源：`logo-new.{png,jpg}`、`lanhu-bg.png`、`dashboard-banner.png`、`dashboard/` 目录（~~square-top-banner.png~~ 随消息广场移除）。
 
 ### B. 钩子文件（对上游文件的少量修改，升级时需重放）
+
+> 注：frontend-local 目录已删（2026-08-30），下文所有「对照 frontend-local」一律指
+> `git show 0ab3ab3c:frontend-local/<路径>` 或按需 `git checkout 0ab3ab3c -- frontend-local/` 临时还原。
 
 | 文件 | 改动内容 |
 |---|---|
@@ -50,20 +53,24 @@ frontend-hybrid = **上游 frontend 原样底座 + 数字员工本地薄壳**。
 `/api/dashboard/*`（dashboard.py 整个文件为本地独有）、`/api/plaza/*`（plaza.py 含本地 505 行改动；**2026-08-30 起前端已无消费方**——消息广场移除，接口与历史帖子留作存档，与上游保留行为一致）、`/api/users/me/avatar`、`/api/agents/{id}/avatar`、`/api/skills/import-zip`、`/api/agents/{id}/files/import-zip`。
 **生产切换前提：deploy-local 的 backend 与 ../backend 同源（含上述接口）。**
 
-## 二、上游升级同步流程
+## 二、上游升级同步流程（完整三阶段手册见仓库根 UPGRADE-PLAYBOOK.md）
+
+> 演练环境 deploy-local-upgrade/ 已于 2026-08-30 生产切换后删除（19G）；
+> 重建配方归档于 `frontend-hybrid/deploy/`（docker-compose.rehearsal.yml + docker-compose.hybrid.yml）。
 
 1. 拷贝新版上游：`rsync -a --delete --exclude src/local --exclude node_modules --exclude dist --exclude LOCAL-LAYER.md --exclude .git frontend/ frontend-hybrid/`
 2. 按上文 B 表**重放钩子改动**（每个文件改动都很小，git diff 历史可参考；建议升级前 `git diff HEAD -- <钩子文件>` 备份）
 3. i18n 增量：如上游新增词条与本地品牌措辞冲突，重新运行补丁生成（token 归一化 diff，见本次会话脚本逻辑；`feed.*`/本地页面词条保持不动）
 4. `npx tsc --noEmit && npm run build && npm test`（上游 122 个契约测试是安全网）
-5. 部署 3010 验证：`cd deploy-local-upgrade && docker compose -f docker-compose.yml -f docker-compose.hybrid.yml build clawith-frontend-hybrid && docker compose -f docker-compose.yml -f docker-compose.hybrid.yml up -d --no-deps clawith-frontend-hybrid`
-   ⚠️ `deploy-local-upgrade/` 整目录被 .gitignore 忽略，compose override 的**git 正本**在 `frontend-hybrid/deploy/docker-compose.hybrid.yml`——改动后两处需手动同步
-6. 对照验证：3010（hybrid）vs 3011（纯上游）vs 3009（旧整合版）
+5. 部署演练环境验证（环境需先按 UPGRADE-PLAYBOOK.md 阶段 B 重建）：
+   `cd deploy-local-upgrade && docker compose -f docker-compose.yml -f docker-compose.hybrid.yml build clawith-frontend-hybrid && ... up -d --no-deps clawith-frontend-hybrid`
+6. 对照验证：3010（hybrid）vs 3011（纯上游）
+7. 生产切换：按 UPGRADE-PLAYBOOK.md 阶段 C（备份三件套→预构建→停机切换→验证清单）
 
 ## 三、URL 语义（2026-08-30 对齐上游：消息广场已移除）
 
 `/plaza`=经验库（上游 Plaza 原生语义）、`/experience`→重定向 `/plaza`（兼容期，曾为 hybrid 过渡 URL）、`/dashboard`=本地分析仪表盘、`/okr`=上游 OKR 页（无侧边栏入口）、index→`/dashboard`（上游同款）。
-历史：v1.10.3 生产的 `/plaza` 曾是社交广场，随消息广场移除而退役（社交 feed 页面/PostCard/MentionInput/feed.* 词条已删；回滚依赖 frontend-local 冻结副本）。
+历史：v1.10.3 生产的 `/plaza` 曾是社交广场，随消息广场移除而退役（社交 feed 页面/PostCard/MentionInput/feed.* 词条已删；回滚依赖 rollback 镜像 + git 0ab3ab3c）。
 
 ## 四、未迁移项（Phase E 备选，需要时再做）
 
