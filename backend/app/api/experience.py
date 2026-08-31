@@ -387,6 +387,10 @@ def _parse_draft_json(text: str) -> dict:
     """
     if not text:
         return {}
+    # 【本地定制】新一代模型思考链以 "</think>" 收尾分隔（无开标记），
+    # 只解析最后一个闭合标记之后的段落，避免思考文字里的花括号污染匹配。
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[1]
     m = re.search(r"\{.*\}", text, re.DOTALL)
     if not m:
         return {}

@@ -73,12 +73,84 @@ def extract_embedded_reasoning(
             extracted.append(thought)
         visible = remainder[closing.end() :]
 
+    # 【本地定制】新一代开源模型（DeepSeek-R1 / Qwen3 系等）的思考链约定：
+    # 思考为裸文本、仅以 "</think>\n\n" 收尾分隔、没有开标记。在最后一个闭合
+    # 标记处切分：之前进 reasoning 通道，之后才是可见回答。
+    if not extracted:
+        last_closing = None
+        for match in _CLOSING_THINK_TAG.finditer(visible):
+            last_closing = match
+        if last_closing is not None:
+            thought = visible[: last_closing.start()].strip()
+            visible = visible[last_closing.end() :].lstrip()
+            if thought:
+                extracted.append(thought)
+
     reasoning_parts: list[str] = []
     for part in (reasoning_content, *extracted):
         normalized = (part or "").strip()
         if normalized and normalized not in reasoning_parts:
             reasoning_parts.append(normalized)
     return visible.strip(), "\n\n".join(reasoning_parts) or None
+
+
+class ReasoningSplitter:
+    """【本地定制】按 "</think>" 闭标记切分思考链与可见正文的有状态流式分流器。
+
+    新一代开源模型（DeepSeek-R1 / Qwen3 系）流式输出时思考链是裸文本、仅以
+    "</think>" 收尾（无开标记），无法在流内即时判定归属。分流策略：
+
+    - PROBE：delta 先缓冲（不外发）；缓冲中出现 "</think>"（取最后一次出现）
+      则缓冲文本作为思考链返回，其后内容切换为可见正文；
+    - 超过 ``hold_limit`` 字符仍无标记 → 判定为非思考输出，缓冲原样作为
+      可见正文补发（非思考模型的首段不被吞掉）；
+    - VISIBLE 后偶发的游离 "</think>" 字样直接剔除。
+    """
+
+    def __init__(self, hold_limit: int = 16384) -> None:
+        self._buffer: list[str] = []
+        self._buffer_len = 0
+        self._mode = "probe"
+        self._hold_limit = hold_limit
+        self._pending_visible_lstrip = False
+
+    def feed(self, delta: str) -> tuple[str, str]:
+        """消费一段 delta，返回 ``(reasoning_delta, visible_delta)``（其一恒为空串）。"""
+        if self._mode == "visible":
+            delta = delta.replace("</think>", "")
+            if self._pending_visible_lstrip and delta:
+                delta = delta.lstrip()
+                self._pending_visible_lstrip = False
+                if not delta:
+                    return "", ""
+            return "", delta
+        self._buffer.append(delta)
+        self._buffer_len += len(delta)
+        joined = "".join(self._buffer)
+        idx = joined.rfind("</think>")
+        if idx != -1:
+            self._mode = "visible"
+            self._buffer = []
+            self._pending_visible_lstrip = True
+            reasoning = joined[:idx].strip()
+            visible = joined[idx + len("</think>"):].lstrip()
+            self._pending_visible_lstrip = not visible
+            return (reasoning or "", visible)
+        if self._buffer_len >= self._hold_limit:
+            self._mode = "visible"
+            self._buffer = []
+            return "", joined
+        return "", ""
+
+    def flush(self) -> tuple[str, str]:
+        """流结束：清出 PROBE 缓冲残留。无闭标记 → 缓冲即正文（非思考模型的兜底）。"""
+        joined = "".join(self._buffer)
+        self._buffer = []
+        self._buffer_len = 0
+        if self._mode == "probe" and joined:
+            self._mode = "visible"
+            return "", joined
+        return "", ""
 
 
 def _available_tool_names(tools: list[dict] | None) -> frozenset[str]:

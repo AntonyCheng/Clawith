@@ -87,7 +87,25 @@ from app.services.builtin_tool_definitions import (
     builtin_policy,
     is_reserved_custom_tool_name,
 )
-from app.services.llm.client import LLMMessage, LLMVisibleStreamInterrupted
+from app.services.llm.client import LLMMessage, LLMVisibleStreamInterrupted, ReasoningSplitter
+
+
+def _reasoning_close_tag_enabled(model: LLMModel) -> bool:
+    """【本地定制】模型是否启用 "</think>" 闭标记思考链分流（REASONING_CLOSE_TAG_MODELS）。"""
+    import os
+
+    raw = os.environ.get("REASONING_CLOSE_TAG_MODELS", "")
+    if not raw.strip():
+        return False
+    names = [n.strip().lower() for n in raw.split(",") if n.strip()]
+    if not names:
+        return False
+    haystacks = [
+        h.lower()
+        for h in (str(getattr(model, "model", "") or ""), str(getattr(model, "label", "") or ""))
+        if h
+    ]
+    return any(n in h for n in names for h in haystacks)
 from app.services.llm.failover import (
     classify_error,
     is_retryable_classification,
@@ -1911,13 +1929,44 @@ class RuntimeModelStepService:
                 agent=agent,
             )
             try:
+                # 【本地定制】"</think>" 闭标记思考链分流（新约定模型，ReasoningSplitter）。
+                # 仅对 REASONING_CLOSE_TAG_MODELS 名单内的模型启用（按 model 名/label
+                # 子串匹配，逗号分隔、大小写不敏感）；未列出的模型完全保持上游行为。
+                # 名单内模型：PROBE 缓冲 → 见 "</think>" 则缓冲文本作为思考链、其后
+                # delta 直通为可见正文；流结束 flush 兜底。思考文本并入
+                # step.reasoning_content，经终态落库进入 chat_messages.thinking。
+                # 仅 web 直聊直播路径启用（writer 非空时）。
+                base_visible = writer.write if writer is not None else None
+                use_splitter = base_visible is not None and _reasoning_close_tag_enabled(model)
+                splitter = ReasoningSplitter() if use_splitter else None
+                split_reasoning: list[str] = []
+
+                async def _split_visible_delta(delta: str) -> None:
+                    reasoning, visible = splitter.feed(delta)
+                    if reasoning:
+                        split_reasoning.append(reasoning)
+                    if visible and base_visible is not None:
+                        await base_visible(visible)
+
                 step = await self._call_prepared(
                     model=model,
                     agent=agent,
                     messages=messages,
                     tools=tools,
-                    on_visible_delta=(writer.write if writer is not None else None),
+                    on_visible_delta=(_split_visible_delta if use_splitter else None),
                 )
+                if use_splitter:
+                    flush_reasoning, flush_visible = splitter.flush()
+                    if flush_visible and base_visible is not None:
+                        await base_visible(flush_visible)
+                    if flush_reasoning:
+                        split_reasoning.append(flush_reasoning)
+                if split_reasoning:
+                    step = replace(
+                        step,
+                        reasoning_content=(step.reasoning_content or "")
+                        + "".join(split_reasoning),
+                    )
             except Exception as exc:
                 await self._close_answer_stream(writer)
                 if writer is not None and writer.visible_started:
