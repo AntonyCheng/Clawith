@@ -1161,7 +1161,11 @@ export default function Layout() {
 
 
                     <div className="sidebar-section" data-tour-target="main-nav">
-                        {/* 数字员工本地壳层：导航（2026-08-30 移除消息广场，经验广场回归上游 /plaza 语义），OKR 不在侧边栏（路由保留） */}
+                        {/* 数字员工本地壳层：导航顺序 仪表盘/经验广场/群聊/花名册（2026-08-30 调整，消息广场已移除，OKR 不在侧边栏） */}
+                        <NavLink key="dashboard" to="/dashboard" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
+                            <span className="sidebar-item-icon" style={{ display: 'flex' }}>{SidebarIcons.home}</span>
+                            <span className="sidebar-item-text">{t('nav.dashboard')}</span>
+                        </NavLink>
                         <NavLink key="plaza" to="/plaza" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
                             <span className="sidebar-item-icon" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                                 <IconBook2 size={14} stroke={1.5} />
@@ -1176,10 +1180,6 @@ export default function Layout() {
                             {groupUnread > 0 && (
                                 <span className="sidebar-item-badge">{groupUnread > 99 ? '99+' : groupUnread}</span>
                             )}
-                        </NavLink>
-                        <NavLink key="dashboard" to="/dashboard" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
-                            <span className="sidebar-item-icon" style={{ display: 'flex' }}>{SidebarIcons.home}</span>
-                            <span className="sidebar-item-text">{t('nav.dashboard')}</span>
                         </NavLink>
                         {/* 数字员工本地壳层：花名册（2026-08-28 新增，平铺展示全部数字员工） */}
                         <NavLink key="roster" to="/roster" className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}>
