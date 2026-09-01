@@ -446,6 +446,9 @@ async def _persist_message(
         participant_id=scope.participant.id,
         mentions=mention_payload,
         created_at=clock,
+        # 【本地定制】补盖租户戳：人类消息此前未写 tenant_id，租户隔离器查询时
+        # 会把 NULL 租户的历史消息全部滤掉（刷新后只剩数字员工气泡的根因）。
+        tenant_id=scope.group.tenant_id,
     )
     db.add(message)
     scope.session.last_message_at = clock
