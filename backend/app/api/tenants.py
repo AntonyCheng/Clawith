@@ -270,13 +270,19 @@ async def join_company(
     - Registration flow (user has no tenant yet): assigns tenant directly
     - Switch-org flow (user already has a tenant): creates a new User record"""
     from app.models.invitation_code import InvitationCode
-    ic_result = await query_dao.execute(db, 
-        select(InvitationCode).where(
-            InvitationCode.code == data.invitation_code,
-            InvitationCode.is_active.is_(True),
-            InvitationCode.tenant_id.is_not(None),
+    from app.dao.base import tenant_context
+    # 【本地定制】归一化输入 + 豁免租户作用域：邀请码必须跨租户可查（加入的就是
+    # 别的组织），否则租户隔离器把它限定在当前租户内导致永远 400。仅此查询豁免。
+    normalized_code = data.invitation_code.strip().upper()
+    with tenant_context(None):
+        ic_result = await query_dao.execute(
+            db,
+            select(InvitationCode).where(
+                InvitationCode.code == normalized_code,
+                InvitationCode.is_active.is_(True),
+                InvitationCode.tenant_id.is_not(None),
+            )
         )
-    )
     code_obj = ic_result.scalar_one_or_none()
     if not code_obj:
         raise HTTPException(status_code=400, detail="Invalid invitation code")
