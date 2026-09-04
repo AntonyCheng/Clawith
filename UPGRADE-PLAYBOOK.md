@@ -81,4 +81,5 @@ docker compose up -d clawith-frontend
 3. **docker compose 命令认准目录**：生产=deploy-local/，演练=deploy-local-upgrade/，跑错目录会静默构建错误项目
 4. **后端构建约 20 分钟**（pip 网络慢），安排在切换前预构建
 5. **生产 compose 挂载 ./nginx/nginx.conf**（含 /p/ 短链代理），换前端镜像时保留该挂载即可
-6. **思考链闭标记约定**：新模型思考为裸文本、仅以 \</think\> 收尾（无开标记）。已修：extract_embedded_reasoning 闭标记切分、蒸馏解析兜底、ReasoningSplitter 流式分流（model_step_service，仅 web 直聊）。名单经环境变量 REASONING_CLOSE_TAG_MODELS（deploy-local compose，逗号分隔模型名，大小写不敏感）
+6. **空闲事务自动回收**：deploy-local compose 的 postgres 服务带 `command: postgres -c idle_in_transaction_session_timeout=600000` + 库级 ALTER（双保险，重建容器/换数据目录都生效）。泄漏复发时先查 pg_stat_activity 再定位代码。
+7. **思考链闭标记约定**：新模型思考为裸文本、仅以 \</think\> 收尾（无开标记）。已修：extract_embedded_reasoning 闭标记切分、蒸馏解析兜底、ReasoningSplitter 流式分流（model_step_service，仅 web 直聊）。名单经环境变量 REASONING_CLOSE_TAG_MODELS（deploy-local compose，逗号分隔模型名，大小写不敏感）

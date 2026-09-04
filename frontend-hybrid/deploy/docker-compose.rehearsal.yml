@@ -1,7 +1,11 @@
 services:
   clawith-postgres:
+  clawith-postgres:
     image: postgres:15-alpine
     restart: unless-stopped
+    # 【本地定制】空闲事务自动回收（30 分钟）
+    command: postgres -c idle_in_transaction_session_timeout=1800000
+    ports:
     ports:
       - "5434:5432"
     networks:
